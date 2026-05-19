@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import re
 import shutil
@@ -31,6 +32,7 @@ CORE_PROMPT_ORDER = {
 
 Task = dict[str, str]
 State = dict[str, object]
+JsonObject = dict[str, object]
 
 
 def now_iso() -> str:
@@ -179,6 +181,30 @@ def state_tasks(state: State) -> list[Task]:
     return []
 
 
+def normalize_tasks(task_list: object) -> list[Task]:
+    if not isinstance(task_list, list):
+        raise SystemExit("Expected data.tasks to be a list.")
+    if not 1 <= len(task_list) <= 3:
+        raise SystemExit("Mary Workflow accepts 1 to 3 tasks per plan.")
+
+    tasks: list[Task] = []
+    for index, item in enumerate(task_list, start=1):
+        if isinstance(item, str):
+            title = item.strip()
+            task_id = f"task-{index}"
+        elif isinstance(item, dict):
+            title = str(item.get("title", "")).strip()
+            task_id = str(item.get("id") or f"task-{index}").strip()
+        else:
+            raise SystemExit("Each task must be a string or object.")
+        if not title:
+            raise SystemExit("Task title cannot be empty.")
+        if not re.fullmatch(r"task-[1-9][0-9]*", task_id):
+            raise SystemExit(f"Invalid task id: {task_id}. Use task-1, task-2, ...")
+        tasks.append({"id": task_id, "status": "pending", "title": title})
+    return tasks
+
+
 def append_log(root: Path, message: str) -> None:
     log_path = root / "log.md"
     with log_path.open("a", encoding="utf-8") as handle:
@@ -216,6 +242,122 @@ def set_phase(state: State, root: Path, phase: str) -> None:
     sync_prompt_for_phase(state, root)
 
 
+def update_state(root: Path, phase: str | None = None, task_list: object | None = None) -> State:
+    """Update Mary state through the public protocol boundary.
+
+    `phase` uses the machine-facing enum. `task_list` accepts strings or objects
+    with `id` and `title`. When tasks are supplied, the workflow enters
+    EXECUTING unless the caller explicitly supplies a phase.
+    """
+
+    state = read_state(root)
+    state["started_at"] = state["started_at"] or now_iso()
+    if task_list is not None:
+        state["tasks"] = normalize_tasks(task_list)
+        refresh_task_progress(state)
+        set_phase(state, root, phase or "EXECUTING")
+    elif phase is not None:
+        set_phase(state, root, phase)
+        refresh_task_progress(state)
+    else:
+        state["updated_at"] = now_iso()
+        refresh_task_progress(state)
+    write_state(root, state)
+    append_log(root, f"updated state phase={state['phase']} tasks={state['total']}")
+    return state
+
+
+def apply_action(root: Path, payload: JsonObject) -> State:
+    action = str(payload.get("action", "")).strip()
+    data = payload.get("data", {})
+    if not isinstance(data, dict):
+        raise SystemExit("Expected action data to be an object.")
+
+    if action == "update_state":
+        phase = data.get("phase")
+        tasks = data.get("tasks")
+        if tasks is None:
+            tasks = data.get("task_list")
+        return update_state(root, phase=str(phase) if phase else None, task_list=tasks)
+
+    if action == "set_phase":
+        phase = data.get("phase")
+        if not phase:
+            raise SystemExit("set_phase requires data.phase.")
+        return update_state(root, phase=str(phase))
+
+    if action == "mark_task_done":
+        task_id = str(data.get("id") or data.get("task_id") or "").strip()
+        if not task_id:
+            raise SystemExit("mark_task_done requires data.id or data.task_id.")
+        return mark_task_done(root, task_id)
+
+    raise SystemExit(f"Unknown action: {action}")
+
+
+def load_json_payload(args: argparse.Namespace) -> JsonObject:
+    if args.file:
+        raw = Path(args.file).read_text(encoding="utf-8")
+    elif args.json:
+        raw = args.json
+    else:
+        raw = sys.stdin.read()
+    payload = parse_json_payload(raw)
+    if not isinstance(payload, dict):
+        raise SystemExit("JSON action must be an object.")
+    return payload
+
+
+def parse_json_payload(raw: str) -> object:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, flags=re.DOTALL)
+    if fenced:
+        try:
+            return json.loads(fenced.group(1))
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid fenced JSON action: {exc}") from exc
+
+    candidate = extract_first_json_object(raw)
+    if candidate:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid embedded JSON action: {exc}") from exc
+    raise SystemExit("Invalid JSON action: no JSON object found.")
+
+
+def extract_first_json_object(raw: str) -> str | None:
+    start = raw.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(raw)):
+        char = raw[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return raw[start : index + 1]
+    return None
+
+
 def refresh_task_progress(state: State) -> None:
     tasks = state_tasks(state)
     state["completed"] = sum(1 for task in tasks if task.get("status") == "done")
@@ -229,6 +371,27 @@ def first_pending_task(state: State) -> Task | None:
         if task.get("status") != "done":
             return task
     return None
+
+
+def mark_task_done(root: Path, target_id: str) -> State:
+    state = read_state(root)
+    tasks = state_tasks(state)
+    for task in tasks:
+        if task.get("id") == target_id:
+            task["status"] = "done"
+            break
+    else:
+        raise SystemExit(f"Task not found: {target_id}")
+
+    refresh_task_progress(state)
+    next_task = first_pending_task(state)
+    if next_task:
+        set_phase(state, root, "EXECUTING")
+    else:
+        set_phase(state, root, "REVIEWING")
+    write_state(root, state)
+    append_log(root, f"marked {target_id} done")
+    return state
 
 
 def seed_core_prompts(root: Path) -> int:
@@ -332,17 +495,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
     titles = [title.strip() for title in args.task if title.strip()]
     if not titles:
         raise SystemExit("Provide at least one --task.")
-    if len(titles) > 3:
-        raise SystemExit("Mary Workflow accepts at most 3 tasks per plan.")
-
-    state = read_state(root)
-    tasks = [{"id": f"task-{index}", "status": "pending", "title": title} for index, title in enumerate(titles, start=1)]
-    state["tasks"] = tasks
-    state["started_at"] = state["started_at"] or now_iso()
-    refresh_task_progress(state)
-    set_phase(state, root, "EXECUTING")
-    write_state(root, state)
-    append_log(root, f"planned {len(tasks)} task(s)")
+    state = update_state(root, phase="EXECUTING", task_list=titles)
+    append_log(root, f"planned {len(titles)} task(s)")
     print_status(state)
     return 0
 
@@ -372,34 +526,23 @@ def cmd_done_task(args: argparse.Namespace) -> int:
         target_id = task["id"] if task else ""
     if not target_id:
         raise SystemExit("No pending task to mark done.")
-
-    tasks = state_tasks(state)
-    for task in tasks:
-        if task.get("id") == target_id:
-            task["status"] = "done"
-            break
-    else:
-        raise SystemExit(f"Task not found: {target_id}")
-
-    refresh_task_progress(state)
-    next_task = first_pending_task(state)
-    if next_task:
-        set_phase(state, root, "EXECUTING")
-    else:
-        set_phase(state, root, "REVIEWING")
-    write_state(root, state)
-    append_log(root, f"marked {target_id} done")
+    state = mark_task_done(root, target_id)
     print_status(state)
     return 0
 
 
 def cmd_set_phase(args: argparse.Namespace) -> int:
     root = require_root(Path.cwd())
-    state = read_state(root)
-    set_phase(state, root, args.phase)
-    refresh_task_progress(state)
-    write_state(root, state)
+    state = update_state(root, phase=args.phase)
     append_log(root, f"set phase to {state['phase']}")
+    print_status(state)
+    return 0
+
+
+def cmd_apply_action(args: argparse.Namespace) -> int:
+    root = require_root(Path.cwd())
+    payload = load_json_payload(args)
+    state = apply_action(root, payload)
     print_status(state)
     return 0
 
@@ -477,6 +620,12 @@ def build_parser() -> argparse.ArgumentParser:
     phase_parser = subparsers.add_parser("set-phase", help="set workflow phase")
     phase_parser.add_argument("phase", help="PLANNING, EXECUTING, REVIEWING, or FINISHED")
     phase_parser.set_defaults(func=cmd_set_phase)
+
+    action_parser = subparsers.add_parser("apply-action", help="apply AI JSON action to state")
+    action_source = action_parser.add_mutually_exclusive_group()
+    action_source.add_argument("--json", help="JSON action string")
+    action_source.add_argument("--file", help="path to JSON action file")
+    action_parser.set_defaults(func=cmd_apply_action)
 
     subparsers.add_parser("complete-current", help="advance current prompt file").set_defaults(func=cmd_complete_current)
     subparsers.add_parser("stop", help="stop workflow").set_defaults(func=cmd_stop)
