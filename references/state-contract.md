@@ -53,6 +53,8 @@ Phase values:
 - `REVIEWING`: inspect the generated code and decide whether to continue.
 - `FINISHED`: the user's request is complete.
 
+Use `REVIEWING` exactly. Do not shorten this phase to `REVIEW`.
+
 Task status values:
 
 - `pending`: not completed yet.
@@ -69,3 +71,12 @@ mw-review.md
 ```
 
 Additional `.md` prompts may be added later, but the MVP phase loop uses these three names directly.
+
+## Phase Prompt Guardrails
+
+Each core prompt must enforce:
+
+- Phase gate: read `.mary-workflow/state.yaml` first and verify `workflow.phase` matches the prompt.
+- Structured output: return a strict JSON object for task plans, execution results, or review decisions.
+- State update boundary: update state only through `scripts/mary_workflow.py`; do not edit `state.yaml` by hand.
+- Context isolation: execution should inspect and edit only files directly related to the current task unless explicitly instructed otherwise.

@@ -28,25 +28,29 @@ python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py <command>
 3. For state-only operations, use `scripts/mary_workflow.py`.
 4. Prompts may be bilingual: keep the English `Agent Protocol` as the execution contract and use Chinese `中文说明` sections for human explanation.
 5. Machine-facing names stay in English: command names, file names, YAML keys, task ids, and phase values.
-6. The core phase prompts are:
+6. Every phase prompt must gate on `.mary-workflow/state.yaml` before acting and stop on phase mismatch.
+7. Every phase prompt must use a strict JSON result shape for user-visible structured output.
+8. Never hand-edit `.mary-workflow/state.yaml` during phase execution; update state through `scripts/mary_workflow.py`.
+9. The core phase prompts are:
 
    - `PLANNING`: `.mary-workflow/prompts/mw-plan.md`
    - `EXECUTING`: `.mary-workflow/prompts/mw-execute.md`
    - `REVIEWING`: `.mary-workflow/prompts/mw-review.md`
 
-7. Append important user-visible events to `.mary-workflow/log.md`.
-8. User-facing output should follow the user's conversation language.
+10. Append important user-visible events to `.mary-workflow/log.md`.
+11. User-facing output should follow the user's conversation language.
 
 ## Prompt Execution
 
 When executing a prompt:
 
 1. Read `.mary-workflow/state.yaml`.
-2. Read `.mary-workflow/prompts/<current prompt>`.
-3. Treat the prompt as the active user task.
-4. Complete the phase with normal Codex engineering discipline.
-5. Use `mary_workflow.py` commands from the prompt to update phase and task state.
-6. Report the result and the next phase, if any.
+2. Verify `workflow.phase` matches the prompt being executed.
+3. Read `.mary-workflow/prompts/<current prompt>`.
+4. Treat the prompt as the active user task.
+5. Complete the phase with normal Codex engineering discipline.
+6. Use `mary_workflow.py` commands from the prompt to update phase and task state.
+7. Report the result using the prompt's JSON shape, then add a brief human summary when useful.
 
 ## Phase Commands
 
