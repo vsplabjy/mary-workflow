@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run a minimal project-local prompt workflow from `.mary-workflow/`. Use when the user invokes `/mw:init`, `/mw:start`, `/mw:next`, `/mw:resume`, `/mw:status`, `/mw:stop`, `/mw-plan`, `/mw-run`, `/mw-review`, `/mw-debug`, or asks to run Mary workflow.
+description: Run a minimal project-local prompt workflow from `.mary-workflow/`. Use when the user invokes `/mw-init`, `/mw-start`, `/mw-next`, `/mw-resume`, `/mw-status`, `/mw-stop`, `/mw-plan`, `/mw-run`, `/mw-review`, `/mw-debug`, or asks to run Mary workflow.
 ---
 
 # Mary Workflow
@@ -15,22 +15,21 @@ Use `scripts/mary_workflow.py` for deterministic state operations:
 python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py <command>
 ```
 
-- `/mw:init`: create `.mary-workflow/` with `config.yaml`, `state.yaml`, `prompts/`, and `log.md`.
-- `/mw:start`: set the workflow to `PLANNING` and select `mw-plan.md`.
-- `/mw:next` or `/mw:resume`: execute the prompt for the current phase.
-- `/mw:status`: show current status, phase, progress, prompt file, and task list.
-- `/mw:stop`: set the workflow status to `stopped` and append a log entry.
+- `/mw-init`: create `.mary-workflow/` with `config.yaml`, `state.yaml`, `prompts/`, and `log.md`.
+- `/mw-start`: set the workflow to `PLANNING` and select `mw-plan.md`.
+- `/mw-next`: load the prompt matching `workflow.phase`.
+- `/mw-resume`: alias of `/mw-next`.
+- `/mw-status`: show current status, phase, progress, prompt file, and task list.
+- `/mw-stop`: set the workflow status to `stopped` and append a log entry.
 - `/mw-plan`: load `mw-plan.md` as the current Codex instruction context.
 - `/mw-run`: load `mw-execute.md` as the current Codex instruction context.
 - `/mw-review`: load `mw-review.md` as the current Codex instruction context.
 - `/mw-debug`: load `mw-debug.md` as the current Codex instruction context.
-- `/mw-next`: load the prompt matching `workflow.phase`.
-- `/mw-status`: render current Mary Workflow state for Codex context.
 
 ## Runtime Rules
 
 1. Before any command, work from the user's current project directory.
-2. If `.mary-workflow/` is missing, run `/mw:init` when the user asked to initialize; otherwise tell the user to run `/mw:init`.
+2. If `.mary-workflow/` is missing, run `/mw-init` when the user asked to initialize; otherwise tell the user to run `/mw-init`.
 3. For state-only operations, use `scripts/mary_workflow.py`.
 4. Prompts may be bilingual: keep the English `Agent Protocol` as the execution contract and use Chinese `中文说明` sections for human explanation.
 5. Machine-facing names stay in English: command names, file names, YAML keys, task ids, and phase values.
@@ -47,11 +46,26 @@ python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py <command>
 10. Append important user-visible events to `.mary-workflow/log.md`.
 11. User-facing output should follow the user's conversation language.
 
-## Codex Plugin Bridge
+## Codex Native Commands
 
-The Codex plugin manifest lives at `.codex-plugin/plugin.json`. It exposes Mary Workflow metadata and this skill to Codex. The manifest schema does not define native slash-command routing, so slash aliases are handled by this skill plus `scripts/mw_codex.py`.
+The Codex plugin manifest lives at `.codex-plugin/plugin.json`. It exposes Mary Workflow metadata and this skill to Codex.
 
-When the user invokes `/mw-plan`, `/mw-run`, `/mw-review`, `/mw-debug`, `/mw-next`, or `/mw-status`:
+Native slash command entries live in the plugin root `commands/` directory. Codex discovers those Markdown files by filename:
+
+- `commands/mw-init.md` -> `/mw-init`
+- `commands/mw-start.md` -> `/mw-start`
+- `commands/mw-plan.md` -> `/mw-plan`
+- `commands/mw-run.md` -> `/mw-run`
+- `commands/mw-review.md` -> `/mw-review`
+- `commands/mw-debug.md` -> `/mw-debug`
+- `commands/mw-next.md` -> `/mw-next`
+- `commands/mw-resume.md` -> `/mw-resume`
+- `commands/mw-status.md` -> `/mw-status`
+- `commands/mw-stop.md` -> `/mw-stop`
+
+`plugin.json` remains metadata. Command behavior is defined by the Markdown files above, and phase prompt loading is handled by `scripts/mw_codex.py`.
+
+When the user invokes `/mw-plan`, `/mw-run`, `/mw-review`, `/mw-debug`, `/mw-next`, `/mw-resume`, or `/mw-status`:
 
 1. Run the bridge from the project root:
 
@@ -59,7 +73,7 @@ When the user invokes `/mw-plan`, `/mw-run`, `/mw-review`, `/mw-debug`, `/mw-nex
    python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-plan
    ```
 
-   Replace `mw-plan` with `mw-run`, `mw-review`, `mw-debug`, `mw-next`, or `mw-status` as needed.
+   Replace `mw-plan` with `mw-run`, `mw-review`, `mw-debug`, `mw-next`, `mw-resume`, or `mw-status` as needed.
 
 2. Treat the bridge output as the active phase instruction context for this turn.
 3. For `/mw-status`, report the rendered state without mutating it.
@@ -73,6 +87,7 @@ Alias mapping:
 - `/mw-review` -> `REVIEWING` -> `.mary-workflow/prompts/mw-review.md`
 - `/mw-debug` -> `DEBUGGING` -> `.mary-workflow/prompts/mw-debug.md`
 - `/mw-next` -> current `workflow.phase` -> matching prompt
+- `/mw-resume` -> current `workflow.phase` -> matching prompt
 - `/mw-status` -> current `workflow.phase` -> state context only
 
 ## Prompt Execution

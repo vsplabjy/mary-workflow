@@ -9,7 +9,7 @@ Commit: `cc636e8` - `Initial Mary workflow skill`
 完成内容：
 
 - 创建 `mary-workflow` Codex skill 项目骨架。
-- 编写 `SKILL.md`，定义 `/mw:init`、`/mw:start`、`/mw:next`、`/mw:resume`、`/mw:status`、`/mw:stop` 的最小行为。
+- 编写 `SKILL.md`，定义 `/mw-init`、`/mw-start`、`/mw-next`、`/mw-resume`、`/mw-status`、`/mw-stop` 的最小行为。
 - 新增 `scripts/mary_workflow.py`，实现初始 `.mary-workflow/` 创建、状态读写、prompt 顺序推进、状态展示和停止。
 - 新增 `references/state-contract.md`，描述 `.mary-workflow/state.yaml` 的初始字段。
 - 新增 `agents/openai.yaml`，提供 Codex UI 元数据。
@@ -65,7 +65,7 @@ Commit: `013c599` - `Add bilingual phase prompt notes`
 验证：
 
 - 运行 skill 验证，结果为 `Skill is valid!`。
-- 冒烟测试确认 `/mw:init` 能把双语 prompt 正常种到新项目。
+- 冒烟测试确认 `/mw-init` 能把双语 prompt 正常种到新项目。
 
 ## 2026-05-19 18:53:30 +08:00
 
@@ -145,15 +145,15 @@ Commit: `c140137` - `Add action protocol to phase prompts`
 验证：
 
 - 运行 skill 验证，结果为 `Skill is valid!`。
-- 冒烟测试确认新项目 `/mw:init` 能种下带 `Workflow Protocol` 的 prompt。
+- 冒烟测试确认新项目 `/mw-init` 能种下带 `Workflow Protocol` 的 prompt。
 - 端到端 action 流转测试通过：
   - `PLANNING -> EXECUTING -> REVIEWING -> FINISHED`
 - 检查 prompt/docs，确认不再残留旧状态更新路径。
 
-## Current State
+## State after Commit `c140137`
 
 - 当前分支：`main`
-- 当前 HEAD：`c140137`
+- 当时 HEAD：`c140137`
 - 当前工作区：clean
 - 远端同步状态：本地 `main` 与 `origin/main` 一致
 
@@ -212,3 +212,44 @@ Fourth step: self-healing debug loop.
   - `enqueue_fix_task` 会创建修复任务。
   - 修复任务会优先于原 pending 任务执行。
   - workflow 会从 `DEBUGGING` 回到 `EXECUTING`。
+
+## 2026-05-19 22:17:04 +08:00
+
+Native slash command registration.
+
+完成内容：
+
+- 新增 Codex 插件原生命令目录 `commands/`。
+- 新增 10 个命令文件：
+  - `/mw-init`
+  - `/mw-start`
+  - `/mw-plan`
+  - `/mw-run`
+  - `/mw-review`
+  - `/mw-debug`
+  - `/mw-next`
+  - `/mw-resume`
+  - `/mw-status`
+  - `/mw-stop`
+- 将主命令风格统一为短横线形式，例如 `/mw-init`，匹配 Codex 命令文件名 `commands/mw-init.md`。
+- 更新 `SKILL.md`，明确 native command Markdown 文件负责 UI slash entry，`scripts/mw_codex.py` 负责加载 phase prompt 和 state context。
+- 更新 `references/state-contract.md`，记录 `commands/` 目录和 bridge 行为。
+- 更新 `scripts/mw_codex.py`，支持 `/mw-resume`，并让 `FINISHED` 阶段返回只读状态上下文。
+- 更新脚本和 prompt 中的初始化提示，从 `/mw:init` 改为 `/mw-init`。
+
+验证：
+
+- `.codex-plugin/plugin.json` JSON 校验通过。
+- `~/.agents/plugins/marketplace.json` JSON 校验通过。
+- `scripts/mary_workflow.py` 和 `scripts/mw_codex.py` Python 语法检查通过。
+- 运行 skill 验证，结果为 `Skill is valid!`。
+- 确认 10 个 `commands/mw-*.md` 文件存在且 frontmatter 可读。
+- 确认 `~/plugins/mary-workflow` 本地插件软链接能暴露 `commands/mw-init.md`。
+- 冒烟测试通过：
+  - `/mw-init` 对应的 init 能初始化 4 个核心 prompt。
+  - `/mw-start` 能进入 `PLANNING`。
+  - `/mw-plan` 能加载 `mw-plan.md` 和当前 state。
+  - `/mw-run` 能加载 `mw-execute.md` 和当前 task。
+  - `/mw-review` 能加载 `mw-review.md`。
+  - `/mw-next`、`/mw-resume`、`/mw-status` 在 `FINISHED` 阶段返回只读状态上下文。
+  - 未初始化项目调用 phase bridge 时，会提示先运行 `/mw-init`。

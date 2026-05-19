@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Codex-facing bridge for Mary Workflow slash aliases.
 
-The Codex plugin manifest exposes metadata, while this bridge provides a
-deterministic way to resolve slash aliases into prompt text and state context.
+Native command markdown files expose slash entries to Codex. This bridge keeps
+prompt resolution deterministic by rendering the selected prompt plus state.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ ALIAS_TO_PHASE = {
 def read_state_phase(root: Path) -> str:
     state_path = root / WORKFLOW_DIR / "state.yaml"
     if not state_path.exists():
-        raise SystemExit("Mary Workflow is not initialized. Run /mw:init first.")
+        raise SystemExit("Mary Workflow is not initialized. Run /mw-init first.")
     in_workflow = False
     for raw_line in state_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip()
@@ -45,16 +45,24 @@ def read_state_phase(root: Path) -> str:
     raise SystemExit("Cannot find workflow.phase in .mary-workflow/state.yaml.")
 
 
+def require_initialized(root: Path) -> None:
+    if not (root / WORKFLOW_DIR / "state.yaml").exists():
+        raise SystemExit("Mary Workflow is not initialized. Run /mw-init first.")
+
+
 def prompt_path_for(root: Path, alias: str) -> tuple[str, Path]:
     normalized = alias.lstrip("/").strip()
+    require_initialized(root)
     if normalized == "mw-status":
         phase = read_state_phase(root)
         return phase, Path()
     phase = ALIAS_TO_PHASE.get(normalized)
-    if normalized == "mw-next":
+    if normalized in {"mw-next", "mw-resume"}:
         phase = read_state_phase(root)
+        if phase == "FINISHED":
+            return phase, Path()
     if not phase:
-        valid = ", ".join(f"/{name}" for name in sorted([*ALIAS_TO_PHASE, "mw-next", "mw-status"]))
+        valid = ", ".join(f"/{name}" for name in sorted([*ALIAS_TO_PHASE, "mw-next", "mw-resume", "mw-status"]))
         raise SystemExit(f"Unknown Mary Workflow alias: /{normalized}. Available: {valid}")
     prompt_name = PHASE_TO_PROMPT.get(phase)
     if not prompt_name:
@@ -66,13 +74,14 @@ def prompt_path_for(root: Path, alias: str) -> tuple[str, Path]:
 
 
 def render_prompt(root: Path, alias: str) -> str:
+    normalized = alias.lstrip("/").strip()
     phase, prompt_path = prompt_path_for(root, alias)
     state_path = root / WORKFLOW_DIR / "state.yaml"
     state_text = state_path.read_text(encoding="utf-8") if state_path.exists() else ""
-    if alias.lstrip("/").strip() == "mw-status":
+    if normalized == "mw-status" or phase == "FINISHED":
         return (
             f"# Mary Workflow Status Context\n\n"
-            f"Alias: /mw-status\n"
+            f"Alias: /{normalized}\n"
             f"Current phase: {phase}\n\n"
             f"## Current State\n\n"
             f"```yaml\n{state_text}```\n"
@@ -94,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Resolve Mary Workflow slash aliases for Codex")
     parser.add_argument(
         "alias",
-        choices=["mw-plan", "mw-run", "mw-review", "mw-debug", "mw-next", "mw-status"],
+        choices=["mw-plan", "mw-run", "mw-review", "mw-debug", "mw-next", "mw-resume", "mw-status"],
         help="Slash alias without the leading slash",
     )
     parser.add_argument(

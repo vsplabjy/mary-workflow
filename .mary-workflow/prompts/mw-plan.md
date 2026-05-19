@@ -15,7 +15,7 @@ workflow:
   phase: PLANNING
 ```
 
-If `state.yaml` is missing, stop and ask the user to run `/mw:init`. If the phase is not `PLANNING`, stop and report the current phase. Do not edit `state.yaml` by hand.
+If `state.yaml` is missing, stop and ask the user to run `/mw-init`. If the phase is not `PLANNING`, stop and report the current phase. Do not edit `state.yaml` by hand.
 
 ### Goal
 

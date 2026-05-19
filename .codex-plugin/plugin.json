@@ -30,7 +30,7 @@
     ],
     "websiteURL": "https://github.com/reversevertin1999/mary-workflow",
     "defaultPrompt": [
-      "/mw:init",
+      "/mw-init",
       "/mw-plan",
       "/mw-run"
     ],

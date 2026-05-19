@@ -245,7 +245,7 @@ def append_log(root: Path, message: str) -> None:
 def require_root(cwd: Path) -> Path:
     root = workflow_root(cwd)
     if not root.exists():
-        raise SystemExit("Mary Workflow is not initialized. Run /mw:init first.")
+        raise SystemExit("Mary Workflow is not initialized. Run /mw-init first.")
     return root
 
 
