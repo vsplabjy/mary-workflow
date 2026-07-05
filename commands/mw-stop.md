@@ -1,10 +1,10 @@
 ---
-description: Stop Mary Workflow without deleting state.
+description: Pause Mary Workflow while keeping state and reports.
 ---
 
 # /mw-stop
 
-Stop Mary Workflow while keeping `.mary-workflow/state.yaml` and task history.
+Stop Mary Workflow while keeping `.mary-workflow/state.yaml`, reports, and logs.
 
 ## Instructions
 
@@ -15,5 +15,5 @@ Stop Mary Workflow while keeping `.mary-workflow/state.yaml` and task history.
    python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py stop
    ```
 
-3. Report the stopped status and current phase.
+3. Report stopped status and current milestone.
 

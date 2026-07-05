@@ -1,19 +1,19 @@
 ---
-description: Show Mary Workflow state without mutating it.
+description: Show Mary Workflow v2 state without mutating it.
 ---
 
 # /mw-status
 
-Show the current Mary Workflow state.
+Show current Mary Workflow state.
 
 ## Instructions
 
-1. From the user's current project root, render the status context:
+1. From the project root, render status context:
 
    ```bash
    python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-status
    ```
 
-2. Report the current status, phase, progress, current prompt, current task, and task list.
+2. Report status, phase, current milestone, milestone review states, action counts, rejected envelope count, and phase history.
 3. Do not mutate `.mary-workflow/state.yaml`.
 

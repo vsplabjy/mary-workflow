@@ -1,6 +1,6 @@
 ---
 name: init
-description: Initialize Mary Workflow in the current project. Use when the user invokes /mw-init or asks to initialize Mary workflow.
+description: Initialize or reset Mary Workflow v2 in the current project. Use when the user invokes /mw-init or asks to initialize Mary workflow.
 ---
 
 # Mary Workflow: Init
@@ -16,6 +16,6 @@ Initialize the project-local `.mary-workflow/` workspace.
    python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py init
    ```
 
-3. If the user explicitly asks for example prompts, run `init --with-examples`.
-4. Report the created state and tell the user the next step is `/mw-start` or `/mw-plan`.
+3. If the user passes `--reset`, run `init --reset`.
+4. Report the current phase, project snapshot, and tell the user the next step is `/mw-plan`.
 

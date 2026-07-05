@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run simple project prompt workflows"
-  default_prompt: "Use $mary-workflow to initialize and run a small local prompt workflow."
+  short_description: "Run milestone-based project workflows"
+  default_prompt: "Use $mary-workflow to initialize, plan milestones, and run a local workflow."
 
 policy:
   allow_implicit_invocation: true

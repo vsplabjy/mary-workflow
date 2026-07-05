@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "0.1.0",
-  "description": "Minimal project-local planning, execution, and review workflow for Codex.",
+  "version": "0.2.0",
+  "description": "Milestone-based project-local workflow for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Mary Workflow",
-    "shortDescription": "Run a small local plan-execute-review workflow",
-    "longDescription": "Mary Workflow packages a lightweight Codex skill and local helper scripts for project-local planning, execution, review, state transitions, and prompt-driven action updates through a .mary-workflow workspace.",
+    "shortDescription": "Run a local milestone workflow",
+    "longDescription": "Mary Workflow packages a lightweight Codex skill and local helper scripts for milestone planning, automatic execution and review, debug recovery, state transitions, and audit-friendly action updates through a .mary-workflow workspace.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [

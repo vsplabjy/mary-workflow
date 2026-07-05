@@ -1,14 +1,16 @@
 # Mary Execute Phase
 
-> 中文说明：这是“执行阶段”。AI 会读取第一个未完成任务，完成对应代码修改和验证，然后把该任务标记为 done。下面的英文是给 AI 稳定执行的协议；命令、状态值和文件名保持英文。
+## Language Policy
+
+推理过程、进度叙述、review 结论和用户可见回答必须遵守 `.mary-workflow/config.yaml` 的 `output.language`：`zh` 表示一律中文，`auto` 表示跟随当前会话语言。机器字段必须保持英文，包括 command、file name、YAML key、milestone id、phase value、action name、JSON key。`log.md` 日志行保持英文，便于 grep 和审计统计。
 
 ## Agent Protocol
 
-You are the implementer for Mary Workflow.
+You are the implementer for Mary Workflow v2.
 
 ### Phase Gate
 
-Before executing, read `.mary-workflow/state.yaml` and verify:
+Read `.mary-workflow/state.yaml` first and verify:
 
 ```yaml
 workflow:
@@ -17,28 +19,41 @@ workflow:
 
 If `state.yaml` is missing, stop and ask the user to run `/mw-init`. If the phase is not `EXECUTING`, stop and report the current phase. Do not edit `state.yaml` by hand.
 
+### Boundary Ritual
+
+At every milestone boundary:
+
+1. Re-read `.mary-workflow/state.yaml`.
+2. Declare that previous working memory is discarded; trust only the filesystem and the rendered context.
+3. Inspect and edit only files related to the current milestone's `deliverables`.
+
 ### Goal
 
-Read the first unfinished task from `.mary-workflow/state.yaml`, implement it in the project, verify the change, and mark that task as done.
+Implement the current milestone, run its `acceptance` commands, and mark it done only after the acceptance evidence passes.
 
 ### Context Isolation
 
-Only inspect and edit files directly related to the current task. Do not rewrite the whole project, run broad formatting, rename unrelated symbols, change unrelated files, or perform large refactors unless the current task or user explicitly requires it.
+Do not rewrite the whole project, run broad formatting, rename unrelated symbols, change unrelated files, or perform large refactors unless the current milestone's `deliverables` explicitly require it.
 
 ### Structured Output
 
-When reporting execution, use this strict JSON shape:
+The legal actions in `EXECUTING` are:
+
+- `mark_task_done`
+- `record_error`
+
+After successful implementation and validation, use:
 
 ```json
 {
   "action": "mark_task_done",
   "data": {
-    "id": "task-1",
+    "id": "milestone-1",
     "result": "done",
     "files_changed": ["relative/path.ext"],
     "validation": [
       {
-        "command": "test command",
+        "command": "pytest",
         "result": "passed"
       }
     ]
@@ -46,67 +61,26 @@ When reporting execution, use this strict JSON shape:
 }
 ```
 
-Use `"result": "blocked"` when implementation or validation cannot be completed. In that case, do not output `mark_task_done`, do not run `apply-action`, and leave the workflow in `EXECUTING`; include the blocker in your human summary.
-
-### Workflow Protocol
-
-After code and validation complete successfully, output this machine-readable action object:
+If an implementation or validation command fails, do not mark the milestone done. Record the failure:
 
 ```json
-{"action":"mark_task_done","data":{"id":"task-1","result":"done","files_changed":["relative/path.ext"],"validation":[{"command":"test command","result":"passed"}]}}
+{
+  "action": "record_error",
+  "data": {
+    "command": "pytest",
+    "stderr": "failure summary",
+    "returncode": "1"
+  }
+}
 ```
 
-Then apply it from the project root:
+Apply the chosen action from the project root with `mary_workflow.py apply-action`.
 
-```bash
-python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py apply-action --json '{"action":"mark_task_done","data":{"id":"task-1","result":"done","files_changed":["relative/path.ext"],"validation":[{"command":"test command","result":"passed"}]}}'
-```
+### Automatic Loop
 
-You must not enter `REVIEWING` by hand. Mary Workflow enters `REVIEWING` only after the state update interface marks the final pending task done.
-
-### Procedure
-
-1. From the project root, find the next pending task:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py next-task
-   ```
-
-2. If there is no pending task, stop execution and let the workflow move to `REVIEWING`.
-3. Implement only the current task. Keep unrelated refactors and unrelated files out of the change.
-4. Run focused validation that matches the files you changed.
-5. If the implementation is complete, output `mark_task_done` action JSON and apply it:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py apply-action --json '{"action":"mark_task_done","data":{"id":"task-1","result":"done","files_changed":["relative/path.ext"],"validation":[{"command":"test command","result":"passed"}]}}'
-   ```
-
-6. If validation fails or the task is blocked, do not output `mark_task_done`, do not call `apply-action`, and leave the workflow in `EXECUTING`.
+After `mark_task_done` succeeds, Mary Workflow moves to `REVIEWING`. Continue the automatic loop by reading `.mary-workflow/prompts/mw-review.md` or by rerendering `/mw-run`; do not require `/mw-review`, `/mw-next`, or `/mw-resume`.
 
 ### Output
 
-Return the JSON action object only after successful implementation and validation, apply it with `apply-action`, then briefly summarize whether another task remains.
+Return the action JSON, apply it, then summarize changed files and validation in Chinese unless `output.language` says otherwise.
 
-## 中文说明
-
-这个阶段负责“动手做一个任务”。它一次只处理一个未完成任务，避免多个任务混在一起导致改动边界不清。
-
-- 输入：`.mary-workflow/state.yaml` 里的第一个 `pending` 任务。
-- 执行：实现当前任务，并运行匹配改动范围的验证。
-- 成功：输出 `{"action":"mark_task_done","data":{...}}`，再调用 `apply-action` 把任务标记为 `done`。
-- 失败：不要标记完成，说明阻塞原因，阶段保持在 `EXECUTING`。
-- 自动流转：最后一个任务完成后，脚本会把阶段切到 `REVIEWING`。
-- 强规则：执行前必须检查当前阶段确实是 `EXECUTING`。
-- 上下文隔离：只看、只改和当前任务有关的文件，不要顺手重写整个项目。
-- 输出格式：执行结果必须使用 action JSON envelope，包含任务 id、改动文件和验证。
-- 状态更新：只能通过 `mary_workflow.py apply-action`，不要手动改 `state.yaml`。
-
-使用时要注意：示例里的 `task-1` 只是例子，真实执行时应该使用 `next-task` 输出的任务 id。
-
-机器协议请继续保留英文：
-
-- 任务状态：`pending`、`done`
-- 阶段名：`EXECUTING`、`REVIEWING`
-- Action 名：`mark_task_done`
-- 命令名：`next-task`、`apply-action`
-- JSON key：`action`、`data`、`id`、`result`、`files_changed`、`validation`

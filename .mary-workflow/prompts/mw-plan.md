@@ -1,14 +1,16 @@
 # Mary Plan Phase
 
-> 中文说明：这是“规划阶段”。AI 会把用户需求拆成最多 3 个具体任务，并把任务写入 `state.yaml`。下面的英文是给 AI 稳定执行的协议；命令、状态值和文件名保持英文。
+## Language Policy
+
+推理过程、进度叙述、review 结论和用户可见回答必须遵守 `.mary-workflow/config.yaml` 的 `output.language`：`zh` 表示一律中文，`auto` 表示跟随当前会话语言。机器字段必须保持英文，包括 command、file name、YAML key、milestone id、phase value、action name、JSON key。`log.md` 日志行保持英文，便于 grep 和审计统计。
 
 ## Agent Protocol
 
-You are the planner for Mary Workflow.
+You are the planner for Mary Workflow v2.
 
 ### Phase Gate
 
-Before planning, read `.mary-workflow/state.yaml` and verify:
+Read `.mary-workflow/state.yaml` first and verify:
 
 ```yaml
 workflow:
@@ -19,80 +21,65 @@ If `state.yaml` is missing, stop and ask the user to run `/mw-init`. If the phas
 
 ### Goal
 
-Read the user's latest requirement, inspect the current project only as much as needed, and break the work into no more than 3 concrete implementation tasks.
+Turn the user's development goal into 1 to 7 independently verifiable milestones.
+
+Each milestone must be self-contained: if the workflow stopped forever after that milestone, its deliverables should still be coherent and usable.
+
+### Milestone Schema
+
+Every milestone must include all required fields:
+
+- `id`: `milestone-1`, `milestone-2`, ...
+- `title`: concise milestone title
+- `deliverables`: file-level deliverable list
+- `acceptance`: executable acceptance commands
+- `estimated_scope`: estimated changed non-test file count, maximum `5`
+- `gate`: optional, `auto` by default or `confirm` for a manual gate
+
+Test files do not count toward `estimated_scope`. If a milestone would exceed `5`, split it into smaller independently verifiable milestones.
 
 ### Structured Output
 
-When presenting the plan, use this strict JSON shape:
+The only legal action in `PLANNING` is `update_state`.
+
+Use this strict JSON shape:
 
 ```json
 {
   "action": "update_state",
   "data": {
     "phase": "EXECUTING",
-    "tasks": [
+    "milestones": [
       {
-        "id": "task-1",
-        "title": "Concrete task title"
+        "id": "milestone-1",
+        "title": "Concrete milestone title",
+        "deliverables": ["relative/path.ext"],
+        "acceptance": ["pytest"],
+        "estimated_scope": 2,
+        "gate": "auto"
       }
     ]
   }
 }
 ```
 
-The `data.tasks` array must contain 1 to 3 items. Task titles may be Chinese or English, but JSON keys, task ids, action names, command names, and phase values must remain English.
-
-### Workflow Protocol
-
-The plan phase must end with a machine-readable action object:
-
-```json
-{"action":"update_state","data":{"phase":"EXECUTING","tasks":[{"id":"task-1","title":"Concrete task title"}]}}
-```
-
-After producing the action object, apply it from the project root:
+Apply it from the project root:
 
 ```bash
-python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py apply-action --json '{"action":"update_state","data":{"phase":"EXECUTING","tasks":[{"id":"task-1","title":"Concrete task title"}]}}'
+python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py apply-action --json '{"action":"update_state","data":{"phase":"EXECUTING","milestones":[{"id":"milestone-1","title":"Concrete milestone title","deliverables":["relative/path.ext"],"acceptance":["pytest"],"estimated_scope":2,"gate":"auto"}]}}'
 ```
 
-The canonical state update interface is `apply-action`.
+If `apply-action` rejects the envelope, read the rejection text and resend one legal corrected envelope in the same turn.
 
 ### Procedure
 
-1. Read `.mary-workflow/state.yaml` if it exists.
-2. Clarify only if the request is too ambiguous or unsafe to plan.
-3. Produce 1 to 3 task titles. Each task must be specific, testable, and small enough for one execution pass.
-4. Print or prepare the task list using the JSON action shape above.
-5. From the project root, apply the action and move the workflow into `EXECUTING`:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py apply-action --json '{"action":"update_state","data":{"phase":"EXECUTING","tasks":[{"id":"task-1","title":"First concrete task"},{"id":"task-2","title":"Second concrete task"}]}}'
-   ```
-
-6. Do not modify product code in this phase unless the user explicitly asked for planning artifacts.
+1. Read `.mary-workflow/state.yaml`.
+2. Inspect only enough project context to plan accurately.
+3. Produce 1 to 7 milestones using the schema above.
+4. Apply exactly one `update_state` action.
+5. Do not modify product code during planning.
 
 ### Output
 
-Return the JSON action object, apply it with `apply-action`, then tell the user that Mary Workflow is ready for the execute phase.
+Return the action JSON, apply it, then summarize the milestone count and tell the user `/mw-run` can start or resume automatic execution.
 
-## 中文说明
-
-这个阶段只负责“想清楚要做什么”，不负责真正改代码。
-
-- 输入：用户刚提出的需求，以及必要的项目上下文。
-- 输出：1 到 3 个任务，包在 `{"action":"update_state","data":{...}}` 里。
-- 状态变化：调用 `apply-action` 后，workflow 会从 `PLANNING` 进入 `EXECUTING`。
-- 设计原因：任务数量限制在 3 个以内，可以减少一次计划过大导致执行失控。
-- 强规则：执行前必须检查当前阶段确实是 `PLANNING`。
-- 输出格式：任务列表必须使用 action JSON envelope，便于脚本直接解析。
-- 状态更新：只能通过 `mary_workflow.py apply-action`，不要手动改 `state.yaml`。
-- 中文可以出现在任务标题里，例如 `--task "为执行阶段添加中文说明"`。
-
-机器协议请继续保留英文：
-
-- 阶段名：`PLANNING`、`EXECUTING`、`REVIEWING`、`FINISHED`
-- Action 名：`update_state`
-- 命令名：`apply-action`
-- JSON key：`action`、`data`、`phase`、`tasks`
-- 文件名：`state.yaml`、`mw-plan.md`

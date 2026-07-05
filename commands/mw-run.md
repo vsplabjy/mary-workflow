@@ -1,26 +1,22 @@
 ---
-description: Execute the first pending Mary Workflow task.
+description: Run or resume Mary Workflow automatic milestone execution.
 ---
 
 # /mw-run
 
-Load Mary Workflow's execution phase and complete the first pending task.
+Run the current Mary Workflow phase. This command replaces `/mw-next`, `/mw-resume`, and `/mw-review`.
 
 ## Instructions
 
-1. From the user's current project root, render the execution context:
+1. From the project root, render current run context:
 
    ```bash
    python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-run
    ```
 
-2. Treat the rendered output as the active instruction context for this turn.
-3. Follow the loaded `mw-execute.md` protocol exactly:
-   - read `.mary-workflow/state.yaml`;
-   - verify `workflow.phase` is `EXECUTING`;
-   - inspect only files related to the current task;
-   - implement and validate the task;
-   - output an `{"action":"mark_task_done","data":{...}}` JSON object only after success;
-   - apply it through `mary_workflow.py apply-action`.
-4. If implementation or validation is blocked, leave the workflow in `EXECUTING` and explain the blocker.
+2. Treat the rendered output as active instruction context.
+3. If phase is `EXECUTING`, implement the current milestone and apply `mark_task_done` or `record_error`.
+4. If phase is `REVIEWING`, review diff and acceptance evidence, then apply `set_phase` or `record_error`.
+5. If phase is `DEBUGGING`, enqueue a fix milestone with `enqueue_fix_task`.
+6. Continue the automatic loop until the workflow reaches `FINISHED`, needs user confirmation, or is blocked.
 

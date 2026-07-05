@@ -292,3 +292,61 @@ Hypo-style sub-skill command surface.
   - `mary-workflow:resume`
   - `mary-workflow:status`
   - `mary-workflow:stop`
+
+## 2026-07-05
+
+v1.1 milestone workflow refactor.
+
+完成内容：
+
+- 将用户命令面从 10 条收敛为 6 条：
+  - `/mw-init`
+  - `/mw-plan`
+  - `/mw-run`
+  - `/mw-status`
+  - `/mw-stop`
+  - `/mw-debug`
+- 裁撤 `/mw-start`、`/mw-next`、`/mw-resume` 和独立 `/mw-review` 的 command/sub-skill 注册。
+- 将状态模型升级为 `version: 2` milestone schema：
+  - `deliverables`
+  - `acceptance`
+  - `estimated_scope`
+  - `gate`
+- 新增 `init --reset`，旧 v1 state 不迁移，需 reset。
+- 在 runtime 层强制 phase/action 白名单：
+  - `PLANNING`: `update_state`
+  - `EXECUTING`: `mark_task_done` / `record_error`
+  - `REVIEWING`: `set_phase` / `record_error`
+  - `DEBUGGING`: `enqueue_fix_task`
+- 删除旧 CLI 后门：
+  - `start`
+  - `plan --task`
+  - `next-task`
+  - `done-task`
+  - `set-phase`
+  - `record-error`
+  - `complete-current`
+- `apply-action` 先记录 action 名，再执行具体状态变更。
+- 拒收非法信封时写入 `log.md`，增加 `rejected_actions` 统计，并返回当前 phase 合法动作。
+- `set_phase()` 统一记录 phase transition 日志。
+- `mark_task_done` 自动进入 `REVIEWING` 时写入独立日志：
+  - `phase EXECUTING -> REVIEWING (auto: all tasks done)`
+- `/mw-run` 改为当前 phase 渲染入口，吸收 next/resume/review 行为。
+- `mw_codex.py` 在 milestone 边界从 `state.yaml` 渲染干净上下文包。
+- 新增 `.mary-workflow/reports/<milestone-id>.md` 验收报告落盘。
+- 四个 phase prompt 同步加入统一 Language Policy。
+- review prompt 明确禁止 `update_state`，只允许 `set_phase` / `record_error`。
+- `references/state-contract.md` 重写为 v2 milestone contract。
+
+验证：
+
+- `python -m py_compile scripts/mary_workflow.py scripts/mw_codex.py` 通过。
+- `.codex-plugin/plugin.json` JSON 校验通过。
+- 临时目录冒烟测试通过：
+  - `init`
+  - `update_state` milestone plan
+  - 非法 `update_state` 在 `EXECUTING` 被拒
+  - `mark_task_done` 自动进入 `REVIEWING`
+  - review `set_phase EXECUTING` 可打回当前 milestone
+  - 再次完成后 `set_phase FINISHED`
+  - 日志可区分 `update_state` 与 `set_phase`

@@ -1,6 +1,6 @@
-# Mary Workflow State Contract
+# Mary Workflow v2 State Contract
 
-Mary Workflow stores project-local runtime files in `.mary-workflow/`.
+Mary Workflow stores runtime files in `.mary-workflow/`.
 
 ## Directory Layout
 
@@ -13,135 +13,151 @@ Mary Workflow stores project-local runtime files in `.mary-workflow/`.
 │   ├── mw-execute.md
 │   ├── mw-review.md
 │   └── mw-debug.md
+├── reports/
+│   └── milestone-1.md
 └── log.md
 ```
 
-## `state.yaml`
+## State Version
+
+`state.yaml` must contain:
 
 ```yaml
+version: 2
+```
+
+Mary Workflow v2 rejects v1 state files. Use `/mw-init --reset` to recreate old projects.
+
+## Core State Shape
+
+```yaml
+version: 2
+
 workflow:
   status: idle
   phase: PLANNING
   started_at:
   updated_at:
 
+project:
+  root: "/path/to/project"
+  structure:
+    - "README.md"
+  tech_stack:
+    - "python"
+  test_commands:
+    - "pytest"
+
 current:
   index: 0
   prompt_file: mw-plan.md
-  task_id:
+  milestone_id:
 
 progress:
   completed: 0
   total: 0
 
-tasks:
-  - id: task-1
+execution_lease:
+  owner:
+  milestone_id:
+  started_at:
+
+milestones:
+  - id: milestone-1
     status: pending
-    title: "Implement the smallest useful change"
+    title: "Implement one independently verifiable slice"
+    deliverables:
+      - "src/module.py"
+    acceptance:
+      - "pytest"
+    estimated_scope: 2
+    gate: auto
+    review: ""
 
-last_error:
-  command: "pytest"
-  stderr: "failure summary"
-  returncode: "1"
-  created_at: 2026-05-19T00:00:00+00:00
+audit:
+  action_counts:
+    update_state: 0
+    mark_task_done: 0
+    set_phase: 0
+    record_error: 0
+    enqueue_fix_task: 0
+  rejected_actions: 0
+  phase_history:
+    - "PLANNING -> EXECUTING (envelope: update_state)"
 ```
 
-Status values:
+## Phase Values
 
-- `idle`: initialized but not started.
-- `running`: prompt execution is active.
-- `stopped`: user paused the workflow.
-- `completed`: all prompts have completed.
+- `PLANNING`: convert the user goal into 1 to 7 milestones.
+- `EXECUTING`: implement the current milestone.
+- `REVIEWING`: review current milestone evidence and diff.
+- `DEBUGGING`: convert `last_error` into a focused fix milestone.
+- `FINISHED`: all milestones are complete.
 
-Phase values:
+## Action Whitelist
 
-- `PLANNING`: convert the user's request into at most 3 concrete tasks.
-- `EXECUTING`: implement the first pending task.
-- `REVIEWING`: inspect the generated code and decide whether to continue.
-- `DEBUGGING`: turn a command or script failure into a focused fix task.
-- `FINISHED`: the user's request is complete.
+The runtime rejects illegal envelopes:
 
-Use `REVIEWING` exactly. Do not shorten this phase to `REVIEW`.
+- `PLANNING`: `update_state`
+- `EXECUTING`: `mark_task_done`, `record_error`
+- `REVIEWING`: `set_phase`, `record_error`
+- `DEBUGGING`: `enqueue_fix_task`
+- `FINISHED`: no mutating actions
 
-Task status values:
+Rejected envelopes are logged as `rejected ...`, counted in `audit.rejected_actions`, and returned with legal actions for the current phase.
 
-- `pending`: not completed yet.
-- `done`: implemented and validated.
+## Milestone Schema
 
-## Prompt Ordering
+`update_state` accepts:
 
-Core prompt files live in `.mary-workflow/prompts/`:
+```json
+{
+  "action": "update_state",
+  "data": {
+    "phase": "EXECUTING",
+    "milestones": [
+      {
+        "id": "milestone-1",
+        "title": "Concrete milestone",
+        "deliverables": ["relative/path.ext"],
+        "acceptance": ["pytest"],
+        "estimated_scope": 2,
+        "gate": "auto"
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- 1 to 7 milestones.
+- `deliverables`, `acceptance`, and `estimated_scope` are required.
+- `estimated_scope <= 5`, counting non-test files only.
+- Every milestone must be independently verifiable.
+- `gate` is `auto` or `confirm`.
+
+## Command Surface
+
+v2 exposes six commands:
 
 ```text
-mw-plan.md
-mw-execute.md
-mw-review.md
-mw-debug.md
+/mw-init
+/mw-plan
+/mw-run
+/mw-status
+/mw-stop
+/mw-debug
 ```
 
-Additional `.md` prompts may be added later, but the MVP phase loop uses these four names directly.
-
-## Codex Commands and Bridge
-
-Mary Workflow exposes Codex-facing slash commands through command-specific sub-skills:
+Removed v1 commands:
 
 ```text
-skills/
-├── init/SKILL.md
-├── start/SKILL.md
-├── plan/SKILL.md
-├── run/SKILL.md
-├── review/SKILL.md
-├── debug/SKILL.md
-├── next/SKILL.md
-├── resume/SKILL.md
-├── status/SKILL.md
-└── stop/SKILL.md
+/mw-start
+/mw-next
+/mw-resume
+/mw-review
 ```
 
-These sub-skills follow the Hypo-Workflow autocomplete pattern: each command is a small skill with its own `name` and `description`.
+`/mw-run` renders the current phase and resumes from the current milestone, so it absorbs next/resume/review behavior.
 
-Mary Workflow also keeps top-level command Markdown files for clients that support file-based command loading:
-
-```text
-commands/
-├── mw-init.md
-├── mw-start.md
-├── mw-plan.md
-├── mw-run.md
-├── mw-review.md
-├── mw-debug.md
-├── mw-next.md
-├── mw-resume.md
-├── mw-status.md
-└── mw-stop.md
-```
-
-The phase commands call `scripts/mw_codex.py` to render prompt and state context:
-
-- `/mw-plan`: render `mw-plan.md`.
-- `/mw-run`: render `mw-execute.md`.
-- `/mw-review`: render `mw-review.md`.
-- `/mw-debug`: render `mw-debug.md`.
-- `/mw-next`: render the prompt for the current `workflow.phase`.
-- `/mw-resume`: render the prompt for the current `workflow.phase`.
-- `/mw-status`: render `state.yaml` without a phase prompt.
-
-The bridge prints the current `state.yaml` plus the resolved phase prompt. Codex should treat that output as the active instruction context for the turn.
-
-## Phase Prompt Guardrails
-
-Each core prompt must enforce:
-
-- Phase gate: read `.mary-workflow/state.yaml` first and verify `workflow.phase` matches the prompt.
-- Structured output: return an action JSON envelope, `{"action":"...","data":{...}}`.
-- State update boundary: update state only through `scripts/mary_workflow.py apply-action`; do not edit `state.yaml` by hand.
-- Context isolation: execution should inspect and edit only files directly related to the current task unless explicitly instructed otherwise.
-
-Supported action names:
-
-- `update_state`: replace the task list and move to the target phase.
-- `mark_task_done`: mark one task done and advance to the next task or `REVIEWING`.
-- `set_phase`: move to `PLANNING`, `EXECUTING`, `REVIEWING`, `DEBUGGING`, or `FINISHED`.
-- `record_error`: record failed command details and enter `DEBUGGING`.
-- `enqueue_fix_task`: insert one fix task before the first pending task and return to `EXECUTING`.

@@ -1,11 +1,11 @@
 ---
 name: stop
-description: Stop Mary Workflow without deleting state. Use when the user invokes /mw-stop.
+description: Stop Mary Workflow v2 without deleting state. Use when the user invokes /mw-stop.
 ---
 
 # Mary Workflow: Stop
 
-Stop Mary Workflow while keeping state and logs.
+Stop Mary Workflow while keeping state, logs, and reports.
 
 ## Procedure
 
@@ -16,5 +16,5 @@ Stop Mary Workflow while keeping state and logs.
    python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py stop
    ```
 
-3. Report the stopped status and current phase.
+3. Report stopped status and current milestone.
 
