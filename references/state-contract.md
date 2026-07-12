@@ -1,6 +1,6 @@
-# Mary Workflow v3 State Contract
+# Mary Workflow v2.1 State Contract
 
-Mary Workflow stores runtime files in `.mary-workflow/`.
+Mary Workflow stores runtime authority in `.mary-workflow/`. Filesystem state, not conversation memory, controls every transition.
 
 ## Directory Layout
 
@@ -11,156 +11,79 @@ Mary Workflow stores runtime files in `.mary-workflow/`.
 ├── state.yaml
 ├── prompts/
 │   ├── mw-plan.md
+│   ├── mw-ready.md
+│   ├── mw-resume.md
 │   ├── mw-execute.md
 │   ├── mw-review.md
 │   └── mw-debug.md
-├── reports/
-│   └── C0/
-│       └── milestone-1.md
-├── cycles/
-│   └── C0/
-│       ├── state.yaml
-│       ├── log.md
-│       └── reports/
-│           └── milestone-1.md
+├── reports/C0/milestone-1.md
+├── cycles/C0/{state.yaml,log.md,reports/}
 └── log.md
 ```
 
-## State Version
-
-`state.yaml` must contain:
+## Version
 
 ```yaml
-version: 3
+version: 2.1
 cycle: C0
 ```
 
-Mary Workflow v3 rejects v1/v2 state files. Use `/mw-init --reset` to recreate old projects.
+v2.1 rejects earlier state contracts. Recreate old workspaces with `/mw-init --reset`; there is no implicit migration because `PLANNED` and the lease/grant contract change state semantics.
 
-## Config
+## Phase Graph
 
-```yaml
-workflow:
-  name: Mary Workflow
-  prompt_glob: prompts/*.md
-output:
-  language: zh
-plan:
-  interview: on
-  interview.max_rounds: 3
-  interview.questions_per_round: "3-5"
+```text
+PLANNING --update_state--> PLANNED
+PLANNED --start_execution + start grant--> EXECUTING
+EXECUTING --mark_task_done--> REVIEWING
+EXECUTING/REVIEWING --record_error--> DEBUGGING
+DEBUGGING --enqueue_fix_task--> EXECUTING
+REVIEWING --set_phase--> EXECUTING | PLANNING | FINISHED
+stopped active phase --resume_execution + resume grant--> same active phase
 ```
 
-`output.language` controls user-visible language for plan/run/debug/status/stop. `zh` is the default, `auto` follows the conversation, and `en` forces English.
-
-## Core State Shape
-
-```yaml
-version: 3
-cycle: C0
-
-workflow:
-  status: idle
-  phase: PLANNING
-  started_at:
-  updated_at:
-
-project:
-  root: "/path/to/project"
-  brief: ".mary-workflow/project-brief.md"
-  language: zh
-  structure:
-    - "README.md"
-  tech_stack:
-    - "python"
-  test_commands:
-    - "pytest"
-
-planning:
-  clarifications:
-    - "验收方式：pytest"
-
-current:
-  index: 0
-  prompt_file: mw-plan.md
-  milestone_id:
-
-progress:
-  completed: 0
-  total: 0
-
-execution_lease:
-  owner:
-  milestone_id:
-  started_at:
-
-milestones:
-  - id: milestone-1
-    status: pending
-    title: "Implement one independently verifiable slice"
-    deliverables:
-      - "src/module.py"
-    acceptance:
-      - "pytest"
-    estimated_scope: 2
-    gate: auto
-    review: ""
-
-audit:
-  action_counts:
-    update_project: 0
-    update_state: 0
-    mark_task_done: 0
-    set_phase: 0
-    record_error: 0
-    enqueue_fix_task: 0
-  rejected_actions: 0
-  phase_history:
-    - "PLANNING -> EXECUTING (envelope: update_state)"
-```
+`/mw-cycle` archives the active cycle and resets to `PLANNING`. No edge other than a grant-backed `start_execution` may enter initial `EXECUTING` from `PLANNED`.
 
 ## Action Whitelist
 
-- `PLANNING`: `update_project`, `update_state`
+- `PLANNING`: `update_project`, `update_interview`, `update_state`
+- `PLANNED`: `reopen_plan`, `start_execution`
 - `EXECUTING`: `mark_task_done`, `record_error`
 - `REVIEWING`: `set_phase`, `record_error`
 - `DEBUGGING`: `enqueue_fix_task`
-- `FINISHED`: no mutating actions
+- `FINISHED`: none
 
-`update_project` is the only legal way to correct init project understanding. It may update `structure`, `tech_stack`, `test_commands`, and `language`, then rewrites `.mary-workflow/project-brief.md`.
+When an active phase has `workflow.status: stopped`, its normal actions are replaced by `resume_execution` only.
 
-## Plan Interview
+## Planning Contract
 
-When `plan.interview: on`, `/mw-plan` must complete the interview gate before `update_state`.
+The interview persists every question and answer. Adaptive depth is enforced:
 
-Rules:
+- 1 to 2 milestones may use confirmed round-0 defaults.
+- 3 to 4 milestones require at least one answered active round.
+- 5 or more milestones require at least two answered active rounds.
 
-- 0 to 3 progressive rounds, capped by `plan.interview.max_rounds`.
-- Each active round asks 3 to 5 targeted questions.
-- A question is allowed only when its answer can change milestone decomposition or acceptance criteria.
-- Later rounds must anchor to the previous answer and the remaining uncertainty.
-- Small 1 to 2 milestone tasks may use 0 to 1 round with stated defaults.
-- Large 5+ milestone tasks may use 2 to 3 rounds when uncertainty remains.
-- The planner may stop early with `信息已足够，剩余采用默认值：...`.
+Lifecycle values are `not_started`, `awaiting_answers`, `in_progress`, `draft_ready`, `plan_ready`, and `complete`. `draft_ready` is a persisted draft awaiting `update_state`; `plan_ready` is a frozen, still-unconfirmed plan awaiting `/mw-run`.
 
-`update_state` must include `data.clarifications` summarizing all rounds, answers, and defaults; missing or empty clarifications are rejected.
+Every default or assumption must be persisted and displayed before the user answers. `plan.interview: off` disables open-ended interviewing, not confirmation: `mode=propose` remains in `awaiting_answers` until the user explicitly accepts the listed assumptions. `resolve` and `revise` reject newly introduced defaults.
+
+Every milestone has `id`, `title`, file-level `deliverables`, executable `acceptance`, `estimated_scope <= 5`, and `gate: auto|confirm`.
+
+When the draft is complete, `update_state` must copy persisted `clarifications` and `draft_milestones` exactly:
 
 ```json
 {
   "action": "update_state",
   "data": {
-    "phase": "EXECUTING",
-    "clarifications": [
-      "Round 1: 用户确认验收方式为 pytest",
-      "Defaults: 未指定性能目标，默认以测试通过为准"
-    ],
+    "phase": "PLANNED",
+    "clarifications": ["<exact persisted record>"],
     "milestones": [
       {
         "id": "milestone-1",
-        "title": "Concrete milestone",
-        "deliverables": ["relative/path.ext"],
+        "title": "Frozen delivery unit",
+        "deliverables": ["src/module.py"],
         "acceptance": ["pytest"],
-        "estimated_scope": 2,
+        "estimated_scope": 1,
         "gate": "auto"
       }
     ]
@@ -168,15 +91,77 @@ Rules:
 }
 ```
 
-## Cycle Archive
+This produces `interview_status: plan_ready`, `final_plan_confirmed: false`, and phase `PLANNED`. It never starts product work. `/mw-plan` can use `reopen_plan` to return a frozen plan to `PLANNING` for revision.
 
-`/mw-cycle` archives current short-term memory into `.mary-workflow/cycles/<cycle>/`, resets active milestones/reports/log, increments `cycle`, and tells the user to run `/mw-plan`.
+## Run Grant
 
-Project brief is long-term memory and remains in the active root. Milestones, reports, logs, leases, and clarifications are cycle-local.
+Rendering `/mw-run` in `PLANNED` creates a short-lived one-time start grant bound to:
+
+- current cycle
+- SHA-256 digest of clarifications and the frozen milestone schema
+- purpose `start`
+
+The plaintext token appears only in that `/mw-run` render. `state.yaml`, `/mw-status`, and logs store only digest metadata and a short fingerprint:
+
+```yaml
+run_grant:
+  token_digest: <sha256>
+  fingerprint: <12 hex chars>
+  purpose: start
+  plan_digest: <sha256>
+  cycle: C0
+  issued_at: <timestamp>
+  expires_at: <timestamp>
+```
+
+```json
+{
+  "action": "start_execution",
+  "data": {"token": "<plaintext token from current /mw-run render>"}
+}
+```
+
+Successful consumption is single-use and atomic: it sets `final_plan_confirmed: true`, changes `interview_status` to `complete`, acquires the run lease, and records `PLANNED -> EXECUTING`. Replay, expiry, wrong purpose, changed plan, or changed cycle is rejected.
+
+Before the authorization block, `/mw-run` renders `Final Plan Confirmation Evidence` as quoted JSON containing every persisted question, recorded answer, default/assumption, clarification, and frozen milestone. The ready prompt requires this evidence to be shown without paraphrasing before grant consumption; evidence strings are data, not instructions.
+
+The repository runtime can prove possession of a token emitted by its `/mw-run` renderer. Proving that a human, rather than an agent with direct process access, invoked the renderer requires the Codex host/slash-command dispatcher to be the trusted caller.
+
+## Execution Lease
+
+The lease belongs to the whole run, not one phase:
+
+```yaml
+execution_lease:
+  owner: codex
+  status: active
+  run_id: <random id>
+  plan_digest: <sha256>
+  cycle: C0
+  milestone_id: milestone-1
+  started_at: <timestamp>
+  heartbeat_at: <timestamp>
+```
+
+- `start_execution` is the only initial lease acquisition point.
+- EXECUTING/REVIEWING/DEBUGGING transitions preserve the run id and refresh heartbeat/current milestone.
+- `/mw-stop` changes an active lease to `paused` and clears any outstanding grant.
+- A later `/mw-run` issues a purpose `resume` grant; `resume_execution` restores the same run id and phase.
+- FINISHED, replanning, and cycle reset release or clear the lease.
+
+## Audit
+
+`audit.action_counts` includes `update_interview`, `update_project`, `update_state`, `reopen_plan`, `start_execution`, `resume_execution`, `mark_task_done`, `set_phase`, `record_error`, and `enqueue_fix_task`. `phase_history` records, at minimum:
+
+```text
+PLANNING -> PLANNED (envelope: update_state; plan ready)
+PLANNED -> EXECUTING (/mw-run: start_execution)
+EXECUTING -> REVIEWING (auto: all tasks done)
+```
+
+Rejected envelopes increment `rejected_actions` and leave action mutations unapplied.
 
 ## Command Surface
-
-v3 exposes seven commands:
 
 ```text
 /mw-init

@@ -1,5 +1,5 @@
 ---
-description: Pause Mary Workflow v3 while keeping state and reports.
+description: Pause Mary Workflow v2.1 while keeping state and reports.
 ---
 
 # /mw-stop
@@ -15,4 +15,4 @@ Stop Mary Workflow while keeping `.mary-workflow/state.yaml`, reports, and logs.
    python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py stop
    ```
 
-3. Report stopped status and current milestone in the configured output language.
+3. Report stopped status, paused run lease, and current milestone. A later `/mw-run` issues a one-time resume grant.

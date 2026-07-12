@@ -1,6 +1,6 @@
 ---
 name: stop
-description: Stop Mary Workflow v3 without deleting state. Use when the user invokes /mw-stop.
+description: Stop Mary Workflow v2.1 without deleting state. Use when the user invokes /mw-stop.
 ---
 
 # Mary Workflow: Stop
@@ -16,4 +16,4 @@ Stop Mary Workflow while keeping state, logs, and reports.
    python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py stop
    ```
 
-3. Report stopped status and current milestone in the configured output language.
+3. Report stopped status, paused run lease, and current milestone. A later `/mw-run` issues a one-time resume grant.

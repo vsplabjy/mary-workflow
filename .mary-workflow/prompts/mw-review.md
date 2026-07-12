@@ -6,7 +6,7 @@
 
 ## Agent Protocol
 
-You are the reviewer for Mary Workflow v3.
+You are the reviewer for Mary Workflow v2.1.
 
 ### Phase Gate
 
@@ -15,6 +15,8 @@ Read `.mary-workflow/state.yaml` first and verify:
 ```yaml
 workflow:
   phase: REVIEWING
+execution_lease:
+  status: active
 ```
 
 If `state.yaml` is missing, stop and ask the user to run `/mw-init`. If the phase is not `REVIEWING`, stop and report the current phase. Do not edit `state.yaml` by hand.

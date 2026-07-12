@@ -353,11 +353,11 @@ v1.1 milestone workflow refactor.
 
 ## 2026-07-09
 
-v3 cycle-aware planning refactor.
+v2.1 cycle-aware planning refactor.
 
 完成内容：
 
-- 将状态契约升级为 `version: 3`，新增 `cycle` 字段，并拒载 v1/v2 老 state。
+- 将状态契约统一为 `version: 2.1`，新增 `cycle` 字段，并拒载早期 state。
 - `/mw-init` 产出 `.mary-workflow/project-brief.md`，并在 `state.yaml` 的 `project` 段记录 brief 路径和输出语言。
 - `init` 默认中文，`config.yaml` 新增 `output.language`，命令层 `status` / `stop` / `apply-action` 摘要按配置输出。
 - 新增 `update_project` 信封，允许在 `PLANNING` 中合法修正项目结构、技术栈、测试方式和语言配置。
@@ -367,7 +367,7 @@ v3 cycle-aware planning refactor.
 - 新增 `/mw-cycle`、`commands/mw-cycle.md` 和 `skills/cycle/SKILL.md`，将当前 cycle 的 state/log/reports 归档到 `.mary-workflow/cycles/<cycle>/`，清空活动 milestones/reports/log，并开启下一 cycle。
 - 报告路径 cycle 化为 `.mary-workflow/reports/<cycle>/<milestone-id>.md`。
 - `project-brief.md` 作为跨 cycle 长期记忆保留，milestones、reports、log、lease 和 clarifications 作为 cycle 内短期记忆滚动归档。
-- `.codex-plugin/plugin.json` 版本升至 `0.3.0`，`SKILL.md` 与 `references/state-contract.md` 同步 v3 命令面和状态契约。
+- `.codex-plugin/plugin.json`、`SKILL.md` 与 `references/state-contract.md` 同步 v2.1 命令面和状态契约。
 
 验证：
 
@@ -375,10 +375,69 @@ v3 cycle-aware planning refactor.
 - `.codex-plugin/plugin.json` JSON 校验通过。
 - `git diff --check` 通过。
 - 临时目录冒烟测试通过：
-  - `init` 生成 v3 state、`config.yaml` 和 `project-brief.md`。
+  - `init` 生成 v2.1 state、`config.yaml` 和 `project-brief.md`。
   - `update_project` 可修正语言、技术栈和测试命令。
   - 缺失 `clarifications` 的 `update_state` 在 `plan.interview: on` 时被拒收。
   - 新 config 生成 `plan.interview.max_rounds: 3` 和 `plan.interview.questions_per_round: "3-5"`，`mw-plan` 上下文可渲染多轮 interview 配置。
   - 合法 `update_state` 进入 `EXECUTING`，`mark_task_done` 自动进入 `REVIEWING`。
   - review `set_phase FINISHED` 完成当前 cycle。
   - `/mw-cycle` 将 C0 的 state/log/reports 归档到 `.mary-workflow/cycles/C0/`，活动 state 切到 C1。
+
+## 2026-07-10
+
+Plan/run authorization boundary fix.
+
+问题证据：
+
+- VideoGS 的一次 `/mw-plan` 将自行推断的 `Round 0` defaults 当作问答纪要，直接提交 `update_state`。
+- 旧 `update_state` 强制执行 `PLANNING -> EXECUTING`，没有“计划完成、等待用户运行”的状态。
+- 模型继续加载自动循环后完成初始 4 个 milestone，并由 Debug 循环追加 3 个修复 milestone，最终越权跑到 `FINISHED 7/7`。
+
+完成内容：
+
+- 新增 `PLANNED` 阶段，成功定稿只执行 `PLANNING -> PLANNED`。
+- 新增 `start_execution` 信封，且只在 `PLANNED` 合法；`/mw-run` 渲染时签发一次性 token，信封必须同时携带 token 和 `authorized_by: /mw-run`。
+- 新增 `mw-ready.md`，作为 `/mw-run` 的独立授权关卡。
+- `state.yaml` 新增 interview 状态、当前/最大轮次、持久化轮次记录、draft milestones 和最终计划确认字段。
+- 新增 `update_interview`，支持 `open` / `resolve` / `propose` / `revise` 四种 plan 交互。
+- 每轮问题先落盘再展示；没有用户答案时保持 `awaiting_answers`，禁止把沉默解释为默认同意。
+- 1 到 2 milestone 的 0 轮方案必须确认 defaults；3 到 4 milestone 至少 1 个已回答轮次；5+ milestone 至少 2 个已回答轮次。
+- 最终 `update_state` 要求显式确认文本、完整 clarifications，并与已展示 draft 完全一致。
+- `/mw-plan` 在提问、展示/修订草案和进入 `PLANNED` 后强制结束当前回复，不得运行验收、编辑产品文件或调用 `start_execution`。
+- 已初始化的 v2.1 项目再次运行 `/mw-init` 时覆盖刷新核心 prompts，但不重写 `state.yaml`，确保拿到新增 `mw-ready.md` 和硬停止规则。
+- `apply_action` 使用深拷贝执行动作，拒收信封不会意外持久化半完成状态。
+- plugin manifest 版本统一为 `2.1.0`。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：11/11 通过。
+- 直接 `update_state` 跳过 interview 被拒。
+- 未明确确认的最终计划被拒。
+- `PLANNED` 中的 `mark_task_done` 被白名单拒绝。
+- `/mw-run` 前保持 `started_at` 为空；合法 `start_execution` 后才进入 `EXECUTING`。
+- 5+ milestones 仅一轮回答时被拒。
+
+### v2.1 nonce and run-lease hardening
+
+本节覆盖并取代上面的同日临时授权设计。
+
+- 状态契约统一为 `version: 2.1`，早期 state 明确拒载，旧项目必须 `/mw-init --reset`。
+- `update_state` 只冻结计划并进入 `PLANNED`；它拒绝 `confirmed` / `confirmation` 字段，agent 不能自行声明用户已确认。
+- 用户调用 `/mw-run` 本身承担最终确认：渲染器签发绑定 cycle 与 plan digest 的短期单次 grant，`start_execution` 消费后原子完成确认、lease 领取和 `PLANNED -> EXECUTING`。
+- 原始 token 仅出现在当次 `/mw-run` 渲染；`state.yaml`、status 和日志只保存 SHA-256 digest、指纹、用途和过期时间。
+- 重复渲染会轮换 grant；伪造、重放、过期、错误用途、plan/cycle 变化均拒收。
+- execution lease 改为 run 级：只由 `start_execution` 初次领取，在 EXECUTING/REVIEWING/DEBUGGING 间保持同一 run id，FINISHED/replan/cycle 时释放或清空。
+- `/mw-stop` 暂停 lease 并清除未消费 grant；再次 `/mw-run` 签发 purpose=resume 的单次 grant，`resume_execution` 保持原 phase 和 run id 续跑。
+- 新增 `mw-resume.md`；`mw-ready.md` 改为只读取 `/mw-run` 专用授权区块，不再从 state 读取明文 token。
+- `PLANNED` 下可通过 `reopen_plan` 回到 PLANNING 修订，修订会使旧 grant 失效。
+- 删除默认值逃生口：所有 defaults/assumptions 必须先落盘、完整展示并等待用户显式确认；`interview: off` 也不例外，`resolve`/`revise` 禁止后置注入 defaults。
+- `/mw-run` 的 PLANNED 关卡新增 `Final Plan Confirmation Evidence`，以只读 JSON 原样展示全部问题、记录回答、defaults、clarifications 和 frozen milestones，再允许消费 token。
+- plugin manifest 使用 SemVer `2.1.0`，命令、skills、状态契约与 phase prompt 统一标记为 v2.1。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：21/21 通过。
+- `python -m py_compile scripts/mary_workflow.py scripts/mw_codex.py` 通过。
+- `.codex-plugin/plugin.json` JSON 校验与 `git diff --check` 通过。
+- 覆盖 nonce 明文不落盘、grant 轮换/重放拒绝、原子启动、stop/resume、debug/review lease 保持、FINISHED/replan/cycle 释放，以及早期/缺失 version 拒载。
+- 剩余信任边界：仓库运行时证明的是“调用者持有 `/mw-run` 渲染 grant”；若要密码学证明由人类而非具备直接进程权限的 agent 发起，必须由 Codex 宿主 slash dispatcher 作为可信签发方。

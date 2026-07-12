@@ -1,6 +1,6 @@
 {
   "name": "mary-workflow",
-  "version": "0.3.0",
+  "version": "2.1.0",
   "description": "Cycle-aware milestone workflow for Codex.",
   "author": {
     "name": "Mary Workflow",

@@ -1,20 +1,20 @@
 ---
 name: mary-workflow
-description: Run a v3 milestone workflow from `.mary-workflow/`. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, or asks to run Mary workflow.
+description: Run a v2.1 milestone workflow from `.mary-workflow/`. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, or asks to run Mary workflow.
 ---
 
 # Mary Workflow
 
-Mary Workflow v3 keeps project-local state in `.mary-workflow/` and drives Codex through project understanding, milestone planning, automatic execution/review, debug recovery, cycle archives, and audit-friendly state updates.
+Mary Workflow v2.1 keeps project-local state in `.mary-workflow/` and drives Codex through project understanding, milestone planning, authorized automatic execution/review, debug recovery, cycle archives, and audit-friendly state updates.
 
 ## Commands
 
 User-facing command surface:
 
-- `/mw-init`: create `.mary-workflow/`, seed prompts, detect project structure/tech/test commands, write `project-brief.md`, and create v3 state.
+- `/mw-init`: create v2.1 state for a new project, or refresh core prompts in an existing v2.1 project without deleting state.
 - `/mw-init --reset`: remove and recreate `.mary-workflow/`.
-- `/mw-plan`: run the adaptive interview gate, then write 1 to 7 milestones with clarifications.
-- `/mw-run`: automatic main loop for current phase.
+- `/mw-plan`: persist adaptive interview rounds, freeze the draft, then stop unconfirmed in `PLANNED`.
+- `/mw-run`: confirm the frozen plan, consume a one-time grant, acquire/resume the run lease, then run the automatic phase loop.
 - `/mw-status`: read-only state dashboard.
 - `/mw-stop`: pause while preserving state, logs, reports, and cycle.
 - `/mw-debug`: manually load debug phase when the workflow is in `DEBUGGING`.
@@ -23,22 +23,24 @@ User-facing command surface:
 ## Runtime Rules
 
 1. Work from the user's current project directory.
-2. v3 state files must contain `version: 3`; v1/v2 state files are rejected and require `/mw-init --reset`.
+2. v2.1 state files must contain `version: 2.1`; earlier state contracts are rejected and require `/mw-init --reset`.
 3. `init` defaults to Chinese, writes `.mary-workflow/project-brief.md`, then asks whether plan/run should use `zh`, `auto`, or `en`.
 4. Project understanding corrections use `update_project`; do not hand-edit `state.yaml` or `project-brief.md`.
 5. State updates go through `scripts/mary_workflow.py apply-action`.
 6. Phase/action whitelist is enforced by the runtime:
-   - `PLANNING`: `update_project`, `update_state`
-   - `EXECUTING`: `mark_task_done`, `record_error`
-   - `REVIEWING`: `set_phase`, `record_error`
-   - `DEBUGGING`: `enqueue_fix_task`
-7. `/mw-plan` with `plan.interview: on` must complete the adaptive interview gate before `update_state`: 0 to 3 progressive rounds, 3 to 5 necessary questions per active round, early stop when enough information is available, and `clarifications` covering every round/default.
-8. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
+   - `PLANNING`: `update_project`, `update_interview`, `update_state`
+   - `PLANNED`: `reopen_plan`, `start_execution`
+   - `EXECUTING`: `mark_task_done`, `record_error` (`resume_execution` only while stopped)
+   - `REVIEWING`: `set_phase`, `record_error` (`resume_execution` only while stopped)
+   - `DEBUGGING`: `enqueue_fix_task` (`resume_execution` only while stopped)
+7. `/mw-plan` persists questions before asking, never invents missing answers, freezes the exact draft in `PLANNED`, and ends without editing product files.
+8. Only a `/mw-run` render contains the plaintext one-time token. `start_execution` atomically confirms the plan and acquires the lease; stop/resume uses a separate single-use grant.
+9. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
 
 ## Memory Model
 
 - Long-term memory: `.mary-workflow/project-brief.md` and the `project` section in `state.yaml`.
-- Cycle-local short-term memory: milestones, reports, logs, leases, and clarifications.
+- Cycle-local short-term memory: interview rounds, draft/active milestones, reports, logs, leases, and clarifications.
 - `/mw-cycle` archives short-term memory and starts the next cycle without planning new work.
 
 ## Codex Native Commands
@@ -57,4 +59,4 @@ Command Markdown files also live under `commands/` for clients that support file
 
 ## File Contract
 
-See `references/state-contract.md` for expected v3 files and state fields.
+See `references/state-contract.md` for expected v2.1 files and state fields.

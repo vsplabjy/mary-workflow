@@ -16,5 +16,6 @@ Load Mary Workflow's planning phase, run the adaptive interview gate, and create
    ```
 
 2. Treat the rendered output as active instruction context.
-3. Follow `mw-plan.md`: verify `workflow.phase: PLANNING`, run 0 to 3 progressive interview rounds when `plan.interview: on`, include all rounds/defaults in `clarifications`, produce milestones with `deliverables`, `acceptance`, and `estimated_scope`, output `update_state`, and apply it with `mary_workflow.py apply-action`.
-4. Do not edit product code during planning.
+3. Follow persisted interview state: ask only boundary-changing questions, resolve answers, revise when requested, then freeze the exact draft in `PLANNED`. Every default or assumption, including with interview disabled, must be displayed and explicitly confirmed before freezing.
+4. End after questions or after displaying the frozen plan. `/mw-run` itself confirms and starts that plan.
+5. Do not edit product code, run acceptance commands, invoke `/mw-run`, or emit `start_execution` during planning.
