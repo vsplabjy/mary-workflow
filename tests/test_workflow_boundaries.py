@@ -811,7 +811,7 @@ class WorkflowBoundaryTests(unittest.TestCase):
         target = self.root / "prompts/mw-plan.md"
         target.write_text("stale prompt\n", encoding="utf-8")
         refreshed = seed_core_prompts(self.root, overwrite=True)
-        self.assertEqual(refreshed, 7)
+        self.assertEqual(refreshed, 10)
         self.assertIn("Non-Negotiable Boundary", target.read_text(encoding="utf-8"))
         self.assertTrue((self.root / "prompts/mw-resume.md").exists())
         self.assertEqual((self.root / "state.yaml").read_bytes(), state_before)
@@ -893,12 +893,38 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertNotIn("scratch/debug.json", state["project_inventory"])
         config = read_config(workflow)
         self.assertIn("output/**", config["init_ignore"])
-        self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 7)
+        self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
         self.assertTrue((workflow / "analysis").is_dir())
         self.assertIn("继续 /mw-init 理解流程", result.stdout)
         init_context = render_prompt(fresh, "mw-init")
         self.assertIn("# Mary Init Understanding Phase", init_context)
         self.assertIn("file_104.txt", init_context)
+
+    def test_course_profiles_render_as_shared_mary_context(self) -> None:
+        for alias, prompt_name, marker in (
+            ("mw-learn", "mw-learn.md", "Course Learning Profile"),
+            ("mw-exam", "mw-exam.md", "ExamPass Profile"),
+            ("mw-review", "mw-exam.md", "ExamPass Profile"),
+            ("mw-slide", "mw-slide.md", "Slide Profile"),
+        ):
+            phase, prompt = prompt_path_for(self.project, alias)
+            self.assertEqual(phase, "PLANNING")
+            self.assertEqual(prompt.name, prompt_name)
+            rendered = render_prompt(self.project, alias)
+            self.assertIn(f"Alias: /{alias}", rendered)
+            self.assertIn(marker, rendered)
+            self.assertIn("Mary Workflow v2.1 Context", rendered)
+
+    def test_course_profiles_remain_available_after_finished_cycle(self) -> None:
+        self.start_execution()
+        apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
+        apply_action(
+            self.root,
+            {"action": "set_phase", "data": {"phase": "FINISHED", "decision": "accepted"}},
+        )
+        rendered = render_prompt(self.project, "mw-exam")
+        self.assertIn("Resolved phase: FINISHED", rendered)
+        self.assertIn("ExamPass Profile", rendered)
 
 
 if __name__ == "__main__":

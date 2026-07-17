@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Build full project understanding and run milestone workflows"
-  default_prompt: "Use $mary-workflow to fully read and understand the repository, plan milestones, run, inspect status, stop, debug, or archive cycles with /mw-cycle."
+  short_description: "Run project, Lecture learning, and exam review milestones"
+  default_prompt: "Use $mary-workflow to plan and run project work, /mw-learn for slides plus lecture recordings, or /mw-exam for scoped ExamPass review."
 
 policy:
   allow_implicit_invocation: true

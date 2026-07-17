@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run a v2.1 milestone workflow from `.mary-workflow/`. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, or asks to run Mary workflow.
+description: Run a v2.1 milestone workflow from `.mary-workflow/`, including course Lecture learning and ExamPass review profiles. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, or `/mw-slide`, or asks to run Mary workflow.
 ---
 
 # Mary Workflow
@@ -19,6 +19,10 @@ User-facing command surface:
 - `/mw-stop`: pause while preserving state, logs, reports, and cycle.
 - `/mw-debug`: manually load debug phase when the workflow is in `DEBUGGING`.
 - `/mw-cycle`: archive the current cycle to `.mary-workflow/cycles/<cycle>/`, reset active short-term state, and point back to `/mw-plan`.
+- `/mw-learn`: run the Course Lecture learning profile based on `skills/lecture-learning/`.
+- `/mw-exam`: run the ExamPass review profile based on `skills/exam-review/`.
+- `/mw-review`: compatibility alias for `/mw-exam`.
+- `/mw-slide`: run the direct Slide to Lecture preparation profile.
 
 ## Runtime Rules
 
@@ -55,6 +59,10 @@ Autocomplete is surfaced through command-specific sub-skills under `skills/`:
 - `skills/stop/SKILL.md` -> `/mw-stop`
 - `skills/debug/SKILL.md` -> `/mw-debug`
 - `skills/cycle/SKILL.md` -> `/mw-cycle`
+- `skills/lecture-learning/SKILL.md` -> `/mw-learn`
+- `skills/exam-review/SKILL.md` -> `/mw-exam`
+- `skills/slide-to-lecture/SKILL.md` -> `/mw-slide` and the Lecture learning Stage 1
+- `skills/roundtrip-screenshot/SKILL.md` -> image/PDF crop verification when needed
 
 Command Markdown files also live under `commands/` for clients that support file-based command loading.
 

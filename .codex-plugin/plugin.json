@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
   "version": "2.1.0",
-  "description": "Full-depth project understanding and cycle-aware milestone workflow for Codex.",
+  "description": "Full-depth project, course Lecture, and ExamPass milestone workflow for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -11,6 +11,8 @@
   "license": "MIT",
   "keywords": [
     "workflow",
+    "course-learning",
+    "exam-review",
     "planning",
     "prompt-engineering",
     "codex",
@@ -20,7 +22,7 @@
   "interface": {
     "displayName": "Mary Workflow",
     "shortDescription": "Run a local milestone workflow",
-    "longDescription": "Mary Workflow packages a lightweight Codex skill and local helper scripts for project briefs, interviewed milestone planning, automatic execution and review, debug recovery, cycle archives, state transitions, and audit-friendly action updates through a .mary-workflow workspace.",
+    "longDescription": "Mary Workflow packages project, course Lecture learning, and ExamPass review profiles with interviewed milestone planning, authorized execution and review, debug recovery, cycle archives, and audit-friendly updates through a .mary-workflow workspace.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [
@@ -32,7 +34,9 @@
     "defaultPrompt": [
       "/mw-init",
       "/mw-plan",
-      "/mw-run"
+      "/mw-run",
+      "/mw-learn",
+      "/mw-exam"
     ],
     "brandColor": "#4F46E5",
     "screenshots": []

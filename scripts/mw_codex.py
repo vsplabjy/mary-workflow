@@ -26,6 +26,12 @@ from mary_workflow import (
 
 
 PROMPTS_DIR = "prompts"
+SPECIALIZED_PROMPTS = {
+    "mw-learn": "mw-learn.md",
+    "mw-exam": "mw-exam.md",
+    "mw-review": "mw-exam.md",
+    "mw-slide": "mw-slide.md",
+}
 
 
 def require_initialized(root: Path) -> Path:
@@ -43,6 +49,8 @@ def prompt_path_for(root: Path, alias: str) -> tuple[str, Path | None]:
         return str(state["phase"]), None
     if normalized == "mw-init":
         return str(state["phase"]), workflow / PROMPTS_DIR / "mw-init.md"
+    if normalized in SPECIALIZED_PROMPTS:
+        return str(state["phase"]), workflow / PROMPTS_DIR / SPECIALIZED_PROMPTS[normalized]
     if normalized == "mw-run":
         phase = str(state["phase"])
         if phase == "FINISHED":
@@ -65,7 +73,20 @@ def prompt_path_for(root: Path, alias: str) -> tuple[str, Path | None]:
         if phase != "DEBUGGING":
             raise SystemExit(f"/mw-debug requires DEBUGGING, current phase is {phase}.")
         return phase, workflow / PROMPTS_DIR / PHASE_PROMPTS["DEBUGGING"]
-    valid = ", ".join(f"/{name}" for name in ["mw-init", "mw-debug", "mw-plan", "mw-run", "mw-status"])
+    valid = ", ".join(
+        f"/{name}"
+        for name in [
+            "mw-debug",
+            "mw-exam",
+            "mw-init",
+            "mw-learn",
+            "mw-plan",
+            "mw-run",
+            "mw-review",
+            "mw-slide",
+            "mw-status",
+        ]
+    )
     raise SystemExit(f"Unknown Mary Workflow alias: /{normalized}. Available: {valid}")
 
 
@@ -86,7 +107,9 @@ def render_prompt(root: Path, alias: str) -> str:
         run_grant = issue_run_authorization(workflow)
     state = read_state(workflow)
     state_text = (workflow / "state.yaml").read_text(encoding="utf-8")
-    if normalized == "mw-status" or (phase == "FINISHED" and normalized != "mw-init"):
+    if normalized == "mw-status" or (
+        phase == "FINISHED" and normalized not in {"mw-init", *SPECIALIZED_PROMPTS}
+    ):
         return render_status(normalized, phase, state_text)
 
     if not prompt_path or not prompt_path.exists():
@@ -322,7 +345,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Resolve Mary Workflow v2.1 slash aliases for Codex")
     parser.add_argument(
         "alias",
-        choices=["mw-init", "mw-plan", "mw-run", "mw-debug", "mw-status"],
+        choices=[
+            "mw-init",
+            "mw-plan",
+            "mw-run",
+            "mw-debug",
+            "mw-status",
+            "mw-learn",
+            "mw-exam",
+            "mw-review",
+            "mw-slide",
+        ],
         help="Slash alias without the leading slash",
     )
     parser.add_argument(
