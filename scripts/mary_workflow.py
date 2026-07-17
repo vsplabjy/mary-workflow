@@ -23,6 +23,16 @@ import subprocess
 import sys
 from typing import Any
 
+from mw_runtime import (
+    EnvelopeError,
+    action_envelope_parts,
+    append_log_entry,
+    atomic_write_text,
+    extract_first_json_object,
+    parse_json_payload as parse_runtime_json_payload,
+    require_json_object,
+)
+
 
 WORKFLOW_DIR = ".mary-workflow"
 PROMPTS_DIR = "prompts"
@@ -682,7 +692,7 @@ def write_state(root: Path, state: State) -> None:
     lines.extend([f"  rejected_actions: {state.get('rejected_actions', 0)}", "  phase_history:"])
     lines.extend(f"    - {quote_value(item)}" for item in state.get("phase_history", []))
 
-    (root / "state.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(root / "state.yaml", "\n".join(lines) + "\n", encoding="utf-8")
 
 
 def state_milestones(state: State) -> list[Milestone]:
@@ -704,11 +714,12 @@ def all_action_names() -> list[str]:
 
 
 def append_log(root: Path, message: str) -> None:
-    log_path = root / "log.md"
-    if not log_path.exists():
-        log_path.write_text("# Mary Workflow Log\n\n", encoding="utf-8")
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(f"- {now_iso()} {message}\n")
+    append_log_entry(
+        root / "log.md",
+        message,
+        timestamp=now_iso(),
+        header="# Mary Workflow Log\n\n",
+    )
 
 
 def require_root(cwd: Path) -> Path:
@@ -987,10 +998,11 @@ def normalize_string_list(value: object, field_name: str) -> list[str]:
 
 def apply_action(root: Path, payload: JsonObject) -> State:
     state = read_state(root)
-    action = str(payload.get("action", "")).strip()
-    data = payload.get("data", {})
-    if not isinstance(data, dict):
-        return reject_action(root, state, action, "Action data must be an object.")
+    try:
+        action, data = action_envelope_parts(payload)
+    except EnvelopeError as exc:
+        action = str(payload.get("action", "")).strip()
+        return reject_action(root, state, action, str(exc))
     if not is_action_allowed(state, action):
         allowed = sorted(legal_actions_for_state(state))
         allowed_text = ", ".join(allowed) if allowed else "(none)"
@@ -1864,58 +1876,17 @@ def load_json_payload(args: argparse.Namespace) -> JsonObject:
     else:
         raw = sys.stdin.read()
     payload = parse_json_payload(raw)
-    if not isinstance(payload, dict):
-        raise SystemExit("JSON action must be an object.")
-    return payload
+    try:
+        return require_json_object(payload)
+    except EnvelopeError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def parse_json_payload(raw: str) -> object:
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, flags=re.DOTALL)
-    if fenced:
-        try:
-            return json.loads(fenced.group(1))
-        except json.JSONDecodeError as exc:
-            raise SystemExit(f"Invalid fenced JSON action: {exc}") from exc
-
-    candidate = extract_first_json_object(raw)
-    if candidate:
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError as exc:
-            raise SystemExit(f"Invalid embedded JSON action: {exc}") from exc
-    raise SystemExit("Invalid JSON action: no JSON object found.")
-
-
-def extract_first_json_object(raw: str) -> str | None:
-    start = raw.find("{")
-    if start == -1:
-        return None
-    depth = 0
-    in_string = False
-    escaped = False
-    for index, char in enumerate(raw[start:], start=start):
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return raw[start : index + 1]
-    return None
+        return parse_runtime_json_payload(raw)
+    except EnvelopeError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def seed_core_prompts(root: Path, overwrite: bool = False) -> int:
@@ -2549,7 +2520,7 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     sync_prompt_for_phase(state, root)
     write_state(root, state)
     write_project_brief(root, state)
-    (root / "log.md").write_text("# Mary Workflow Log\n\n", encoding="utf-8")
+    atomic_write_text(root / "log.md", "# Mary Workflow Log\n\n", encoding="utf-8")
     append_log(root, f"cycle {old_cycle} archived; started {new_cycle}")
     print(f"已归档 {old_cycle} 到 {archive}")
     print(f"已开启 {new_cycle}。下一步：/mw-plan")
