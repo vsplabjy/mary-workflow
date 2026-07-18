@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run milestones and write grounded paper articles"
-  default_prompt: "Use $mary-workflow to close-read an arXiv paper and write a readable article with machine-validated source evidence."
+  short_description: "Read papers and build grounded research slides"
+  default_prompt: "Use $mary-workflow to turn a completed paper summary into grounded ShanghaiTech Marp group-meeting slides."
 
 policy:
   allow_implicit_invocation: true

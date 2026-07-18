@@ -55,9 +55,12 @@ class MarpAssetContractTests(unittest.TestCase):
             (REPO_ROOT / "assets/marp/themes/mary-shanghaitech-red.css").resolve(),
         )
 
-    def test_p4_does_not_claim_the_slides_stage_is_implemented(self) -> None:
+    def test_p5_reuses_the_local_theme_without_adding_vendor_metadata(self) -> None:
         paper_skill = (REPO_ROOT / "skills/paper/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Do not generate `slides.md`", paper_skill)
+        slides_contract = (REPO_ROOT / "references/slides-contract.md").read_text(encoding="utf-8")
+        self.assertIn("run `complete-slides`", paper_skill)
+        self.assertIn("theme: mary-shanghaitech-red", slides_contract)
+        self.assertIn("figure-placeholder", slides_contract)
         self.assertFalse((REPO_ROOT / "assets/marp/VENDOR.md").exists())
 
 

@@ -21,12 +21,17 @@ from mw_paper import (  # noqa: E402
     normalize_paper_id,
     paper_directory,
     paper_progress,
+    prepare_slides,
     prepare_summary,
     read_paper_state,
     resolve_paper_id,
 )
 from mary_workflow import default_state as default_workflow_state  # noqa: E402
-from tests.paper_read_helpers import write_read_fixture, write_summary_fixture  # noqa: E402
+from tests.paper_read_helpers import (  # noqa: E402
+    write_read_fixture,
+    write_slides_fixture,
+    write_summary_fixture,
+)
 
 
 def fingerprint(character: str) -> str:
@@ -55,6 +60,8 @@ class PaperStateTests(unittest.TestCase):
     def complete(self, stage: str, digest: str) -> dict[str, object]:
         if stage == "summary":
             prepare_summary(self.project, self.paper_id)
+        elif stage == "slides":
+            prepare_slides(self.project, self.paper_id)
         else:
             self.apply("start_stage", {"stage": stage})
         artifact = f"{stage}.md"
@@ -69,6 +76,9 @@ class PaperStateTests(unittest.TestCase):
         elif stage == "summary":
             artifact = "summary.md"
             digest = write_summary_fixture(paper_directory(self.project, self.paper_id))
+        elif stage == "slides":
+            artifact = "slides.md"
+            digest = write_slides_fixture(paper_directory(self.project, self.paper_id))
         return self.apply(
             "complete_stage",
             {
@@ -331,7 +341,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         state = read_paper_state(self.project, "arxiv-2501.00003v1")
         self.assertEqual(state["audit"]["rejected_actions"], 1)
 
-    def test_plugin_surfaces_read_and_summary_without_claiming_later_stages(self) -> None:
+    def test_plugin_surfaces_read_summary_and_slides_but_not_quiz(self) -> None:
         command = (REPO_ROOT / "commands/mw-paper.md").read_text(encoding="utf-8")
         skill = (REPO_ROOT / "skills/paper/SKILL.md").read_text(encoding="utf-8")
         contract = (REPO_ROOT / "references/paper-state-contract.md").read_text(encoding="utf-8")
@@ -342,13 +352,18 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("For `summarize [paper-id]`", command)
         self.assertIn("summary-ledger.json", command)
         self.assertIn("coherent article", command)
-        self.assertIn("Do not produce slides or quiz artifacts", command)
+        self.assertIn("For `slides [paper-id]`", command)
+        self.assertIn("complete-slides", command)
+        self.assertIn("Do not produce `quiz-log.md`", command)
         self.assertIn("name: paper", skill)
         self.assertIn("blog-style article", skill)
         self.assertIn("summary-ledger.json", skill)
+        self.assertIn("references/slides-contract.md", skill)
+        self.assertIn("Figure placeholders", skill)
         self.assertIn("quiz` depends on `read` and `summary`, not `slides`", skill)
         self.assertIn("paper_state_schema", contract)
-        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.5"))
+        self.assertIn("slides.md", contract)
+        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.6"))
 
     def test_mw_init_reset_does_not_delete_paper_workspaces(self) -> None:
         self.run_cli(
