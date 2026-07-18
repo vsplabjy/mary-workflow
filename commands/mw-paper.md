@@ -1,6 +1,6 @@
 ---
-description: Manage paper state, close-read arXiv HTML/PDF, or write a readable source-grounded summary.
-argument-hint: [read|summarize|create|list|status|apply-action] [source/options]
+description: Manage paper state, close-read papers, write grounded summaries, or build linted Marp research slides.
+argument-hint: [read|summarize|slides|create|list|status|apply-action] [source/options]
 ---
 
 # /mw-paper
@@ -39,4 +39,13 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - run `complete-summary` and do not bypass body-anchor, locator, evidence, or dual-file fingerprint rejection.
 7. Treat `.mary-research/papers/<paper-id>/state.json` as authority. Never hand-edit state or generated context/index files.
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
-9. Do not produce slides or quiz artifacts before their implementation stages.
+9. For `slides [paper-id]`:
+   - run `prepare-slides`, specifying `--paper-id` when needed;
+   - read all of `summary.md`, `summary-ledger.json`, `slides-context.json`, and `references/slides-contract.md`;
+   - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;
+   - lead with the research problem, make Method at least two pages and the most detailed part, then present experiments and takeaways without adding facts outside the summary claim ledger;
+   - add one hidden `<!-- section: ... -->` and `<!-- claims: ... -->` declaration to each factual page, keeping `[B01]`-style ids out of visible slide text;
+   - use at least two VSP-Marp multi-panel layouts such as `cols-2-64`, `cols-3`, `rows-2-*`, or `pin-3` according to content shape;
+   - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `slides-context.json`; do not download or crop figures, because the user will place screenshots in `figures/` later;
+   - run `lint-slides`, fix every rejection, then run `complete-slides`; add `--smoke-compile` only when local Marp CLI is available and the user wants the optional check.
+10. Do not produce `quiz-log.md`; P6 is not implemented.

@@ -1,6 +1,6 @@
 # Mary Marp Asset Contract
 
-P4 vendors the ShanghaiTech red presentation base into `assets/marp/`. It does not implement the paper `slides` stage.
+P4 vendors the ShanghaiTech red presentation base into `assets/marp/`; P5 consumes it for the contract-validated paper `slides` stage.
 
 ## Asset Layout
 
@@ -30,6 +30,8 @@ The CSS header records the exact upstream commit. There is intentionally no `VEN
 6. Keep `math: katex` explicit in slide front matter.
 7. Resolve the registered theme from the workspace root so Markdown can live in any workspace subdirectory.
 8. Do not modify or depend on the ignored `vsp-marp/` checkout at runtime.
+
+P5 adds the `.figure-placeholder`, `.figure-placeholder__number`, and `.figure-placeholder__caption` styles to the localized theme while retaining the pinned P4 source and deterministic self-contained build.
 
 ## Validation
 

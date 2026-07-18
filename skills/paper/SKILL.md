@@ -1,11 +1,11 @@
 ---
 name: paper
-description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, and write readable source-grounded paper summaries with separate claim ledgers. Use when the user invokes /mw-paper, asks to register or inspect a paper, read a paper closely, summarize a completed paper read, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
+description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, write readable source-grounded summaries, and build linted ShanghaiTech Marp research slides with Figure placeholders. Use when the user invokes /mw-paper, asks to register or inspect a paper, read or summarize a paper, create group-meeting slides from a completed summary, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
 ---
 
 # Mary Workflow: Paper
 
-Manage independent paper states, close reading, and grounded summaries under `.mary-research/papers/`.
+Manage independent paper states, close reading, grounded summaries, and research slides under `.mary-research/papers/`.
 
 ## Procedure
 
@@ -39,8 +39,17 @@ Manage independent paper states, close reading, and grounded summaries under `.m
    - keep interpretations, intuition, and connective reasoning in the article without inventing ledger claims; leave unresolved matters in P2 uncertainties for later expert Q&A;
    - copy each ledger claim's evidence exactly from a cited source span and do not add `direct`/`inferred` labels;
    - run `complete-summary` and report any body, anchor, locator, or evidence rejection without weakening the contract.
-14. Treat `assets/marp/` as the P4 offline theme supply only. Read `references/marp-assets-contract.md` when inspecting it.
-15. Do not generate `slides.md` or complete the slides stage until P5 implements its contract and runtime gate.
-16. Do not generate `quiz-log.md`; that stage is not implemented yet.
+14. For `/mw-paper slides [paper-id]`:
+   - run `prepare-slides`, specifying `--paper-id` when needed;
+   - read all of `summary.md`, `summary-ledger.json`, `slides-context.json`, and `references/slides-contract.md`;
+   - write `slides.md` with `mary-shanghaitech-red`, `16:9`, and `math: katex` frontmatter;
+   - turn the summary into a talk rather than copying paragraphs: establish the problem, teach method intuition and information flow across at least two Method pages, then show experiments and takeaways;
+   - use only summary-ledger facts, attach valid hidden claim comments to factual pages, and keep claim ids invisible to the audience;
+   - use at least two suitable VSP multi-panel layouts, varying columns, rows, or pin-3 according to the material;
+   - use exact context-backed Figure placeholders with visible paper Figure numbers and captions; do not fetch, crop, or fabricate figures;
+   - run `lint-slides`, repair every structure, reference, placeholder, media, or capacity error, and run `complete-slides` only after lint passes;
+   - use `--smoke-compile` only as an optional temporary Marp check; do not deliver generated HTML, PDF, or PPTX.
+15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
+16. Do not generate `quiz-log.md`; P6 is not implemented yet.
 
-Read `references/paper-notes-contract.md` before producing notes and `references/summary-contract.md` before producing a summary. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the P4-only offline presentation assets.
+Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, and `references/slides-contract.md` before producing slides. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.
