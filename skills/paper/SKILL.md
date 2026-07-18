@@ -39,6 +39,8 @@ Manage independent paper states, close reading, and grounded summaries under `.m
    - keep interpretations, intuition, and connective reasoning in the article without inventing ledger claims; leave unresolved matters in P2 uncertainties for later expert Q&A;
    - copy each ledger claim's evidence exactly from a cited source span and do not add `direct`/`inferred` labels;
    - run `complete-summary` and report any body, anchor, locator, or evidence rejection without weakening the contract.
-14. Do not generate `slides.md` or `quiz-log.md`; those stages are not implemented yet.
+14. Treat `assets/marp/` as the P4 offline theme supply only. Read `references/marp-assets-contract.md` when inspecting it.
+15. Do not generate `slides.md` or complete the slides stage until P5 implements its contract and runtime gate.
+16. Do not generate `quiz-log.md`; that stage is not implemented yet.
 
-Read `references/paper-notes-contract.md` before producing notes and `references/summary-contract.md` before producing a summary. See `references/paper-state-contract.md` for state transitions.
+Read `references/paper-notes-contract.md` before producing notes and `references/summary-contract.md` before producing a summary. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the P4-only offline presentation assets.
