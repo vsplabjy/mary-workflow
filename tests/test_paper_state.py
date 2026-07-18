@@ -21,11 +21,12 @@ from mw_paper import (  # noqa: E402
     normalize_paper_id,
     paper_directory,
     paper_progress,
+    prepare_summary,
     read_paper_state,
     resolve_paper_id,
 )
 from mary_workflow import default_state as default_workflow_state  # noqa: E402
-from tests.paper_read_helpers import write_read_fixture  # noqa: E402
+from tests.paper_read_helpers import write_read_fixture, write_summary_fixture  # noqa: E402
 
 
 def fingerprint(character: str) -> str:
@@ -52,7 +53,10 @@ class PaperStateTests(unittest.TestCase):
         )
 
     def complete(self, stage: str, digest: str) -> dict[str, object]:
-        self.apply("start_stage", {"stage": stage})
+        if stage == "summary":
+            prepare_summary(self.project, self.paper_id)
+        else:
+            self.apply("start_stage", {"stage": stage})
         artifact = f"{stage}.md"
         if stage == "read":
             artifact = "paper-notes.md"
@@ -62,6 +66,9 @@ class PaperStateTests(unittest.TestCase):
                 locator=self.source,
                 source_fingerprint=fingerprint("1"),
             )
+        elif stage == "summary":
+            artifact = "summary.md"
+            digest = write_summary_fixture(paper_directory(self.project, self.paper_id))
         return self.apply(
             "complete_stage",
             {
@@ -157,14 +164,15 @@ class PaperStateTests(unittest.TestCase):
     def test_quiz_depends_on_read_and_summary_but_not_slides(self) -> None:
         read_state = self.complete("read", fingerprint("a"))
         read_fingerprint = read_state["stages"]["read"]["output_fingerprint"]
-        self.complete("summary", fingerprint("b"))
+        summary_state = self.complete("summary", fingerprint("b"))
+        summary_fingerprint = summary_state["stages"]["summary"]["output_fingerprint"]
 
         state = self.apply("start_stage", {"stage": "quiz"})
         self.assertEqual(state["stages"]["quiz"]["status"], "in_progress")
         self.assertEqual(state["stages"]["slides"]["status"], "pending")
         self.assertEqual(
             state["stages"]["quiz"]["input_fingerprints"],
-            {"read": read_fingerprint, "summary": fingerprint("b")},
+            {"read": read_fingerprint, "summary": summary_fingerprint},
         )
 
     def test_source_change_cascades_stale_to_started_stages(self) -> None:
@@ -323,7 +331,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         state = read_paper_state(self.project, "arxiv-2501.00003v1")
         self.assertEqual(state["audit"]["rejected_actions"], 1)
 
-    def test_plugin_surfaces_read_without_claiming_downstream_content_stages(self) -> None:
+    def test_plugin_surfaces_read_and_summary_without_claiming_later_stages(self) -> None:
         command = (REPO_ROOT / "commands/mw-paper.md").read_text(encoding="utf-8")
         skill = (REPO_ROOT / "skills/paper/SKILL.md").read_text(encoding="utf-8")
         contract = (REPO_ROOT / "references/paper-state-contract.md").read_text(encoding="utf-8")
@@ -331,11 +339,12 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
 
         self.assertIn("# /mw-paper", command)
         self.assertIn("For `read <source>`", command)
-        self.assertIn("Do not produce summary, slides, or quiz artifacts", command)
+        self.assertIn("For `summarize [paper-id]`", command)
+        self.assertIn("Do not produce slides or quiz artifacts", command)
         self.assertIn("name: paper", skill)
         self.assertIn("quiz` depends on `read` and `summary`, not `slides`", skill)
         self.assertIn("paper_state_schema", contract)
-        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.2"))
+        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.3"))
 
     def test_mw_init_reset_does_not_delete_paper_workspaces(self) -> None:
         self.run_cli(

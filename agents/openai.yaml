@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run milestone workflows and close-read research papers"
-  default_prompt: "Use $mary-workflow to close-read an arXiv paper with parse-quality gating, or manage project milestones."
+  short_description: "Run milestones and create grounded paper summaries"
+  default_prompt: "Use $mary-workflow to close-read and summarize an arXiv paper with machine-validated source evidence."
 
 policy:
   allow_implicit_invocation: true

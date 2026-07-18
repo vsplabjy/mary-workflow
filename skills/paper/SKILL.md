@@ -1,11 +1,11 @@
 ---
 name: paper
-description: Manage Mary Workflow's v2.2 paper pipeline and perform contract-validated close reading from arXiv HTML or PDF. Use when the user invokes /mw-paper, asks to register or inspect a paper, asks to read a paper closely, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
+description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, and produce source-grounded three-part summaries. Use when the user invokes /mw-paper, asks to register or inspect a paper, read a paper closely, summarize a completed paper read, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
 ---
 
 # Mary Workflow: Paper
 
-Manage independent paper states and the `read` stage under `.mary-research/papers/`.
+Manage independent paper states, close reading, and grounded summaries under `.mary-research/papers/`.
 
 ## Procedure
 
@@ -29,6 +29,13 @@ Manage independent paper states and the `read` stage under `.mary-research/paper
 10. Copy source identity and parse quality from `read-context.json`; do not calculate or improvise those fields.
 11. Keep `uncertainties` non-empty. Add every degraded or failed quality dimension to at least one uncertainty.
 12. Pass `--override-quality --override-reason <reason>` only after the user explicitly accepts a displayed blocked report. Never infer consent.
-13. Do not generate `summary.md`, `slides.md`, or `quiz-log.md`; those stages are not implemented yet.
+13. For `/mw-paper summarize [paper-id]`:
+   - run `prepare-summary`, specifying `--paper-id` when needed;
+   - read `paper-notes.md`, `summary-context.json`, and the relevant spans in `source.md`;
+   - write `summary.md` with ordered background, method, and experiments claim arrays;
+   - copy `inputs` exactly from summary context and use only `allowed_source_locators`;
+   - copy each claim's evidence exactly from a cited source span;
+   - run `complete-summary` and report any rejected claim without weakening the contract.
+14. Do not generate `slides.md` or `quiz-log.md`; those stages are not implemented yet.
 
-Read `references/paper-notes-contract.md` before producing `paper-notes.md`. See `references/paper-state-contract.md` for state transitions.
+Read `references/paper-notes-contract.md` before producing notes and `references/summary-contract.md` before producing a summary. See `references/paper-state-contract.md` for state transitions.

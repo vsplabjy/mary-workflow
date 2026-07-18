@@ -8,6 +8,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+from mw_paper_locators import parse_source_locator_blocks  # noqa: E402
 from mw_paper_sources import QUALITY_DIMENSIONS, quality_gate, sha256_file, write_read_context  # noqa: E402
 
 
@@ -103,3 +104,32 @@ def write_read_fixture(
     notes = "<!-- mary-paper-notes:v1 -->\n```json\n" + json.dumps(ledger, ensure_ascii=False, indent=2) + "\n```\n"
     (workspace / "paper-notes.md").write_text(notes, encoding="utf-8")
     return sha256_file(workspace / "paper-notes.md")
+
+
+def write_summary_fixture(workspace: Path, mutate: object = None) -> str:
+    context = json.loads((workspace / "summary-context.json").read_text(encoding="utf-8"))
+    source_format = context["inputs"]["source"]["format"]
+    blocks = parse_source_locator_blocks(workspace / "source.md", source_format)
+    locator = context["allowed_source_locators"][0]
+    evidence = blocks[locator][0]["content"][:120]
+    claim = {
+        "claim_id": "",
+        "claim_text": "A grounded fixture claim with enough detail.",
+        "evidence": evidence,
+        "source_locators": [locator],
+    }
+    ledger = {
+        "summary_schema": 1,
+        "paper_id": context["paper_id"],
+        "inputs": context["inputs"],
+        "sections": {
+            "background": [{**claim, "claim_id": "B01"}],
+            "method": [{**claim, "claim_id": "M01"}],
+            "experiments": [{**claim, "claim_id": "E01"}],
+        },
+    }
+    if callable(mutate):
+        mutate(ledger)
+    summary = "<!-- mary-summary:v1 -->\n```json\n" + json.dumps(ledger, ensure_ascii=False, indent=2) + "\n```\n"
+    (workspace / "summary.md").write_text(summary, encoding="utf-8")
+    return sha256_file(workspace / "summary.md")

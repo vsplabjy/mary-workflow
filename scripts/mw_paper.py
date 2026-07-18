@@ -28,6 +28,11 @@ from mw_paper_sources import (
     validate_paper_notes,
     write_read_context,
 )
+from mw_paper_summary import (
+    PaperSummaryError,
+    validate_summary,
+    write_summary_context,
+)
 
 
 RESEARCH_DIR = ".mary-research"
@@ -469,6 +474,26 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
             atomic_write_text(override_path, json.dumps(override_record, ensure_ascii=False, indent=2) + "\n")
             metadata["override_artifact"] = override_artifact
             metadata["override_fingerprint"] = sha256_file(override_path)
+    elif stage == "summary":
+        if artifact != "summary.md":
+            raise PaperError("complete_stage summary requires artifact summary.md.")
+        read_stage = state["stages"]["read"]
+        source_format = str(read_stage["metadata"].get("source_format") or "")
+        if source_format not in {"html", "pdf"}:
+            raise PaperError("complete_stage summary requires a P2-validated read stage.")
+        try:
+            validation = validate_summary(
+                paper_directory(project_root, state["paper_id"]),
+                paper_id=state["paper_id"],
+                source_format=source_format,
+                source_fingerprint=state["source"]["fingerprint"],
+                read_output_fingerprint=read_stage["output_fingerprint"],
+            )
+        except PaperSummaryError as exc:
+            raise PaperError(str(exc)) from exc
+        if output_fingerprint != validation["summary_fingerprint"]:
+            raise PaperError("complete_stage summary output_fingerprint does not match summary.md.")
+        metadata = validation["metadata"]
     item.update(
         {
             "status": "complete",
@@ -703,6 +728,45 @@ def prepare_read(
     return state, report
 
 
+def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
+    root = Path(project_root).resolve()
+    canonical_id = resolve_paper_id(root, paper_id)
+    state = read_paper_state(root, canonical_id)
+    read_stage = state["stages"]["read"]
+    if read_stage["status"] != "complete":
+        raise PaperError("prepare-summary requires the read stage to be complete.")
+    summary_stage = state["stages"]["summary"]
+    if summary_stage["status"] == "complete":
+        raise PaperError("Summary stage is already complete; reset_stage summary before rerun.")
+    source_format = str(read_stage["metadata"].get("source_format") or "")
+    if source_format not in {"html", "pdf"}:
+        raise PaperError("prepare-summary requires a P2-validated read stage with source_format metadata.")
+    try:
+        context = write_summary_context(
+            paper_directory(root, canonical_id),
+            paper_id=canonical_id,
+            source_format=source_format,
+            source_fingerprint=state["source"]["fingerprint"],
+            read_output_fingerprint=read_stage["output_fingerprint"],
+        )
+    except PaperSummaryError as exc:
+        raise PaperError(str(exc)) from exc
+    if summary_stage["status"] in {"pending", "failed", "stale"}:
+        state = apply_paper_action(
+            root,
+            canonical_id,
+            {"action": "start_stage", "data": {"stage": "summary"}},
+        )
+    elif summary_stage["status"] != "in_progress":
+        raise PaperError(f"Summary stage cannot be prepared from status {summary_stage['status']}.")
+    append_paper_log(
+        root,
+        canonical_id,
+        f"prepared summary locators={len(context['allowed_source_locators'])}",
+    )
+    return state, context
+
+
 def load_action_payload(args: argparse.Namespace) -> JsonObject:
     if args.file:
         raw = Path(args.file).read_text(encoding="utf-8")
@@ -826,6 +890,56 @@ def cmd_complete_read(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_prepare_summary(args: argparse.Namespace) -> int:
+    state, context = prepare_summary(Path(args.project_root), args.paper_id)
+    workspace = paper_directory(Path(args.project_root), state["paper_id"])
+    print(f"paper_workspace: {workspace}")
+    print(f"paper_notes: {workspace / 'paper-notes.md'}")
+    print(f"source_locators: {workspace / 'source-locators.json'}")
+    print(f"summary_context: {workspace / 'summary-context.json'}")
+    print(f"summary_target: {workspace / 'summary.md'}")
+    print(
+        json.dumps(
+            {
+                "paper_id": state["paper_id"],
+                "summary_status": state["stages"]["summary"]["status"],
+                "inputs": context["inputs"],
+                "allowed_source_locators": context["allowed_source_locators"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_complete_summary(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root)
+    paper_id = resolve_paper_id(project_root, args.paper_id)
+    summary_path = paper_directory(project_root, paper_id) / "summary.md"
+    if not summary_path.is_file():
+        raise PaperError(f"summary.md is missing: {summary_path}")
+    state = apply_paper_action(
+        project_root,
+        paper_id,
+        {
+            "action": "complete_stage",
+            "data": {
+                "stage": "summary",
+                "artifact": "summary.md",
+                "output_fingerprint": sha256_file(summary_path),
+            },
+        },
+    )
+    append_paper_log(
+        project_root,
+        paper_id,
+        f"completed summary claims={state['stages']['summary']['metadata']['claim_count']}",
+    )
+    print(json.dumps(status_payload(state), ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Mary paper state runtime (paper_state_schema 1)")
     parser.add_argument("--project-root", default=".", help="Project root; defaults to current directory")
@@ -868,6 +982,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     complete_parser.add_argument("--override-reason", help="required explanation for a quality override")
     complete_parser.set_defaults(func=cmd_complete_read)
+
+    summary_prepare_parser = subparsers.add_parser(
+        "prepare-summary", help="index source locators and prepare the summary contract"
+    )
+    summary_prepare_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    summary_prepare_parser.set_defaults(func=cmd_prepare_summary)
+
+    summary_complete_parser = subparsers.add_parser(
+        "complete-summary", help="validate summary.md claims and complete the summary stage"
+    )
+    summary_complete_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    summary_complete_parser.set_defaults(func=cmd_complete_summary)
     return parser
 
 
@@ -875,7 +1001,7 @@ def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (PaperError, PaperReadError) as exc:
+    except (PaperError, PaperReadError, PaperSummaryError) as exc:
         raise SystemExit(str(exc)) from exc
 
 

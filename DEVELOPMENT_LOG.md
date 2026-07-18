@@ -548,3 +548,31 @@ Baseline commit: `386cc6a` - `P1 finished`
 - 真实 arXiv `2401.00001` 冒烟通过：选择官方 HTML，表格行进入 `source.md`，最终 `gate=pass`；同一论文真实 PDF 经本机 `pdftotext` 抽取并生成页码 locator，`gate=pass`。
 - `python -m py_compile`、paper skill validator、plugin validator、manifest JSON、`git diff --check` 和 README 零差异检查通过。
 - plugin cachebuster 更新为 `2.2.0-alpha.2+codex.20260718072135`；当前 Codex CLI 无 `plugin add` 子命令，现有 `~/.codex/skills/mary-workflow` 与 `~/plugins/mary-workflow` 均通过符号链接直接指向本仓库。
+
+### v2.2 P3 grounded summary
+
+Baseline commit: `4603b01` - `P2 test finished`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_locators.py`，将 `source.md` 的 HTML/PDF marker 构造成确定性 `source-locators.json` 索引。
+- source locator 合同固定为 HTML `html#<anchor>` 和 PDF `pdf:p<N>`；每个 locator 必须解析到至少一个非空 source span。
+- locator 索引记录 `source.md` fingerprint、raw source fingerprint、source format，以及每个 span 的行范围、规范化内容 SHA-256 和 preview。
+- 重复 HTML anchor 不覆盖，统一表示为同一 locator 下的多个 spans；evidence 可在任一对应 span 中解析。
+- `prepare-summary` 要求 P2 read 已完成且 `paper-notes.md` 字节与 read output fingerprint 一致，随后生成 `source-locators.json` 和 `summary-context.json` 并启动 summary 阶段。
+- summary context 只允许同时满足“存在于 source.md”与“已被 paper-notes.md 接受”的 locator，阻止总结阶段引入未经精读账本覆盖的新 source region。
+- 新增 `scripts/mw_paper_summary.py` 和 `references/summary-contract.md`；`summary.md` 固定为 ordered `background`、`method`、`experiments` 三段，每段至少一个 claim。
+- claim 四元组固定为 `claim_id`、`claim_text`、`evidence`、`source_locators`；背景/方法/实验 id 分别使用 `Bxx`、`Mxx`、`Exx` 且全局唯一。
+- evidence 必须是当前 normalized source span 中可解析的 8-500 字符原文片段；合法 locator 指向错误 span 同样拒收。
+- `complete-summary` 重建 locator index，校验 context/input/index/source/notes fingerprints、三段结构、四元组字段、ID、locator 存在性、notes allowlist、evidence containment 和 summary 实际 fingerprint 后才允许完成。
+- summary stage metadata 记录 claim 总数、分段计数、引用 locator 数量以及 context/index fingerprints；read reset/source change 继续通过 P1 DAG 使 summary 和下游 stale。
+- 更新 `/mw-paper summarize` command/skill、根 skill、OpenAI metadata、paper state contract 和 plugin manifest；slides/quiz 未实现。
+- `README.md` 未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：94/94 通过，其中原 v2.1 workflow 29/29、P0 runtime 12/12、P1 paper state 18/18、P2 close reading 20/20、P3 summary 15/15。
+- P3 覆盖 HTML 重复 span、PDF page locator、非法/空 span、三段顺序、四元组字段、ID 前缀/唯一性、notes allowlist、evidence 解析、input/output drift、index tamper、CLI 完成和 read dependency gate。
+- 真实 arXiv `2401.00001` 的 P2 `source.md` 内存索引通过：137 个 locator、141 个 spans、4 个重复 locator，抽样 evidence 可在对应 span 中解析。
+- `python -m py_compile`、paper skill validator、plugin validator、manifest JSON、`git diff --check`、下游产物范围扫描和 README 零差异检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.3+codex.20260718083702`；当前 Codex CLI 无 `plugin add` 子命令，现有 skill/plugin 安装均通过符号链接直接指向本仓库。
