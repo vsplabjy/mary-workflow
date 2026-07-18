@@ -39,6 +39,7 @@ User-facing command surface:
 8. Only a `/mw-run` render contains the plaintext one-time token. `start_execution` atomically confirms the plan and acquires the lease; stop/resume uses a separate single-use grant.
 9. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
 10. `/mw-paper` uses `scripts/mw_paper.py` and `paper_state_schema: 1`; it does not read or mutate `.mary-workflow/` milestone state. Parse-quality and source-locator gates are machine enforced.
+11. P4 presentation assets live under `assets/marp/` with the `mary-shanghaitech-red` offline theme. They are supply-only until P5 implements the slides artifact and completion gate.
 
 ## Memory Model
 
@@ -64,4 +65,4 @@ Command Markdown files also live under `commands/` for clients that support file
 
 ## File Contract
 
-See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, and `references/summary-contract.md` for grounded summaries.
+See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, and `references/marp-assets-contract.md` for the offline presentation supply.

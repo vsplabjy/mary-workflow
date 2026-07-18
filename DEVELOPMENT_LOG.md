@@ -600,3 +600,32 @@ Baseline commit: `a834764` - `P3 finished`
 - P3.5 覆盖双文件合法完成、ledger 精确字段、禁用旧标签、B/M/E claim family、locator allowlist、evidence containment、正文三节、双向锚定、章节前缀、孤立锚点、旧/新内嵌账本拒收、双文件 fingerprint 漂移、index tamper、CLI 双目标和缺 ledger 拒收。
 - `python -m py_compile`、root/paper skill validator、plugin validator、manifest JSON、`git diff --check`、README 和 P2/runtime 零差异检查通过。
 - plugin cachebuster 更新为 `2.2.0-alpha.4+codex.20260718093644`；当前 Codex CLI 仍无 `plugin add` 子命令，`~/.codex/skills/mary-workflow` 与 `~/plugins/mary-workflow` 均通过符号链接直接指向本仓库。
+
+### v2.2 P4 offline Marp template supply
+
+Baseline commit: `3fc715f` - `gitignore 更新`
+
+完成内容：
+
+- 以 `VSPlab/vsp-marp` commit `d3ac970227782445e77009ca53fa8fd526cd2b43` 的 `tutorial-red-shtu` 为基线，将编译后主题就地本地化为 `assets/marp/themes/mary-shanghaitech-red.css`；没有 fork、submodule 或运行时 git clone。
+- 按最终评审决定取消 `VENDOR.md`，仅在 CSS 第二行保留 `/* vendored from VSPlab/vsp-marp @ d3ac970, localized 2026-07 */` 工程溯源注释。
+- 复制上海科技大学 16:9 背景、校徽和校名资源；主题中的 COS URL 全部替换为仓库内相对路径，CSS HTTP(S)/协议相对 URL 数量为 0。
+- 本地化六个 Latin Modern OTF、完整 Noto Sans CJK SC regular/bold WOFF2，以及 KaTeX 0.16.45 的 20 个 WOFF2；中文、代码和数学公式均不依赖在线字体。
+- 新增 `assets/marp/marp.config.mjs` 与 `marp-engine.cjs`，注册本地主题、允许本地资源并强制 KaTeX font path 指向 `../fonts/katex/`；禁用会引入远程图片的 emoji 转换。
+- 新增四页 `offline-preview.md`，覆盖 `cover_e`、普通背景页、`toc_b` 和 `lastpage`，实测上海科技大学红色模板、校徽/校名、中文 regular/bold、背景及 KaTeX 求和/范数/上下标均正确显示。
+- 新增 `scripts/validate_marp_assets.py`、`references/marp-assets-contract.md` 和 P4 单测，机器校验主题 provenance、33 个本地 URL 闭包、20 个 KaTeX 字体、两个完整 Noto 字重、配置/engine 和 smoke deck 必填标记。
+- 修复 VS Code 预览未注册本地主题的问题：新增根目录 `.vscode/settings.json`，显式注册 `mary-shanghaitech-red`、允许模板 HTML 并选择 KaTeX；工作区内任意子目录的 Markdown 均使用同一主题。
+- 将可维护的相对路径 CSS 保留为 `mary-shanghaitech-red.source.css`，运行时 CSS 由 `scripts/build_marp_theme.py` 确定性编译并内嵌全部资源，消除背景、校徽与字体相对 Markdown 目录解析造成的跨目录失效。
+- 根 skill 与 paper skill 只声明 P4 离线供应基座；`slides.md` 生成和 slides completion gate 继续明确阻断，未提前实现 P5。
+- 私有仓库自用风险由项目方接受；若未来公开发布 Mary Workflow，须在发布前补做主题、字体、校徽和背景资源的许可/商标审查。
+- `README.md`、paper runtime、P0/P2/P3 源码均未修改，忽略的 `vsp-marp/` 源工作树保持 `main...origin/main` 干净状态。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：104/104 通过，其中既有 100 项全量回归保持通过，P4 asset contract 新增 4/4。
+- `npm_config_offline=true npx --yes @marp-team/marp-cli@4.3.1` 在 npm 离线模式成功生成四页 HTML/PNG；Marp CLI 4.3.1 搭配 Marp Core 4.4.0。
+- Chromium 使用 `--disable-background-networking --host-resolver-rules='MAP * ~NOTFOUND'` 仍成功打开本地 HTML，封面校徽、校名与中文完整；四页 PNG 均为 1280x720 且像素标准差非零。
+- 将同一 smoke deck 复制到仓库外 `/tmp/.../arbitrary/deep/paper/slides.md` 后，在 npm 离线模式重新渲染 4 页 PNG；日志无 missing local files，校徽、校名、16:9 背景、完整中文和 KaTeX 公式均正常，证明输出不再依赖 Markdown 所在目录。
+- 人工逐页检查通过：修正目录页重复标题和尾页非三列布局后，四页无文字重叠、空白资源或公式缺字；按 2026-07-18 修订口径不要求 PDF 导出。
+- `python -m py_compile`、Marp asset validator、root/paper skill validator、plugin validator、manifest JSON、`git diff --check`、无 `VENDOR.md`、README/runtime 零差异和上游工作树零修改检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.5+codex.20260718125033`；现有 skill/plugin 安装继续通过符号链接直接指向本仓库。

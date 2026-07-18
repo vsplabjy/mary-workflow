@@ -348,7 +348,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("summary-ledger.json", skill)
         self.assertIn("quiz` depends on `read` and `summary`, not `slides`", skill)
         self.assertIn("paper_state_schema", contract)
-        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.4"))
+        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.5"))
 
     def test_mw_init_reset_does_not_delete_paper_workspaces(self) -> None:
         self.run_cli(

@@ -1,0 +1,2459 @@
+/* @theme mary-shanghaitech-red */
+/* vendored from VSPlab/vsp-marp @ d3ac970, localized 2026-07 */
+/* @size 16:9 1280px 720px */
+/* @size 4:3 960px 720px */
+@auto-scaling true;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+section {
+  width: 1280px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  padding: var(--page-padding-y) var(--page-padding-x);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+header,
+footer {
+  position: absolute;
+}
+
+strong,
+em,
+code {
+  font: inherit;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+@font-face {
+  font-family: "VSP Latin Modern Roman";
+  src: local("Latin Modern Roman 10 Regular"), local("Latin Modern Roman"), local("LMRoman10-Regular"), url("../fonts/latin-modern/lmroman10-regular.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VSP Latin Modern Roman";
+  src: local("Latin Modern Roman 10 Bold"), local("Latin Modern Roman Bold"), local("LMRoman10-Bold"), url("../fonts/latin-modern/lmroman10-bold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VSP Latin Modern Sans";
+  src: local("Latin Modern Sans 10 Regular"), local("Latin Modern Sans"), local("LMSans10-Regular"), url("../fonts/latin-modern/lmsans10-regular.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VSP Latin Modern Sans";
+  src: local("Latin Modern Sans 10 Bold"), local("Latin Modern Sans Bold"), local("LMSans10-Bold"), url("../fonts/latin-modern/lmsans10-bold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VSP Latin Modern Mono";
+  src: local("Latin Modern Mono 10 Regular"), local("Latin Modern Mono"), local("LMMono10-Regular"), url("../fonts/latin-modern/lmmono10-regular.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VSP Latin Modern Mono";
+  src: local("Latin Modern Mono Light 10 Bold"), local("Latin Modern Mono Light Bold"), local("LMMonoLt10-Bold"), url("../fonts/latin-modern/lmmonolt10-bold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mary Noto Sans CJK SC";
+  src: url("../fonts/noto-cjk-sc/NotoSansCJKsc-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mary Noto Sans CJK SC";
+  src: url("../fonts/noto-cjk-sc/NotoSansCJKsc-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "KaTeX_AMS";
+  src: url("../fonts/katex/KaTeX_AMS-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Caligraphic";
+  src: url("../fonts/katex/KaTeX_Caligraphic-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Caligraphic";
+  src: url("../fonts/katex/KaTeX_Caligraphic-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Fraktur";
+  src: url("../fonts/katex/KaTeX_Fraktur-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Fraktur";
+  src: url("../fonts/katex/KaTeX_Fraktur-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  src: url("../fonts/katex/KaTeX_Main-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  src: url("../fonts/katex/KaTeX_Main-BoldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  src: url("../fonts/katex/KaTeX_Main-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  src: url("../fonts/katex/KaTeX_Main-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Math";
+  src: url("../fonts/katex/KaTeX_Math-BoldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Math";
+  src: url("../fonts/katex/KaTeX_Math-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  src: url("../fonts/katex/KaTeX_SansSerif-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  src: url("../fonts/katex/KaTeX_SansSerif-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  src: url("../fonts/katex/KaTeX_SansSerif-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Script";
+  src: url("../fonts/katex/KaTeX_Script-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Size1";
+  src: url("../fonts/katex/KaTeX_Size1-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Size2";
+  src: url("../fonts/katex/KaTeX_Size2-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Size3";
+  src: url("../fonts/katex/KaTeX_Size3-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Size4";
+  src: url("../fonts/katex/KaTeX_Size4-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "KaTeX_Typewriter";
+  src: url("../fonts/katex/KaTeX_Typewriter-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+:root {
+  --font-family-main: var(--font-family-body);
+  --font-family-title: var(--font-family-display);
+  --font-family-footer: var(--font-family-accent);
+  --font-family-code: var(--font-family-mono);
+  --font-size-display: 55px;
+  --font-size-subtitle: 42px;
+  --font-size-heading: 38px;
+  --font-size-subheading: 30px;
+  --font-size-body: 25px;
+  --font-size-footer: 22px;
+  --font-size-page: 12px;
+  --font-size-code: 20px;
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --border-strong: 3px;
+  --border-thick: 8px;
+  --page-padding-x: 70px;
+  --page-padding-y: 70px;
+}
+
+:root {
+  --color-primary: AccentColor;
+  --color-on-primary: AccentColorText;
+  --color-bg: Canvas;
+  --color-surface: Canvas;
+  --color-text: CanvasText;
+  --color-muted: color-mix(in srgb, CanvasText 55%, Canvas);
+  --color-accent: LinkText;
+  --color-section-bg: color-mix(in srgb, Canvas 88%, AccentColor);
+  --color-code-bg: color-mix(in srgb, Canvas 92%, AccentColor);
+  --color-code-text: CanvasText;
+  --color-link: LinkText;
+  --color-divider: color-mix(in srgb, CanvasText 18%, transparent);
+  --color-quote: color-mix(in srgb, var(--color-section-bg) 75%, var(--color-surface));
+  --color-navbar-font: color-mix(in srgb, CanvasText 65%, Canvas);
+  --filter-logo: none;
+  --filter-bg: none;
+  --font-family-display: "Comic Sans MS", "Papyrus", serif;
+  --font-family-body: "Times New Roman", serif;
+  --font-family-mono: "Courier New", monospace;
+  --font-family-accent: "Brush Script MT", cursive;
+  --color-callout-blue: color-mix(in srgb, var(--color-surface) 35%, var(--color-accent));
+  --color-callout-red: color-mix(in srgb, var(--color-primary) 70%, var(--color-accent));
+  --color-callout-green: color-mix(in srgb, var(--color-section-bg) 65%, var(--color-accent));
+  --color-callout-purple: color-mix(in srgb, var(--color-primary) 45%, var(--color-link));
+  --color-callout-black: color-mix(in srgb, var(--color-text) 80%, var(--color-muted));
+  --color-callout-yellow: color-mix(in srgb, var(--color-primary) 60%, var(--color-accent));
+  --color-callout-body: color-mix(in srgb, var(--color-surface) 80%, var(--color-section-bg));
+  --color-glass-bg: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  --color-glass-border: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --color-syntax-comment: color-mix(in srgb, var(--color-text) 55%, var(--color-accent));
+  --color-syntax-string: color-mix(in srgb, var(--color-accent) 65%, var(--color-primary));
+  --color-syntax-number: color-mix(in srgb, var(--color-accent) 45%, var(--color-text));
+  --color-syntax-keyword: var(--color-link);
+  --color-syntax-symbol: color-mix(in srgb, var(--color-primary) 80%, var(--color-text));
+  --color-syntax-variable: color-mix(in srgb, var(--color-link) 75%, var(--color-primary));
+  --color-syntax-builtin: color-mix(in srgb, var(--color-link) 75%, var(--color-text));
+  --color-prompt-input: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface));
+  --color-prompt-output: color-mix(in srgb, var(--color-primary) 65%, var(--color-surface));
+  --color-inverted-bg: var(--color-surface);
+  --color-inverted-text: var(--color-text);
+  --color-coverbg: var(--color-primary);
+  --color-title: var(--color-on-primary);
+  --color-main: var(--color-text);
+  --color-much: var(--color-accent);
+  --color-footer: var(--color-muted);
+  --color-navbar-bg: var(--color-section-bg);
+  --color-trans: var(--color-primary);
+  --color-few: var(--color-divider);
+  --color-shadow: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --filter-b: var(--filter-logo);
+  --filter-c: var(--filter-bg);
+  --filter-e: var(--filter-logo);
+}
+
+section {
+  font-family: var(--font-family-main);
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+  line-height: 1.45;
+  text-align: justify;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+}
+
+h1 {
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-display);
+  color: var(--color-title);
+}
+
+h2,
+h3 {
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-heading);
+  color: var(--color-accent);
+}
+
+h4,
+h5 {
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-subheading);
+  color: var(--color-accent);
+}
+
+h6 {
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-subtitle);
+}
+
+header {
+  top: 12px;
+}
+
+footer {
+  left: 2%;
+  bottom: 1%;
+  width: 96%;
+  height: 4%;
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-muted);
+}
+
+footer > em {
+  font-family: var(--font-family-footer);
+  font-size: var(--font-size-footer);
+  font-style: normal;
+  letter-spacing: 1px;
+}
+
+footer::after {
+  content: "";
+}
+
+section::after {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: 6px;
+  color: var(--color-muted);
+  content: attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total);
+  font-size: var(--font-size-page);
+  letter-spacing: 1px;
+}
+
+ol,
+ul {
+  padding-left: 35px;
+  line-height: 1.4;
+}
+
+ul > li > ul > li {
+  font-size: 0.9rem;
+}
+
+ul > li > ul > li > ul > li {
+  font-size: 0.85rem;
+}
+
+ol li::marker,
+ul li::marker {
+  color: var(--color-accent);
+}
+
+blockquote {
+  margin: 0;
+  padding: 10px 25px;
+  border-left: var(--border-thick) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-quote);
+  font-size: 0.9rem;
+}
+
+blockquote > p::before {
+  content: "“";
+  padding-right: 2%;
+  color: var(--color-accent);
+  font-weight: 900;
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+a::after {
+  content: " ->";
+  padding-left: 0.35rem;
+  color: var(--color-accent);
+  font-size: 0.7em;
+  font-weight: 900;
+}
+
+pre {
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: rgba(174, 58, 68, 0.04);
+  text-align: left;
+  line-height: 1.15;
+}
+
+code {
+  padding: 2px;
+  border-radius: 2px;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  font-family: var(--font-family-code);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+
+pre code,
+pre .hljs,
+pre code * {
+  padding: 0;
+  background: transparent !important;
+}
+
+strong {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+em {
+  font-style: normal;
+}
+
+img {
+  max-width: 95%;
+  border-radius: var(--radius-sm);
+  margin: auto;
+}
+
+img[alt*="#l"] {
+  float: left;
+}
+
+img[alt*="#r"] {
+  float: right;
+}
+
+img[alt*="#c"] {
+  display: block;
+  margin: auto;
+}
+
+table {
+  margin: 0 auto;
+  font-size: 0.82rem;
+  text-align: center;
+  word-break: initial;
+}
+
+th,
+thead {
+  padding: 6px;
+  border-top: var(--border-strong) solid var(--color-text);
+  border-bottom: var(--border-strong) solid var(--color-text);
+}
+
+table tr:nth-child(2n) {
+  background-color: color-mix(in srgb, var(--color-surface) 85%, var(--color-section-bg));
+}
+
+tbody:last-child {
+  border-bottom: var(--border-strong) solid var(--color-text);
+}
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+
+.hljs-comment {
+  color: var(--color-syntax-comment);
+}
+
+.hljs-string {
+  color: var(--color-syntax-string);
+}
+
+.hljs-number {
+  color: var(--color-syntax-number);
+}
+
+.hljs-keyword,
+.hljs-symbol,
+.hljs-variable,
+.hljs-built_in,
+.hljs-meta,
+.hljs-literal,
+.hljs-name {
+  color: var(--color-syntax-keyword);
+}
+
+.hljs-symbol {
+  color: var(--color-syntax-symbol);
+}
+
+.hljs-variable {
+  color: var(--color-syntax-variable);
+}
+
+.hljs-built_in {
+  color: var(--color-syntax-builtin);
+}
+
+.hljs-meta,
+.hljs-literal,
+.hljs-name {
+  color: var(--color-syntax-keyword);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.in-prompt {
+  color: var(--color-prompt-input);
+}
+
+.in-prompt-number,
+.out-prompt-number {
+  font-weight: 700;
+}
+
+.out-prompt {
+  color: var(--color-prompt-output);
+}
+
+.inverted {
+  background-color: var(--color-inverted-bg);
+  color: var(--color-inverted-text);
+}
+
+section.cover_a,
+section.cover_b,
+section.cover_c,
+section.cover_d,
+section.cover_e {
+  overflow: hidden;
+}
+
+section.cover_a {
+  background: linear-gradient(to bottom, var(--color-coverbg) 60%, var(--color-surface) 40%);
+  text-align: center;
+}
+
+section.cover_a h1,
+section.cover_a h6,
+section.cover_a p {
+  position: absolute;
+}
+
+section.cover_a h1 {
+  top: 28%;
+  width: 88%;
+  padding: 0 80px;
+  transform: translateX(-6%);
+  background-color: var(--color-coverbg);
+}
+
+section.cover_a h6 {
+  top: 38%;
+  width: 90%;
+  padding: 0 80px;
+  transform: translateX(-6%);
+  color: var(--color-title);
+}
+
+section.cover_a p {
+  bottom: 8%;
+  width: 100%;
+  transform: translateX(-6%);
+}
+
+section.cover_e {
+  background: linear-gradient(108deg, var(--color-surface) 70%, var(--color-coverbg) 30%);
+}
+
+section.cover_e h1,
+section.cover_e h6,
+section.cover_e p {
+  position: absolute;
+}
+
+section.cover_e h1 {
+  top: 28%;
+  width: 70%;
+  transform: translateX(-1.2%);
+  color: var(--color-accent);
+}
+
+section.cover_e h6 {
+  top: 38%;
+  width: 68%;
+  color: var(--color-accent);
+}
+
+section.cover_e p {
+  bottom: 15%;
+  transform: translateX(5%);
+}
+
+section.cover_e footer {
+  left: 72%;
+  bottom: 0;
+  width: 26%;
+  height: 128px;
+}
+
+section.cover_e header {
+  top: 0;
+  left: 80px;
+  width: 100px;
+  height: 100px;
+  background-color: var(--color-coverbg);
+  text-align: center;
+}
+
+section.cover_e footer > img {
+  transform: scale(1.2);
+  filter: var(--filter-logo);
+}
+
+section.cover_e header > img {
+  transform: scale(0.9);
+  filter: var(--filter-logo);
+}
+
+section.cover_b h1,
+section.cover_b h6,
+section.cover_b p {
+  position: absolute;
+}
+
+section.cover_b h1 {
+  top: 15%;
+  right: 5%;
+  left: 5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26%;
+  padding: 30px;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-coverbg);
+  text-align: center;
+}
+
+section.cover_b h6 {
+  top: 33%;
+  right: 5%;
+  left: 5%;
+  height: 13%;
+  padding-top: 30px;
+  border-bottom-right-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
+  background-color: var(--color-coverbg);
+  color: var(--color-title);
+  text-align: center;
+}
+
+section.cover_b p {
+  bottom: 13%;
+  width: 100%;
+  transform: translateX(-6%);
+  text-align: center;
+}
+
+section.cover_c {
+  background: linear-gradient(to bottom, var(--color-surface) 20%, var(--color-coverbg) 20% 88%, var(--color-surface) 88%);
+}
+
+section.cover_c img {
+  filter: var(--filter-bg);
+}
+
+section.cover_c h1 {
+  width: 95%;
+  padding-top: 8%;
+  color: var(--color-text);
+}
+
+section.cover_c h6,
+section.cover_c p,
+section.cover_c strong,
+section.cover_c a {
+  color: var(--color-title);
+}
+
+section.cover_c footer {
+  left: 68%;
+  bottom: 30px;
+  font-size: 1.1rem;
+}
+
+section.cover_c header {
+  width: 350px;
+  height: 100px;
+  padding: 0 4%;
+}
+
+section.cover_d {
+  background: linear-gradient(to bottom, var(--color-surface) 5%, var(--color-coverbg) 5% 60%, var(--color-surface) 60%);
+}
+
+section.cover_d h6 {
+  color: var(--color-title);
+}
+
+section.cover_d p {
+  position: relative;
+  bottom: -22%;
+  transform: translateX(1.5%);
+}
+
+section.cover_d footer {
+  left: 68%;
+  bottom: 30px;
+  font-size: 1.1rem;
+}
+
+section.toc_a ul {
+  position: relative;
+  margin: 30px;
+  padding: 30px;
+  list-style: none;
+  border-top: var(--border-thick) solid var(--color-navbar-font);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: 0 10px 30px var(--color-shadow);
+}
+
+section.toc_a ul li {
+  counter-increment: toc_a;
+}
+
+section.toc_a ul li::before,
+section.toc_b ul li::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+  margin-right: 20px;
+  border-radius: 50%;
+  background-color: var(--color-accent);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-title);
+}
+
+section.toc_a ul li::before {
+  content: counter(toc_a);
+}
+
+section.toc_b {
+  background: linear-gradient(to right, var(--color-surface) 6%, var(--color-coverbg) 6% 30%, var(--color-surface) 30%);
+}
+
+section.toc_b > ul,
+section.toc_b > ol {
+  position: absolute;
+  left: 30%;
+  width: 63%;
+  display: table;
+  line-height: 2;
+  list-style: none;
+}
+
+section.toc_b ul li {
+  counter-increment: toc_b;
+}
+
+section.toc_b ul li::before {
+  content: counter(toc_b);
+}
+
+section.toc_b header {
+  top: 25%;
+  left: 8%;
+  width: 20%;
+  color: var(--color-title);
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-heading);
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 3px;
+  line-height: 2;
+}
+
+section.toc_b img {
+  width: 70%;
+  padding-top: 30px;
+  filter: var(--filter-logo);
+}
+
+section.fglass ul {
+  margin-left: -25px;
+  padding: 20px 20px 20px 60px;
+  border-top: var(--border-thick) solid var(--color-navbar-font);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background-color: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  box-shadow: 0 6px 18px var(--color-shadow);
+  list-style: none;
+}
+
+section.col1_ol_sq > ul,
+section.col1_ol_ci > ul,
+section.cols2_ol_sq ol,
+section.cols2_ol_sq ul,
+section.cols2_ol_ci ol,
+section.cols2_ol_ci ul,
+section.cols2_ul_sq ul,
+section.cols2_ul_ci ul {
+  list-style: none;
+}
+
+section.col1_ol_sq ul li,
+section.col1_ol_ci ul li,
+section.cols2_ol_sq ol li,
+section.cols2_ol_sq ul li,
+section.cols2_ol_ci ol li,
+section.cols2_ol_ci ul li {
+  position: relative;
+}
+
+section.col1_ol_sq ul li::before,
+section.col1_ol_ci ul li::before,
+section.cols2_ol_sq ol li::before,
+section.cols2_ol_sq ul li::before,
+section.cols2_ol_ci ol li::before,
+section.cols2_ol_ci ul li::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20px;
+  background-color: var(--color-accent);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-title);
+}
+
+section.col1_ol_sq ul li {
+  counter-increment: col1_ol_sq;
+}
+
+section.col1_ol_sq ul li::before {
+  content: counter(col1_ol_sq);
+  width: 27px;
+  height: 27px;
+}
+
+section.col1_ol_ci ul li {
+  counter-increment: col1_ol_ci;
+}
+
+section.col1_ol_ci ul li::before {
+  content: counter(col1_ol_ci);
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+}
+
+section.cols2_ol_sq ol,
+section.cols2_ol_sq ul,
+section.cols2_ol_ci ol,
+section.cols2_ol_ci ul,
+section.cols2_ul_sq ul,
+section.cols2_ul_ci ul {
+  display: grid;
+  width: 98%;
+  column-gap: 3em;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7em;
+}
+
+section.cols2_ol_sq ol li,
+section.cols2_ol_sq ul li {
+  counter-increment: cols2_ol_sq;
+}
+
+section.cols2_ol_sq ol li::before,
+section.cols2_ol_sq ul li::before {
+  content: counter(cols2_ol_sq);
+  width: 30px;
+  height: 30px;
+}
+
+section.cols2_ol_ci ol li,
+section.cols2_ol_ci ul li {
+  counter-increment: cols2_ol_ci;
+}
+
+section.cols2_ol_ci ol li::before,
+section.cols2_ol_ci ul li::before {
+  content: counter(cols2_ol_ci);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+section.cols2_ul_sq ul li,
+section.cols2_ul_ci ul li {
+  position: relative;
+}
+
+section.cols2_ul_sq ul li::before,
+section.cols2_ul_ci ul li::before {
+  content: "";
+  position: absolute;
+  top: 1.2em;
+  left: -30px;
+  width: 10px;
+  height: 10px;
+  background-color: var(--color-accent);
+}
+
+section.cols2_ul_ci ul li::before {
+  border-radius: 50%;
+}
+
+section.cols-2,
+section.cols-3,
+section.cols-2-73,
+section.cols-2-64,
+section.cols-2-37,
+section.cols-2-46,
+section.rows-2,
+section.rows-2-73,
+section.rows-2-64,
+section.rows-2-55,
+section.rows-2-37,
+section.rows-2-28,
+section.pin-3,
+section.fixedtitleB,
+section.footnote {
+  overflow: visible;
+  display: grid;
+}
+
+section.cols-2 {
+  gap: 1.5rem;
+  grid-template-columns: 50% 50%;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading" "leftpanel rightpanel";
+}
+
+section.cols-3 {
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading slideheading" "leftpanel middlepanel rightpanel";
+}
+
+section.cols-2-73,
+section.cols-2-64,
+section.cols-2-37,
+section.cols-2-46 {
+  gap: 1rem;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading" "leftpanel rightpanel";
+}
+
+section.cols-2-73 {
+  grid-template-columns: 70% 30%;
+}
+
+section.cols-2-64 {
+  grid-template-columns: 60% 40%;
+}
+
+section.cols-2-37 {
+  grid-template-columns: 30% 70%;
+}
+
+section.cols-2-46 {
+  grid-template-columns: 40% 60%;
+}
+
+section.cols-2.right-fill,
+section.cols-2-73.right-fill,
+section.cols-2-64.right-fill,
+section.cols-2-37.right-fill,
+section.cols-2-46.right-fill {
+  grid-template-areas: "leftpanel rightpanel" "leftpanel rightpanel";
+}
+
+section.cols-2.right-fill > :is(h2, h3),
+section.cols-2-73.right-fill > :is(h2, h3),
+section.cols-2-64.right-fill > :is(h2, h3),
+section.cols-2-37.right-fill > :is(h2, h3),
+section.cols-2-46.right-fill > :is(h2, h3) {
+  grid-area: leftpanel;
+  z-index: 2;
+  align-self: start;
+}
+
+section.cols-2.right-fill > :is(.ldiv, .limg),
+section.cols-2-73.right-fill > :is(.ldiv, .limg),
+section.cols-2-64.right-fill > :is(.ldiv, .limg),
+section.cols-2-37.right-fill > :is(.ldiv, .limg),
+section.cols-2-46.right-fill > :is(.ldiv, .limg) {
+  padding-top: 5.5rem;
+}
+
+section.cols-2.right-fill > .rdiv,
+section.cols-2-73.right-fill > .rdiv,
+section.cols-2-64.right-fill > .rdiv,
+section.cols-2-37.right-fill > .rdiv,
+section.cols-2-46.right-fill > .rdiv {
+  align-self: start;
+  padding-top: 0;
+}
+
+section.cols-2.right-fill > .rimg,
+section.cols-2-73.right-fill > .rimg,
+section.cols-2-64.right-fill > .rimg,
+section.cols-2-37.right-fill > .rimg,
+section.cols-2-46.right-fill > .rimg {
+  align-self: stretch;
+  margin-top: 0;
+}
+
+section.right-fill-text {
+  background-image: none !important;
+}
+
+section.rows-2,
+section.rows-2-73,
+section.rows-2-64,
+section.rows-2-55,
+section.rows-2-37,
+section.rows-2-28 {
+  gap: 1rem;
+  grid-template-columns: 100%;
+  grid-template-areas: "slideheading" "toppanel" "bottompanel";
+}
+
+section.rows-2,
+section.rows-2-55 {
+  grid-template-rows: 7% 45% 45%;
+}
+
+section.rows-2-73 {
+  grid-template-rows: 7% 63% 27%;
+}
+
+section.rows-2-64 {
+  grid-template-rows: 7% 54% 36%;
+}
+
+section.rows-2-37 {
+  grid-template-rows: 7% 27% 63%;
+}
+
+section.rows-2-28 {
+  grid-template-rows: 7% 18% 72%;
+}
+
+section.pin-3 {
+  gap: 1rem;
+  grid-template-columns: 50% 50%;
+  grid-template-rows: 7% 42% 48%;
+  grid-template-areas: "slideheading slideheading" "toppanel toppanel" "leftpanel rightpanel";
+}
+
+section.cols-2 :is(h2, h3),
+section.cols-3 :is(h2, h3),
+section.cols-2-73 :is(h2, h3),
+section.cols-2-64 :is(h2, h3),
+section.cols-2-37 :is(h2, h3),
+section.cols-2-46 :is(h2, h3),
+section.rows-2 :is(h2, h3),
+section.rows-2-73 :is(h2, h3),
+section.rows-2-64 :is(h2, h3),
+section.rows-2-55 :is(h2, h3),
+section.rows-2-37 :is(h2, h3),
+section.rows-2-28 :is(h2, h3),
+section.pin-3 :is(h2, h3),
+section.fixedtitleB > :is(h2, h3, h4, h5) {
+  grid-area: slideheading;
+}
+
+section.cols-2 .ldiv,
+section.cols-3 .ldiv,
+section.cols-2-73 .ldiv,
+section.cols-2-64 .ldiv,
+section.cols-2-37 .ldiv,
+section.cols-2-46 .ldiv,
+section.pin-3 .ldiv {
+  grid-area: leftpanel;
+}
+
+section.cols-2 .rdiv,
+section.cols-3 .rdiv,
+section.cols-2-73 .rdiv,
+section.cols-2-64 .rdiv,
+section.cols-2-37 .rdiv,
+section.cols-2-46 .rdiv,
+section.pin-3 .rdiv {
+  grid-area: rightpanel;
+}
+
+section.cols-3 .mdiv {
+  grid-area: middlepanel;
+}
+
+section.rows-2 .tdiv,
+section.rows-2-73 .tdiv,
+section.rows-2-64 .tdiv,
+section.rows-2-55 .tdiv,
+section.rows-2-37 .tdiv,
+section.rows-2-28 .tdiv,
+section.pin-3 .tdiv {
+  grid-area: toppanel;
+}
+
+section.rows-2 .bdiv,
+section.rows-2-73 .bdiv,
+section.rows-2-64 .bdiv,
+section.rows-2-55 .bdiv,
+section.rows-2-37 .bdiv,
+section.rows-2-28 .bdiv {
+  grid-area: bottompanel;
+}
+
+section.rows-2 .timg,
+section.rows-2-73 .timg,
+section.rows-2-64 .timg,
+section.rows-2-55 .timg,
+section.rows-2-37 .timg,
+section.rows-2-28 .timg {
+  grid-area: toppanel;
+}
+
+section.rows-2 .bimg,
+section.rows-2-73 .bimg,
+section.rows-2-64 .bimg,
+section.rows-2-55 .bimg,
+section.rows-2-37 .bimg,
+section.rows-2-28 .bimg {
+  grid-area: bottompanel;
+}
+
+section.cols-2 .limg,
+section.cols-2 .rimg,
+section.cols-3 .limg,
+section.cols-3 .mimg,
+section.cols-3 .rimg,
+section.cols-2-73 .limg,
+section.cols-2-73 .rimg,
+section.cols-2-64 .limg,
+section.cols-2-64 .rimg,
+section.cols-2-37 .limg,
+section.cols-2-37 .rimg,
+section.cols-2-46 .limg,
+section.cols-2-46 .rimg,
+section.rows-2 .timg,
+section.rows-2 .bimg,
+section.rows-2-73 .timg,
+section.rows-2-73 .bimg,
+section.rows-2-64 .timg,
+section.rows-2-64 .bimg,
+section.rows-2-55 .timg,
+section.rows-2-55 .bimg,
+section.rows-2-37 .timg,
+section.rows-2-37 .bimg,
+section.rows-2-28 .timg,
+section.rows-2-28 .bimg,
+section.pin-3 .timg,
+section.pin-3 .limg,
+section.pin-3 .rimg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+
+section.cols-2 .limg p,
+section.cols-2 .rimg p,
+section.cols-3 .limg p,
+section.cols-3 .mimg p,
+section.cols-3 .rimg p,
+section.cols-2-73 .limg p,
+section.cols-2-73 .rimg p,
+section.cols-2-64 .limg p,
+section.cols-2-64 .rimg p,
+section.cols-2-37 .limg p,
+section.cols-2-37 .rimg p,
+section.cols-2-46 .limg p,
+section.cols-2-46 .rimg p,
+section.rows-2 .timg p,
+section.rows-2 .bimg p,
+section.rows-2-73 .timg p,
+section.rows-2-73 .bimg p,
+section.rows-2-64 .timg p,
+section.rows-2-64 .bimg p,
+section.rows-2-55 .timg p,
+section.rows-2-55 .bimg p,
+section.rows-2-37 .timg p,
+section.rows-2-37 .bimg p,
+section.rows-2-28 .timg p,
+section.rows-2-28 .bimg p,
+section.pin-3 .timg p,
+section.pin-3 .limg p,
+section.pin-3 .rimg p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+section.cols-2 .limg img,
+section.cols-2 .rimg img,
+section.cols-3 .limg img,
+section.cols-3 .mimg img,
+section.cols-3 .rimg img,
+section.cols-2-73 .limg img,
+section.cols-2-73 .rimg img,
+section.cols-2-64 .limg img,
+section.cols-2-64 .rimg img,
+section.cols-2-37 .limg img,
+section.cols-2-37 .rimg img,
+section.cols-2-46 .limg img,
+section.cols-2-46 .rimg img,
+section.rows-2 .timg img,
+section.rows-2 .bimg img,
+section.rows-2-73 .timg img,
+section.rows-2-73 .bimg img,
+section.rows-2-64 .timg img,
+section.rows-2-64 .bimg img,
+section.rows-2-55 .timg img,
+section.rows-2-55 .bimg img,
+section.rows-2-37 .timg img,
+section.rows-2-37 .bimg img,
+section.rows-2-28 .timg img,
+section.rows-2-28 .bimg img,
+section.pin-3 .timg img,
+section.pin-3 .limg img,
+section.pin-3 .rimg img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+section .wide-figure img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+section .full-height {
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
+section .full-height img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+section.right-fill .rimg.full-height p {
+  height: 100%;
+}
+
+section.cols-2 .limg,
+section.cols-3 .limg,
+section.cols-2-73 .limg,
+section.cols-2-64 .limg,
+section.cols-2-37 .limg,
+section.cols-2-46 .limg,
+section.pin-3 .limg {
+  grid-area: leftpanel;
+}
+
+section.cols-2 .rimg,
+section.cols-2-73 .rimg,
+section.cols-2-64 .rimg,
+section.cols-2-37 .rimg,
+section.cols-2-46 .rimg,
+section.pin-3 .rimg {
+  grid-area: rightpanel;
+}
+
+section.cols-3 .mimg {
+  grid-area: middlepanel;
+}
+
+section.bq blockquote,
+section.bq-blue blockquote,
+section.bq-red blockquote,
+section.bq-green blockquote,
+section.bq-purple blockquote,
+section.bq-black blockquote,
+section.bq-yellow blockquote {
+  padding: 1%;
+  border-left: none;
+  background-color: var(--color-surface);
+}
+
+section.bq blockquote > p::before,
+section.bq-blue blockquote > p::before,
+section.bq-red blockquote > p::before,
+section.bq-green blockquote > p::before,
+section.bq-purple blockquote > p::before,
+section.bq-black blockquote > p::before,
+section.bq-yellow blockquote > p::before {
+  content: none;
+  padding-right: 0;
+  color: var(--color-on-primary);
+}
+
+section.bq blockquote > p:nth-child(1),
+section.bq-blue blockquote > p:nth-child(1),
+section.bq-red blockquote > p:nth-child(1),
+section.bq-green blockquote > p:nth-child(1),
+section.bq-purple blockquote > p:nth-child(1),
+section.bq-black blockquote > p:nth-child(1),
+section.bq-yellow blockquote > p:nth-child(1) {
+  margin-bottom: -1px;
+  padding: 0.5% 0.5% 0.5% 1.5%;
+  color: var(--color-on-primary);
+  font-size: 1.03rem;
+  line-height: 2rem;
+}
+
+section.bq blockquote > p:not(:nth-child(1)),
+section.bq-blue blockquote > p:not(:nth-child(1)),
+section.bq-red blockquote > p:not(:nth-child(1)),
+section.bq-green blockquote > p:not(:nth-child(1)),
+section.bq-purple blockquote > p:not(:nth-child(1)),
+section.bq-black blockquote > p:not(:nth-child(1)),
+section.bq-yellow blockquote > p:not(:nth-child(1)) {
+  padding: 1% 2%;
+  background-color: var(--color-callout-body);
+}
+
+section.bq blockquote > p:nth-child(1) {
+  background-color: var(--color-primary);
+}
+
+section.bq-blue blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-blue);
+}
+
+section.bq-red blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-red);
+}
+
+section.bq-green blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-green);
+}
+
+section.bq-purple blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-purple);
+}
+
+section.bq-black blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-black);
+}
+
+section.bq-yellow blockquote > p:nth-child(1) {
+  background-color: var(--color-callout-yellow);
+}
+
+section.bq blockquote > p:nth-child(1)::before {
+  content: "\f0eb";
+}
+
+section.bq-blue blockquote > p:nth-child(1)::before {
+  content: "\f518";
+}
+
+section.bq-red blockquote > p:nth-child(1)::before {
+  content: "\f0eb";
+}
+
+section.bq-green blockquote > p:nth-child(1)::before {
+  content: "\e0bb";
+}
+
+section.bq-purple blockquote > p:nth-child(1)::before {
+  content: "\f7e4";
+}
+
+section.bq-black blockquote > p:nth-child(1)::before {
+  content: "\f5ad";
+}
+
+section.bq-yellow blockquote > p:nth-child(1)::before {
+  content: "!";
+}
+
+section.bq blockquote > p:nth-child(1)::before,
+section.bq-blue blockquote > p:nth-child(1)::before,
+section.bq-red blockquote > p:nth-child(1)::before,
+section.bq-green blockquote > p:nth-child(1)::before,
+section.bq-purple blockquote > p:nth-child(1)::before,
+section.bq-black blockquote > p:nth-child(1)::before,
+section.bq-yellow blockquote > p:nth-child(1)::before {
+  padding-right: 2%;
+  font-weight: 900;
+}
+
+section.lastpage {
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: 80% 20%;
+  grid-template-areas: "heading" "icons";
+  padding: 0;
+  background: linear-gradient(to bottom, var(--color-surface) 20%, var(--color-coverbg) 20% 60%, var(--color-surface) 55%);
+}
+
+section.lastpage h6 {
+  grid-area: heading;
+  display: grid;
+  align-content: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-title);
+  font-family: var(--font-family-title);
+  font-size: var(--font-size-display);
+  text-align: center;
+}
+
+section.lastpage .icons {
+  grid-area: icons;
+}
+
+section.lastpage div > ul {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr 1fr;
+  gap: 5em;
+  width: 100%;
+  list-style: none;
+  font-family: var(--font-family-main);
+}
+
+section.lastpage a {
+  font-size: var(--font-size-body);
+}
+
+section.lastpage a::after,
+section.lastpage::after {
+  content: "";
+}
+
+.fa-envelope,
+.fa-weixin,
+.fa-phone-volume,
+.fa-house {
+  padding: 10px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 1.2rem;
+}
+
+section.navbar header {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5%;
+  padding: 6px 0 3px;
+  display: flex;
+  justify-content: space-between;
+  background-color: var(--color-navbar-bg);
+  color: var(--color-navbar-font);
+  white-space: pre;
+}
+
+section.navbar header > em,
+section.navbar header > strong,
+section.navbar header > em > strong {
+  color: var(--color-navbar-font);
+  font-size: 0.9rem;
+  font-style: normal;
+  font-weight: 400;
+}
+
+section.navbar header > strong {
+  padding: 0 15px 5px;
+  border: 1px solid var(--color-surface);
+  border-radius: 12px;
+  background-color: var(--color-surface);
+}
+
+section.navbar header::before,
+section.navbar header::after {
+  content: "";
+}
+
+section.trans {
+  background-image: none;
+  background-color: var(--color-trans);
+}
+
+section.trans h2 {
+  color: var(--color-title);
+  font-size: 4rem;
+  text-align: center;
+}
+
+section.caption .caption {
+  padding-top: 20px;
+  color: var(--color-muted);
+  font-size: smaller;
+  text-align: center;
+}
+
+section.fixedtitleA,
+section.fixedtitleB {
+  justify-content: start;
+}
+
+section.fixedtitleB {
+  gap: 1.5rem;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading" "content";
+}
+
+section.fixedtitleB > :is(h2, h3, h4, h5) {
+  position: absolute;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent);
+  color: var(--color-on-primary);
+  font-size: 1.25rem;
+}
+
+section.fixedtitleB .div {
+  grid-area: content;
+}
+
+section.footnote {
+  gap: 0.7em;
+  grid-template-rows: 1fr auto;
+  grid-template-areas: "content" "footnote";
+}
+
+section.footnote .tdiv {
+  grid-area: content;
+}
+
+section.footnote .bdiv {
+  grid-area: footnote;
+  font-size: 85%;
+}
+
+section.footnote .bdiv::before {
+  display: block;
+  margin-bottom: 1em;
+  border-top: 1.8px dashed var(--color-divider);
+  content: "";
+}
+
+section.tinytext > :is(p, ul, ol, table, blockquote) {
+  font-size: 80%;
+}
+
+section.smalltext > :is(p, ul, ol, table, blockquote) {
+  font-size: 90%;
+}
+
+section.largetext > :is(p, ul, ol, table, blockquote) {
+  font-size: 115%;
+}
+
+section.hugetext > :is(p, ul, ol, table, blockquote) {
+  font-size: 130%;
+}
+
+section:is(.trans, .section-divider, .section-slide, .chapter, .divider, .break) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
+  padding-inline: calc(var(--page-padding-x) * 0.8);
+  text-align: center;
+  background-image: none;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+section:is(.trans, .section-divider, .section-slide, .chapter, .divider, .break) > * {
+  width: 100%;
+  margin-inline: auto;
+}
+
+section:is(.trans, .section-divider, .section-slide, .chapter, .divider, .break) :is(h1, h2, h3, h4) {
+  color: var(--color-on-primary);
+  text-align: center;
+}
+
+section.trans :is(h2, h3),
+section.section-divider :is(h1, h2, h3),
+section.section-slide :is(h1, h2, h3) {
+  font-size: 4rem;
+}
+
+section.cols-2 {
+  overflow: visible;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 50% 50%;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading" "leftpanel rightpanel";
+}
+section.cols-2 :is(h2, h3) {
+  grid-area: slideheading;
+}
+section.cols-2 .ldiv {
+  grid-area: leftpanel;
+  margin-top: -5%;
+}
+section.cols-2 .rdiv {
+  grid-area: rightpanel;
+  margin-top: -5%;
+}
+section.cols-2 .limg {
+  grid-area: leftpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5%;
+}
+section.cols-2 .rimg {
+  grid-area: rightpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5%;
+}
+
+section.cols-3 {
+  overflow: visible;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading slideheading" "leftpanel middlepanel rightpanel";
+}
+section.cols-3 :is(h2, h3) {
+  grid-area: slideheading;
+}
+section.cols-3 .ldiv {
+  grid-area: leftpanel;
+  margin-top: -5%;
+}
+section.cols-3 .mdiv {
+  grid-area: middlepanel;
+  margin-top: -5%;
+}
+section.cols-3 .rdiv {
+  grid-area: rightpanel;
+  margin-top: -5%;
+}
+section.cols-3 .limg {
+  grid-area: leftpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5%;
+}
+section.cols-3 .mimg {
+  grid-area: middlepanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5%;
+}
+section.cols-3 .rimg {
+  grid-area: rightpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5%;
+}
+
+section.cols-2-73,
+section.cols-2-64,
+section.cols-2-37,
+section.cols-2-46 {
+  overflow: visible;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 10% 90%;
+  grid-template-areas: "slideheading slideheading" "leftpanel rightpanel";
+}
+section.cols-2-73 :is(h2, h3),
+section.cols-2-64 :is(h2, h3),
+section.cols-2-37 :is(h2, h3),
+section.cols-2-46 :is(h2, h3) {
+  grid-area: slideheading;
+}
+section.cols-2-73 .ldiv,
+section.cols-2-64 .ldiv,
+section.cols-2-37 .ldiv,
+section.cols-2-46 .ldiv {
+  grid-area: leftpanel;
+  margin-top: -2%;
+}
+section.cols-2-73 .rdiv,
+section.cols-2-64 .rdiv,
+section.cols-2-37 .rdiv,
+section.cols-2-46 .rdiv {
+  grid-area: rightpanel;
+  margin-top: -2%;
+}
+section.cols-2-73 .limg,
+section.cols-2-64 .limg,
+section.cols-2-37 .limg,
+section.cols-2-46 .limg {
+  grid-area: leftpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -2%;
+}
+section.cols-2-73 .rimg,
+section.cols-2-64 .rimg,
+section.cols-2-37 .rimg,
+section.cols-2-46 .rimg {
+  grid-area: rightpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -2%;
+}
+
+section.cols-2-73 {
+  grid-template-columns: 70% 30%;
+}
+
+section.cols-2-64 {
+  grid-template-columns: 60% 40%;
+}
+
+section.cols-2-37 {
+  grid-template-columns: 30% 70%;
+}
+
+section.cols-2-46 {
+  grid-template-columns: 40% 60%;
+}
+
+section.cols-2.right-fill,
+section.cols-2-73.right-fill,
+section.cols-2-64.right-fill,
+section.cols-2-37.right-fill,
+section.cols-2-46.right-fill {
+  grid-template-areas: "leftpanel rightpanel" "leftpanel rightpanel";
+}
+section.cols-2.right-fill > :is(h2, h3),
+section.cols-2-73.right-fill > :is(h2, h3),
+section.cols-2-64.right-fill > :is(h2, h3),
+section.cols-2-37.right-fill > :is(h2, h3),
+section.cols-2-46.right-fill > :is(h2, h3) {
+  grid-area: leftpanel;
+  z-index: 2;
+  align-self: start;
+}
+section.cols-2.right-fill > :is(.ldiv, .limg),
+section.cols-2-73.right-fill > :is(.ldiv, .limg),
+section.cols-2-64.right-fill > :is(.ldiv, .limg),
+section.cols-2-37.right-fill > :is(.ldiv, .limg),
+section.cols-2-46.right-fill > :is(.ldiv, .limg) {
+  padding-top: 5.5rem;
+}
+section.cols-2.right-fill > .rdiv,
+section.cols-2-73.right-fill > .rdiv,
+section.cols-2-64.right-fill > .rdiv,
+section.cols-2-37.right-fill > .rdiv,
+section.cols-2-46.right-fill > .rdiv {
+  align-self: start;
+  padding-top: 0;
+}
+section.cols-2.right-fill > .rimg,
+section.cols-2-73.right-fill > .rimg,
+section.cols-2-64.right-fill > .rimg,
+section.cols-2-37.right-fill > .rimg,
+section.cols-2-46.right-fill > .rimg {
+  align-self: stretch;
+  margin-top: 0;
+}
+
+section.rows-2 {
+  overflow: visible;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 100%;
+  grid-template-rows: 7% 45% 45%;
+  grid-template-areas: "slideheading" "toppanel" "bottompanel";
+}
+section.rows-2 :is(h2, h3) {
+  grid-area: slideheading;
+}
+section.rows-2 .tdiv {
+  grid-area: toppanel;
+}
+section.rows-2 .bdiv {
+  grid-area: bottompanel;
+}
+section.rows-2 .timg {
+  grid-area: toppanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+section.rows-2 .bimg {
+  grid-area: bottompanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+section.pin-3 {
+  overflow: visible;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 50% 50%;
+  grid-template-rows: 7% 42% 48%;
+  grid-template-areas: "slideheading slideheading" "toppanel toppanel" "leftpanel rightpanel";
+}
+section.pin-3 :is(h2, h3) {
+  grid-area: slideheading;
+}
+section.pin-3 .tdiv {
+  grid-area: toppanel;
+}
+section.pin-3 .ldiv {
+  grid-area: leftpanel;
+}
+section.pin-3 .rdiv {
+  grid-area: rightpanel;
+}
+section.pin-3 .timg {
+  grid-area: toppanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+section.pin-3 .limg {
+  grid-area: leftpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+section.pin-3 .rimg {
+  grid-area: rightpanel;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+section.fglass ul,
+section.fglass ol {
+  list-style: none;
+  margin: 0;
+  padding: 20px 20px 20px 60px;
+  line-height: 180%;
+  border-top: var(--border-thick) solid var(--color-navbar-font);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--color-glass-bg);
+  border-inline: 1px solid var(--color-glass-border);
+  border-bottom: 1px solid var(--color-glass-border);
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+section:is(.col1_ol_sq, .col1_ul_sq) > ul,
+section:is(.col1_ol_sq, .col1_ul_sq) > ol {
+  list-style: none;
+  margin: 0;
+  padding: 20px 20px 20px 60px;
+  line-height: 180%;
+}
+section:is(.col1_ol_sq, .col1_ul_sq) li {
+  counter-increment: col1_ol_sq;
+}
+section:is(.col1_ol_sq, .col1_ul_sq) li::before {
+  content: counter(col1_ol_sq);
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  margin-right: 20px;
+  margin-left: -8%;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  line-height: 1;
+}
+
+section:is(.col1_ol_ci, .col1_ul_ci) > ul,
+section:is(.col1_ol_ci, .col1_ul_ci) > ol {
+  list-style: none;
+  margin: 0;
+  padding: 20px 20px 20px 60px;
+  line-height: 180%;
+}
+section:is(.col1_ol_ci, .col1_ul_ci) li {
+  counter-increment: col1_ol_ci;
+}
+section:is(.col1_ol_ci, .col1_ul_ci) li::before {
+  content: counter(col1_ol_ci);
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  margin-right: 20px;
+  margin-left: -8%;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+section.cols2_ol_sq ul,
+section.cols2_ol_sq ol,
+section.cols2_ol_ci ul,
+section.cols2_ol_ci ol,
+section.cols2_ul_sq ul,
+section.cols2_ul_sq ol,
+section.cols2_ul_ci ul,
+section.cols2_ul_ci ol {
+  list-style: none;
+  margin: 0;
+  padding: 20px 20px 20px 60px;
+  line-height: 180%;
+  display: grid;
+  width: 98%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 3em;
+  row-gap: 0.7em;
+  align-items: start;
+}
+
+section.cols2_ol_sq li {
+  counter-increment: cols2_ol_sq;
+}
+section.cols2_ol_sq li::before {
+  content: counter(cols2_ol_sq);
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 20px;
+  margin-left: -8%;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  line-height: 1;
+}
+
+section.cols2_ol_ci li {
+  counter-increment: cols2_ol_ci;
+}
+section.cols2_ol_ci li::before {
+  content: counter(cols2_ol_ci);
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 20px;
+  margin-left: -8%;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+section.cols2_ul_sq li {
+  display: block;
+  position: relative;
+  list-style: none;
+}
+section.cols2_ul_sq li::before {
+  content: "";
+  display: inline-flex;
+  position: absolute;
+  top: 1.2em;
+  left: -30px;
+  margin-top: -0.9em;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  background-color: var(--color-primary);
+  font-family: var(--font-family-display);
+}
+
+section.cols2_ul_ci li {
+  display: block;
+  position: relative;
+  list-style: none;
+}
+section.cols2_ul_ci li::before {
+  content: "";
+  display: inline-flex;
+  position: absolute;
+  top: 1.2em;
+  left: -30px;
+  margin-top: -0.9em;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  background-color: var(--color-primary);
+  font-family: var(--font-family-display);
+  border-radius: 50%;
+}
+
+section:is(.bq, .bq-blue, .bq-red, .bq-green, .bq-purple, .bq-black, .bq-yellow) blockquote {
+  overflow: hidden;
+  padding: 0;
+}
+
+section:is(.bq, .bq-blue, .bq-red, .bq-green, .bq-purple, .bq-black, .bq-yellow) blockquote > p {
+  margin: 0;
+}
+
+section:is(.bq, .bq-blue, .bq-red, .bq-green, .bq-purple, .bq-black, .bq-yellow) blockquote > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+section:is(.bq, .bq-blue, .bq-red, .bq-green, .bq-purple, .bq-black, .bq-yellow) blockquote > p:not(:first-child) {
+  padding: 1% 2%;
+}
+
+section :is(h1, h2, h3, h4, h5, h6) code {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+footer,
+section.navbar header {
+  align-items: center;
+}
+
+:root {
+  --font-family-display: "VSP Latin Modern Sans", "Mary Noto Sans CJK SC", sans-serif;
+  --font-family-body: "VSP Latin Modern Roman", "Mary Noto Sans CJK SC", serif;
+  --font-family-mono: "VSP Latin Modern Mono", "Mary Noto Sans CJK SC", monospace;
+  --font-family-accent: "VSP Latin Modern Sans", "Mary Noto Sans CJK SC", sans-serif;
+  --color-primary: #ae3a44;
+  --color-on-primary: #ffffff;
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-text: #211112;
+  --color-muted: #8c8c8c;
+  --color-accent: #a2222c;
+  --color-section-bg: #edddde;
+  --color-code-bg: #f6eeef;
+  --color-code-text: #2d181b;
+  --color-link: #211112;
+  --color-divider: #53a7a0;
+  --color-quote: rgba(254, 176, 98, 0.1);
+  --color-navbar-font: rgb(100, 81, 75);
+  --filter-logo: none;
+  --filter-bg: none;
+  --color-callout-blue: rgb(129, 161, 193);
+  --color-callout-red: rgb(191, 97, 106);
+  --color-callout-green: rgb(172, 206, 141);
+  --color-callout-purple: rgb(180, 142, 173);
+  --color-callout-black: rgb(67, 76, 94);
+  --color-callout-yellow: rgb(236, 194, 11);
+  --color-callout-body: rgb(228, 234, 246);
+  --color-glass-bg: rgba(255, 255, 255, 0.86);
+  --color-glass-border: rgba(100, 81, 75, 0.14);
+  --color-syntax-comment: #28a828;
+  --color-syntax-string: #fd8f3f;
+  --color-syntax-number: rgb(158, 158, 62);
+  --color-syntax-keyword: #1111e2;
+  --color-syntax-symbol: #ac1212;
+  --color-syntax-variable: #fc5fa3;
+  --color-syntax-builtin: #960ab9;
+  --color-prompt-input: #99bb88;
+  --color-prompt-output: #ff9090;
+  --color-inverted-bg: #ffffff;
+  --color-inverted-text: #232629;
+}
+
+section.cover_a,
+section.cover_b,
+section.cover_c,
+section.cover_d,
+section.cover_e {
+  overflow: hidden;
+}
+
+section.cover_a {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+  padding-top: 150px;
+}
+
+section.cover_a h1,
+section.cover_a h6,
+section.cover_a p {
+  position: relative;
+  top: auto;
+  bottom: auto;
+  width: auto;
+  transform: none;
+}
+
+section.cover_a h1 {
+  margin-inline: 5%;
+  padding: 0 80px;
+}
+
+section.cover_a h6 {
+  margin-inline: 5%;
+  padding: 0 80px;
+}
+
+section.cover_a p {
+  margin-top: auto;
+  text-align: center;
+}
+
+section.cover_b {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+  padding-top: 108px;
+}
+
+section.cover_b h1,
+section.cover_b h6,
+section.cover_b p,
+section.cover_b .speaker-meta {
+  position: relative;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  width: auto;
+  height: auto;
+  transform: none;
+}
+
+section.cover_b h1 {
+  margin-inline: 5%;
+  margin-bottom: 0;
+  padding: 28px 40px 10px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+section.cover_b h6 {
+  margin-inline: 5%;
+  padding: 12px 40px 28px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+section.cover_b p {
+  margin-top: auto;
+  text-align: center;
+}
+
+section.cover_b .speaker-meta {
+  justify-self: center;
+  align-self: start;
+  margin-top: 24px;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 28px;
+  line-height: 1.38;
+  text-align: left;
+}
+
+section.cover_b .speaker-meta span {
+  display: inline-block;
+  min-width: 104px;
+  margin-right: 14px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent), transparent 84%);
+  color: var(--color-accent);
+  font-family: var(--font-family-accent);
+  font-size: 0.62em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+section.cover_b .speaker-meta small {
+  display: block;
+  margin: 4px 0 16px 118px;
+  color: var(--color-muted);
+  font-size: 0.86em;
+}
+
+section.cover_c,
+section.cover_d {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+}
+
+section.cover_c h1,
+section.cover_c h6,
+section.cover_c p,
+section.cover_d h1,
+section.cover_d h6,
+section.cover_d p {
+  position: relative;
+  bottom: auto;
+  transform: none;
+}
+
+section.cover_e {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26%;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+  padding-top: 138px;
+}
+
+section.cover_e::before {
+  pointer-events: none;
+  z-index: 0;
+}
+
+section.cover_e h1,
+section.cover_e h6,
+section.cover_e p,
+section.cover_e .speaker-meta {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  top: auto;
+  bottom: auto;
+  width: auto;
+  transform: none;
+}
+
+section.cover_e h1 {
+  margin-bottom: 8px;
+}
+
+section.cover_e h6 {
+  margin-bottom: 0;
+}
+
+section.cover_e p {
+  margin-top: auto;
+}
+
+section.cover_e .speaker-meta {
+  align-self: end;
+  margin-top: auto;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 28px;
+  line-height: 1.38;
+}
+
+section.cover_e .speaker-meta span {
+  display: inline-block;
+  min-width: 104px;
+  margin-right: 14px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent), transparent 84%);
+  color: var(--color-accent);
+  font-family: var(--font-family-accent);
+  font-size: 0.62em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+section.cover_e .speaker-meta small {
+  display: block;
+  margin: 4px 0 16px 118px;
+  color: var(--color-muted);
+  font-size: 0.86em;
+}
+
+section.cover_e a::after {
+  content: "";
+}
+
+section.lastpage div > ul,
+section.lastpage .ending-cols3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5em;
+  list-style: none;
+  align-content: center;
+  width: 100%;
+}
+
+section.lastpage div > ul > li,
+section.lastpage .ending-cols3 > li {
+  list-style: none;
+  align-content: start;
+}
+
+section.lastpage div > ul > li > ul > li {
+  list-style: none;
+  margin-left: -120px;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) {
+  background-image: url("../backgrounds/shanghaitech-master.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+section.cover_e::before {
+  position: absolute;
+  top: 0;
+  left: 80px;
+  z-index: 1;
+  width: 100px;
+  height: 100px;
+  background: url("../logos/ShanghaiTech_Logo_RGBA.png") center/90% auto no-repeat, var(--color-coverbg);
+  content: "";
+}
+
+section.cover_e::after {
+  content: "";
+}
+
+section.cover_e .speaker-meta::after {
+  position: fixed;
+  right: 24px;
+  bottom: 0;
+  z-index: 1;
+  width: 360px;
+  height: 120px;
+  background: url("../logos/ShanghaiTech_Name_RGBA.png") center/contain no-repeat;
+  content: "";
+}
+
+section.toc_b {
+  position: relative;
+  background-image: linear-gradient(to right, transparent 0 6%, var(--color-coverbg) 6% 30%, transparent 30%), url("../backgrounds/shanghaitech-master.png");
+  background-size: 100% 100%, 100% 100%;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+section.toc_b::before {
+  content: none;
+}
+
+section.toc_b header,
+section.toc_b > ul,
+section.toc_b > ol {
+  z-index: 1;
+}
+
+section.toc_b header {
+  color: var(--color-on-primary);
+}
+
+section.toc_b header::after {
+  display: block;
+  width: 170px;
+  height: 170px;
+  margin: 14px auto 0;
+  background: url("../logos/ShanghaiTech_Logo_RGBA.png") center/contain no-repeat;
+  content: "";
+}

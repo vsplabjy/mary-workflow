@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "2.2.0-alpha.4+codex.20260718093644",
-  "description": "Cycle-aware workflows with validated paper close reading and readable source-grounded summaries for Codex.",
+  "version": "2.2.0-alpha.5+codex.20260718125033",
+  "description": "Cycle-aware workflows with validated paper reading, grounded summaries, and offline research-presentation assets for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Mary Workflow",
     "shortDescription": "Run milestone and research-paper workflows",
-    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine plus v2.2 research skills for independent paper states, arXiv HTML/PDF acquisition, parse-quality gating, contract-validated close reading, source-locator indexing, readable paper articles with separate grounded claim ledgers, project execution, review, recovery, and cycle archives.",
+    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine plus v2.2 research skills for independent paper states, arXiv HTML/PDF acquisition, parse-quality gating, contract-validated close reading, source-locator indexing, readable paper articles with separate grounded claim ledgers, an offline ShanghaiTech red Marp theme supply, project execution, review, recovery, and cycle archives.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [
