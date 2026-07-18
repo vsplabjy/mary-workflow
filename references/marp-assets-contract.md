@@ -16,7 +16,9 @@ P4 vendors the ShanghaiTech red presentation base into `assets/marp/`; P5 consum
 | `marp-engine.cjs` | Forces KaTeX to resolve fonts from the local asset tree |
 | `marp.config.mjs` | Registers the theme, engine, and local-file access |
 | `templates/offline-preview.md` | P4 smoke deck for Chinese, background, logo, and formula rendering |
-| `.vscode/settings.json` | Registers the local theme for every Markdown file in this workspace |
+| `.vscode/settings.json` | Registers the local theme while developing Mary itself |
+| `<target>/.mary-research/marp/themes/` | P5-deployed self-contained theme for an independent paper project |
+| `<target>/.vscode/settings.json` | P5-merged registration when the target project is opened directly |
 
 The CSS header records the exact upstream commit. There is intentionally no `VENDOR.md`. The current integration is private-use and risk-accepted; perform a complete license and trademark review before public distribution.
 
@@ -25,10 +27,12 @@ The CSS header records the exact upstream commit. There is intentionally no `VEN
 1. Keep every source-theme URL relative; reject HTTP(S), protocol-relative, and escaping URLs.
 2. Resolve every source-theme `url(...)` from the theme directory to an existing repository file.
 3. Generate the runtime CSS deterministically with every asset embedded as a `data:` URL.
-4. Register that compiled CSS in the workspace-level `markdown.marp.themes` setting.
+4. Register that compiled CSS in Mary's workspace and deploy/register an identical copy in each
+   target project during `prepare-slides`.
 5. Keep all 20 KaTeX WOFF2 files and both complete Noto CJK SC weights.
 6. Keep `math: katex` explicit in slide front matter.
-7. Resolve the registered theme from the workspace root so Markdown can live in any workspace subdirectory.
+7. Resolve the registered theme from the active project workspace root so Markdown can live at
+   any depth below it; do not rely on a parent repository's `.vscode` settings being inherited.
 8. Do not modify or depend on the ignored `vsp-marp/` checkout at runtime.
 
 P5 adds the `.figure-placeholder`, `.figure-placeholder__number`, and `.figure-placeholder__caption` styles to the localized theme while retaining the pinned P4 source and deterministic self-contained build.

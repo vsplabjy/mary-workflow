@@ -1,6 +1,6 @@
 {
   "name": "mary-workflow",
-  "version": "2.2.0-alpha.6+codex.20260718144006",
+  "version": "2.2.0-alpha.6+codex.20260718151254",
   "description": "Cycle-aware workflows with validated paper reading, grounded summaries, and linted ShanghaiTech Marp research slides for Codex.",
   "author": {
     "name": "Mary Workflow",

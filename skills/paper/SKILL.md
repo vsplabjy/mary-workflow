@@ -41,6 +41,7 @@ Manage independent paper states, close reading, grounded summaries, and research
    - run `complete-summary` and report any body, anchor, locator, or evidence rejection without weakening the contract.
 14. For `/mw-paper slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
+   - keep the generated project-local theme and VS Code registration intact, and open the target project root as the workspace when previewing a nested deck;
    - read all of `summary.md`, `summary-ledger.json`, `slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` with `mary-shanghaitech-red`, `16:9`, and `math: katex` frontmatter;
    - turn the summary into a talk rather than copying paragraphs: establish the problem, teach method intuition and information flow across at least two Method pages, then show experiments and takeaways;

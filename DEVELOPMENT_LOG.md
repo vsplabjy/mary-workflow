@@ -638,6 +638,7 @@ Baseline commit: `c950395` - `P4 finished`
 
 - 新增 `scripts/mw_paper_slides.py`，实现 `slides-context.json`、summary bundle 复验、claim catalog、可解析 Figure catalog、`slides.md` fingerprint 和 P5 lint；slides 完成不再接受通用占位 fingerprint。
 - `prepare-slides` 要求 P3.5 summary 已完成且当前双文件字节仍匹配状态，生成上下文与 `figures/` 目录并启动 slides；`lint-slides` 无状态变更；`complete-slides` 复用同一 lint 后完成状态。
+- 修复独立目标项目的 VS Code 主题作用域：`prepare-slides` 现在把 33/33 资源内嵌的自包含 CSS 原子部署到 `<project>/.mary-research/marp/themes/`，并合并 `<project>/.vscode/settings.json` 的 Marp HTML、KaTeX 与主题注册。已有无关设置和主题条目保留，重复执行幂等；lint 同时拒收缺失或漂移的项目主题/注册。
 - `slides.md` 强制 `mary-shanghaitech-red`、16:9、`math: katex`、封面/背景/至少两页方法/实验/尾页结构，Method 不得弱于其他主体章节。
 - 每个事实页使用隐藏 `<!-- claims: ... -->` 锚定 summary ledger；Background/Method/Experiments 分别限制 B/M/E claim family，未知 claim、可见 `[M01]` 标记和缺少任一 claim family 均拒收。
 - 从当前 `source-locators.json` 的可解析 span 提取 Figure 编号、图注与 locator；占位必须显示论文原 Figure 编号、携带匹配 locator 并落在 `limg/mimg/rimg/timg/bimg` 面板。未知 Figure、错 locator、缺编号/图注节点和只提 Figure 不留占位均拒收。
@@ -646,12 +647,14 @@ Baseline commit: `c950395` - `P4 finished`
 - 上科大主题新增 Figure 虚线占位、编号和图注样式，并重新确定性生成 33/33 资源内嵌的自包含 CSS；P4 远程 URL 继续为 0。
 - `lint-slides` 与 `complete-slides` 支持可选 `--smoke-compile`：优先本地 `marp`，否则使用 npm 离线缓存的 Marp CLI 4.3.1；只生成并删除临时 HTML，不把 HTML/PDF/PPTX 纳入交付。
 - 新增 `references/slides-contract.md`，同步 `/mw-paper` command、paper/root skill、paper state/Marp contract、OpenAI metadata 与 plugin manifest；P6 `quiz-log.md` 继续明确阻断。
-- plugin 预发布基础版本更新为 `2.2.0-alpha.6`，并通过 helper 写入单一 cachebuster `2.2.0-alpha.6+codex.20260718144006`。
+- plugin 预发布基础版本保持 `2.2.0-alpha.6`，并通过 helper 刷新单一 cachebuster 为 `2.2.0-alpha.6+codex.20260718151254`。
 - `README.md`、P0 runtime、P2 source acquisition、P3.5 summary runtime 均未修改；忽略的 `vsp-marp/` 来源仓库未修改。
 
 验证：
 
-- `python -m unittest discover -s tests -v`：116/116 通过，其中既有 104 项回归保持通过，P5 新增 12 项契约测试。
+- `python -m unittest discover -s tests -v`：119/119 通过，其中既有 104 项回归保持通过，P5 共 15 项契约测试。
 - P5 覆盖合法完成、prepare/lint/complete CLI、context/summary/fingerprint 漂移、frontmatter、结构顺序、方法页下限、claim allowlist/family/隐藏语义、Figure id/locator/节点/缺位、布局下限、远程/缺失媒体和单页超量拒收。
+- 跨 workspace 覆盖项目主题落盘、VS Code JSONC 设置合并、既有主题保留、单次注册、重复准备幂等、非法设置无部分主题写入，以及主题注册漂移后拒收/重备修复。
 - 完整 fixture 流水线从 read → summary → slides 生成 7 页 deck；`lint-slides --smoke-compile` 在 npm 离线模式通过，报告 pages=7、layouts=4、figures=1，状态目录没有残留导出物。
 - 使用同一 P5 `slides.md` 离线渲染 7 张 1280x720 PNG 并逐页检查：上科大封面/背景/Logo、KaTeX、双栏 Figure 占位、三栏、上下栏和尾页均正常，无空白页、资源缺失或文字重叠。
+- 对真实 `test/v2.2/.mary-research/papers/arxiv-2308.04079/slides.md` 复验通过：从 `test/v2.2` 独立工作目录仅注册项目内 CSS，离线生成 13/13 张 1280x720 PNG；封面、中文、校徽、红色母版、Figure 1/5 占位和尾页正常，证明不再依赖 Mary 仓库根 `.vscode` 或 Marp CLI config。

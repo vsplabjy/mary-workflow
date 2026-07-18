@@ -41,6 +41,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
 9. For `slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
+   - treat the emitted `workspace_theme` and `vscode_settings` as generated project support: open the target project root in VS Code so every nested paper deck resolves the offline theme;
    - read all of `summary.md`, `summary-ledger.json`, `slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;
    - lead with the research problem, make Method at least two pages and the most detailed part, then present experiments and takeaways without adding facts outside the summary claim ledger;

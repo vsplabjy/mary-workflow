@@ -20,8 +20,12 @@ from mw_paper import (  # noqa: E402
     read_paper_state,
 )
 from mw_paper_slides import (  # noqa: E402
+    PROJECT_THEME_RELATIVE,
     SLIDES_CONTEXT_SCHEMA,
     SLIDES_FILE,
+    VSCODE_SETTINGS_RELATIVE,
+    VSCODE_THEME_REFERENCE,
+    install_project_marp_support,
     validate_slides,
 )
 from mw_paper_sources import sha256_file  # noqa: E402
@@ -121,6 +125,17 @@ class SlidesContractTests(unittest.TestCase):
         )
         self.assertTrue((self.workspace / "slides-context.json").is_file())
         self.assertTrue((self.workspace / "figures").is_dir())
+        self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
+        self.assertEqual(
+            sha256_file(self.project / PROJECT_THEME_RELATIVE),
+            self.context["presentation"]["theme_fingerprint"],
+        )
+        settings = json.loads(
+            (self.project / VSCODE_SETTINGS_RELATIVE).read_text(encoding="utf-8")
+        )
+        self.assertEqual(settings["markdown.marp.html"], "all")
+        self.assertEqual(settings["markdown.marp.mathTypesetting"], "katex")
+        self.assertIn(VSCODE_THEME_REFERENCE, settings["markdown.marp.themes"])
 
         prepared = subprocess.run(
             [
@@ -286,6 +301,18 @@ class SlidesContractTests(unittest.TestCase):
             self.complete(fingerprint("f"))
         self.assertIn("output_fingerprint does not match slides.md", str(rejection.exception))
 
+    def test_project_theme_registration_cannot_drift(self) -> None:
+        write_slides_fixture(self.workspace)
+        settings_path = self.project / VSCODE_SETTINGS_RELATIVE
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["markdown.marp.themes"] = []
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
+        self.assert_rejected("Project VS Code Marp settings are missing or stale")
+        prepare_slides(self.project, self.paper_id)
+        repaired = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertIn(VSCODE_THEME_REFERENCE, repaired["markdown.marp.themes"])
+
     def test_lint_and_complete_slides_cli(self) -> None:
         write_slides_fixture(self.workspace)
         linted = subprocess.run(
@@ -335,6 +362,63 @@ class SlidesContractTests(unittest.TestCase):
             summary_output_fingerprint=state["stages"]["summary"]["output_fingerprint"],
         )
         self.assertEqual(report["slides_fingerprint"], digest)
+
+
+class ProjectMarpInstallTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.project = Path(self.tempdir.name)
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_install_merges_jsonc_settings_and_is_idempotent(self) -> None:
+        settings_path = self.project / VSCODE_SETTINGS_RELATIVE
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text(
+            """{
+  // Preserve unrelated editor preferences.
+  \"editor.wordWrap\": \"on\",
+  \"markdown.marp.themes\": [\"./existing.css\",],
+}
+""",
+            encoding="utf-8",
+        )
+
+        first = install_project_marp_support(self.project)
+        first_theme_fingerprint = sha256_file(self.project / PROJECT_THEME_RELATIVE)
+        first_settings = settings_path.read_text(encoding="utf-8")
+        second = install_project_marp_support(self.project)
+
+        settings = json.loads(first_settings)
+        self.assertEqual(settings["editor.wordWrap"], "on")
+        self.assertEqual(
+            settings["markdown.marp.themes"],
+            ["./existing.css", VSCODE_THEME_REFERENCE],
+        )
+        self.assertEqual(settings["markdown.marp.html"], "all")
+        self.assertEqual(settings["markdown.marp.mathTypesetting"], "katex")
+        self.assertEqual(first, second)
+        self.assertEqual(
+            first_theme_fingerprint,
+            sha256_file(self.project / PROJECT_THEME_RELATIVE),
+        )
+        self.assertEqual(first_settings, settings_path.read_text(encoding="utf-8"))
+
+    def test_install_rejects_invalid_theme_setting_without_copying_theme(self) -> None:
+        settings_path = self.project / VSCODE_SETTINGS_RELATIVE
+        settings_path.parent.mkdir(parents=True)
+        settings_path.write_text(
+            json.dumps({"markdown.marp.themes": "./theme.css"}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "markdown.marp.themes must be an array of strings",
+        ):
+            install_project_marp_support(self.project)
+        self.assertFalse((self.project / PROJECT_THEME_RELATIVE).exists())
 
 
 if __name__ == "__main__":

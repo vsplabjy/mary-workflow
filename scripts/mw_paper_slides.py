@@ -33,6 +33,9 @@ THEME_NAME = "mary-shanghaitech-red"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 THEME_PATH = PLUGIN_ROOT / "assets" / "marp" / "themes" / f"{THEME_NAME}.css"
 MARP_CONFIG_PATH = PLUGIN_ROOT / "assets" / "marp" / "marp.config.mjs"
+PROJECT_THEME_RELATIVE = Path(".mary-research") / "marp" / "themes" / f"{THEME_NAME}.css"
+VSCODE_SETTINGS_RELATIVE = Path(".vscode") / "settings.json"
+VSCODE_THEME_REFERENCE = f"./{PROJECT_THEME_RELATIVE.as_posix()}"
 
 REQUIRED_FRONTMATTER = {
     "marp": "true",
@@ -93,6 +96,175 @@ JsonObject = dict[str, Any]
 
 class PaperSlidesError(ValueError):
     """A slides input, reference, layout, or artifact violated the P5 contract."""
+
+
+def project_root_from_workspace(workspace: Path) -> Path:
+    directory = Path(workspace).resolve()
+    if directory.parent.name != "papers" or directory.parent.parent.name != ".mary-research":
+        raise PaperSlidesError(
+            "Paper workspace must be <project>/.mary-research/papers/<paper-id>."
+        )
+    return directory.parents[2]
+
+
+def strip_jsonc(text: str) -> str:
+    """Remove JSONC comments and trailing commas without touching string contents."""
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        character = text[index]
+        following = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            output.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            output.append(character)
+            index += 1
+            continue
+        if character == "/" and following == "/":
+            output.extend("  ")
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                output.append(" ")
+                index += 1
+            continue
+        if character == "/" and following == "*":
+            output.extend("  ")
+            index += 2
+            while index < len(text):
+                if index + 1 < len(text) and text[index : index + 2] == "*/":
+                    output.extend("  ")
+                    index += 2
+                    break
+                output.append("\n" if text[index] == "\n" else " ")
+                index += 1
+            else:
+                raise PaperSlidesError(".vscode/settings.json contains an unclosed block comment.")
+            continue
+        output.append(character)
+        index += 1
+
+    uncommented = "".join(output)
+    result: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(uncommented):
+        character = uncommented[index]
+        if in_string:
+            result.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            result.append(character)
+            index += 1
+            continue
+        if character == ",":
+            lookahead = index + 1
+            while lookahead < len(uncommented) and uncommented[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(uncommented) and uncommented[lookahead] in "]}":
+                index += 1
+                continue
+        result.append(character)
+        index += 1
+    return "".join(result)
+
+
+def load_vscode_settings(path: Path) -> JsonObject:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(strip_jsonc(path.read_text(encoding="utf-8")))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PaperSlidesError(f"Cannot merge invalid {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise PaperSlidesError(f"Cannot merge {path}: top-level value must be an object.")
+    return payload
+
+
+def required_vscode_settings(settings: JsonObject) -> JsonObject:
+    merged = dict(settings)
+    themes = merged.get("markdown.marp.themes", [])
+    if not isinstance(themes, list) or any(not isinstance(value, str) for value in themes):
+        raise PaperSlidesError(
+            ".vscode/settings.json markdown.marp.themes must be an array of strings."
+        )
+    merged["markdown.marp.html"] = "all"
+    merged["markdown.marp.mathTypesetting"] = "katex"
+    merged["markdown.marp.themes"] = [
+        *(value for value in themes if value != VSCODE_THEME_REFERENCE),
+        VSCODE_THEME_REFERENCE,
+    ]
+    return merged
+
+
+def install_project_marp_support(project_root: Path) -> JsonObject:
+    """Install the offline theme and VS Code registration into a target project."""
+    root = Path(project_root).resolve()
+    if not THEME_PATH.is_file():
+        raise PaperSlidesError(f"Localized Marp theme is missing: {THEME_PATH}")
+    settings_path = root / VSCODE_SETTINGS_RELATIVE
+    settings = load_vscode_settings(settings_path)
+    merged = required_vscode_settings(settings)
+
+    theme_target = root / PROJECT_THEME_RELATIVE
+    theme_target.parent.mkdir(parents=True, exist_ok=True)
+    source_fingerprint = sha256_file(THEME_PATH)
+    if not theme_target.is_file() or sha256_file(theme_target) != source_fingerprint:
+        atomic_write_text(theme_target, THEME_PATH.read_text(encoding="utf-8"))
+
+    if settings != merged:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(
+            settings_path,
+            json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
+        )
+    return {
+        "theme_path": str(theme_target),
+        "theme_reference": VSCODE_THEME_REFERENCE,
+        "theme_fingerprint": source_fingerprint,
+        "vscode_settings": str(settings_path),
+    }
+
+
+def validate_project_marp_support(workspace: Path) -> JsonObject:
+    root = project_root_from_workspace(workspace)
+    theme_target = root / PROJECT_THEME_RELATIVE
+    if not theme_target.is_file():
+        raise PaperSlidesError("Project-local Marp theme is missing; run prepare-slides again.")
+    source_fingerprint = sha256_file(THEME_PATH)
+    if sha256_file(theme_target) != source_fingerprint:
+        raise PaperSlidesError("Project-local Marp theme is stale; run prepare-slides again.")
+    settings_path = root / VSCODE_SETTINGS_RELATIVE
+    settings = load_vscode_settings(settings_path)
+    if required_vscode_settings(settings) != settings:
+        raise PaperSlidesError(
+            "Project VS Code Marp settings are missing or stale; run prepare-slides again."
+        )
+    return {
+        "theme_path": str(theme_target),
+        "theme_reference": VSCODE_THEME_REFERENCE,
+        "theme_fingerprint": source_fingerprint,
+        "vscode_settings": str(settings_path),
+    }
 
 
 def normalize_figure_id(token: str) -> str:
@@ -213,6 +385,7 @@ def write_slides_context(
     summary_output_fingerprint: str,
 ) -> JsonObject:
     directory = Path(workspace)
+    install_project_marp_support(project_root_from_workspace(directory))
     context = build_slides_context(
         directory,
         paper_id=paper_id,
@@ -245,6 +418,7 @@ def validate_slides_context(
         stored = json.loads(context_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise PaperSlidesError(f"{SLIDES_CONTEXT_FILE} is invalid: {exc}") from exc
+    validate_project_marp_support(workspace)
     expected = build_slides_context(
         workspace,
         paper_id=paper_id,

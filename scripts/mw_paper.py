@@ -38,6 +38,7 @@ from mw_paper_summary import (
 )
 from mw_paper_slides import (
     PaperSlidesError,
+    PROJECT_THEME_RELATIVE,
     SLIDES_CONTEXT_FILE,
     SLIDES_FILE,
     run_marp_smoke,
@@ -1052,6 +1053,8 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"summary: {workspace / SUMMARY_FILE}")
     print(f"summary_ledger: {workspace / SUMMARY_LEDGER_FILE}")
     print(f"slides_context: {workspace / SLIDES_CONTEXT_FILE}")
+    print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
+    print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
     print(f"figure_directory: {workspace / 'figures'}")
     print(f"slides_target: {workspace / SLIDES_FILE}")
     print(

@@ -25,6 +25,14 @@ The `slides` stage produces one final artifact: `slides.md`, a ShanghaiTech red 
 
 Read all of `summary.md`, `summary-ledger.json`, and `slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
 
+Preparation also copies the self-contained offline theme to
+`<project>/.mary-research/marp/themes/mary-shanghaitech-red.css` and merges its registration into
+`<project>/.vscode/settings.json`. Unrelated setting values and existing theme entries are retained;
+Mary sets Marp HTML to `all`, math typesetting to `katex`, and registers its project-local theme once.
+Open the target project root as the VS Code workspace, then every paper deck below it previews
+without depending on the Mary plugin checkout or the Markdown file's depth. VS Code does not
+inherit `.vscode` settings from directories above an independently opened workspace.
+
 ## Frontmatter
 
 Start `slides.md` with these required values:
