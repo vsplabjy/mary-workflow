@@ -71,6 +71,7 @@ CORE_PROMPT_ORDER = {
 }
 IGNORED_PROJECT_PARTS = {
     ".git",
+    ".mary-research",
     WORKFLOW_DIR,
     "__pycache__",
     ".pytest_cache",

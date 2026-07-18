@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "2.1.0",
-  "description": "Full-depth project understanding and cycle-aware milestone workflow for Codex.",
+  "version": "2.2.0-alpha.1+codex.20260718064000",
+  "description": "Cycle-aware milestone workflows and independent research-paper pipeline state for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -14,13 +14,15 @@
     "planning",
     "prompt-engineering",
     "codex",
-    "ai-agent"
+    "ai-agent",
+    "research",
+    "papers"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Mary Workflow",
-    "shortDescription": "Run a local milestone workflow",
-    "longDescription": "Mary Workflow packages a lightweight Codex skill and local helper scripts for project briefs, interviewed milestone planning, automatic execution and review, debug recovery, cycle archives, state transitions, and audit-friendly action updates through a .mary-workflow workspace.",
+    "shortDescription": "Run milestone and research-paper workflows",
+    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine plus v2.2 research-skill foundations for independent paper states, project briefs, interviewed planning, automatic execution and review, debug recovery, cycle archives, and audit-friendly action updates through separate .mary-workflow and .mary-research workspaces.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [

@@ -492,3 +492,29 @@ Baseline commit: `83ea160` - `P0 finished`
 - 故障注入覆盖 file `fsync` 和 `os.replace` 失败；旧 `state.yaml` 保持完整，临时文件得到清理。
 - state read/write round trip 字节稳定，原 action 预日志顺序与 invalid data rejected path 保持不变。
 - `python -m py_compile`、`git diff --check` 和 P0 范围扫描通过。
+
+## 2026-07-18
+
+v2.2 P1 paper state and `/mw-paper` skeleton.
+
+完成内容：
+
+- 新增独立的 `.mary-research/papers/<paper-id>/` 工作区，每篇论文使用 `state.json` 和 `log.md`，状态契约固定为 `paper_state_schema: 1`。
+- paper state 不依赖 `/mw-init`，不读取或修改 `.mary-workflow/` 的 phase、grant 或 lease；`/mw-init --reset` 与 `/mw-cycle` 均保留论文工作区。
+- v2.1 项目扫描器忽略 `.mary-research/`，避免运行时状态进入项目理解账本和 fingerprint 基线。
+- 新增规范化 paper id：arXiv 使用保留显式版本号的 `arxiv-<identifier>`，其他来源默认使用 `local-<source-sha256-prefix>`；拒绝路径分隔符、`..` 和非规范 id。
+- source、阶段输入和阶段输出统一使用小写 SHA-256 指纹；P1 只接收预计算 fingerprint，不抓取或解析论文。
+- 新增 `read -> summary -> slides` 与 `read + summary -> quiz` 四阶段依赖图，以及 `pending`、`in_progress`、`complete`、`failed`、`stale` 进度机。
+- 新增 `start_stage`、`complete_stage`、`fail_stage`、`reset_stage`、`update_source` 信封；依赖未完成、输入 lineage 变化、非法 artifact 路径和非法 fingerprint 均拒收。
+- source fingerprint 变化或上游 reset 会将已经开始的下游阶段级联标记为 `stale`；从未开始的阶段保持 `pending`。
+- 新增 `scripts/mw_paper.py` 和 `/mw-paper` 的 `create`、`list`、`status`、`apply-action` 独立命令面，复用 P0 的信封校验、原子写和 append log 公共 runtime。
+- 新增 `commands/mw-paper.md`、`skills/paper/SKILL.md` 和 `references/paper-state-contract.md`，同步 plugin manifest、根 skill、OpenAI interface 与 README。
+- P1 明确不生成 `paper-notes.md`、`summary.md`、`slides.md` 或 `quiz-log.md`，未提前实现 P2 及后续内容阶段。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：59/59 通过，其中原 v2.1 workflow 边界 29/29、P0 runtime 12/12、P1 paper state 18/18。
+- init 专项 3/3 通过：fresh init、active-phase init、prompt refresh state preservation。
+- P1 回归覆盖独立创建与幂等、多论文隔离、arXiv/local id、schema 拒载、阶段 gate、失败重试、lineage、source/reset stale 级联、quiz 依赖、非法/损坏信封审计和 CLI 命令面。
+- `python -m py_compile`、plugin validator、paper skill validator、manifest JSON 校验和 `git diff --check` 通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.1+codex.20260718064000`；当前个人 marketplace 是本地目录而非 Git marketplace，Codex CLI 不支持对其执行 `marketplace upgrade`，现有 skill/plugin 安装均通过符号链接直接指向本仓库。

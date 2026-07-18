@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Build full project understanding and run milestone workflows"
-  default_prompt: "Use $mary-workflow to fully read and understand the repository, plan milestones, run, inspect status, stop, debug, or archive cycles with /mw-cycle."
+  short_description: "Run milestone workflows and manage research paper state"
+  default_prompt: "Use $mary-workflow to understand a project, plan and run milestones, or manage independent research-paper state with /mw-paper."
 
 policy:
   allow_implicit_invocation: true
