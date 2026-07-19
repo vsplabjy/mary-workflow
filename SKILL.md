@@ -40,7 +40,7 @@ User-facing command surface:
 9. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
 10. `/mw-paper` uses `scripts/mw_paper.py` and `paper_state_schema: 1`; it does not read or mutate `.mary-workflow/` milestone state. Parse-quality and source-locator gates are machine enforced.
 11. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion.
-12. P6 anchors questions to P2 uncertainties and P3.5 Method claims, accepts only four-value judgments with exact source excerpts, and requires all `quiz-log.md` sessions to remain append-only under a verified hash chain.
+12. P6 prioritizes paper-understanding questions grounded in P3.5 Method claims, permits only scientific-content P2 uncertainties as conditional follow-ups, requires one such Uxx only when that catalog is non-empty, excludes parse-quality uncertainties from the question pool, accepts four-value judgments with exact source excerpts, and archives all readable sessions in one append-only `quiz-log.md` under a verified hash chain.
 
 ## Memory Model
 

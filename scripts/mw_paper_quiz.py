@@ -28,7 +28,7 @@ from mw_paper_summary import (
 from mw_runtime import atomic_write_text
 
 
-QUIZ_CONTEXT_SCHEMA = 1
+QUIZ_CONTEXT_SCHEMA = 2
 QUIZ_HEAD_SCHEMA = 1
 QUIZ_SESSION_SCHEMA = 1
 QUIZ_CONTEXT_FILE = "quiz-context.json"
@@ -74,6 +74,7 @@ HEAD_FIELDS = (
 FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 UNCERTAINTY_ID_PATTERN = re.compile(r"^U[0-9]{2,}$")
 METHOD_ID_PATTERN = re.compile(r"^M[0-9]{2,}$")
+CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 JsonObject = dict[str, Any]
 
@@ -368,16 +369,28 @@ def build_quiz_context(
     if not isinstance(quiz_attempt, int) or isinstance(quiz_attempt, bool) or quiz_attempt < 1:
         raise PaperQuizError("quiz_attempt must be a positive integer.")
 
-    uncertainty_catalog = []
-    for index, uncertainty in enumerate(notes["uncertainties"], start=1):
-        uncertainty_catalog.append(
+    scientific_uncertainty_catalog = []
+    source_quality_notes = []
+    for uncertainty in notes["uncertainties"]:
+        quality_dimensions = uncertainty["quality_dimensions"]
+        if quality_dimensions:
+            source_quality_notes.append(
+                {
+                    "note_id": f"SQ{len(source_quality_notes) + 1:02d}",
+                    "why_unresolved": uncertainty["why_unresolved"],
+                    "impact": uncertainty["impact"],
+                    "source_locators": uncertainty["locators"],
+                    "quality_dimensions": quality_dimensions,
+                }
+            )
+            continue
+        scientific_uncertainty_catalog.append(
             {
-                "uncertainty_id": f"U{index:02d}",
+                "uncertainty_id": f"U{len(scientific_uncertainty_catalog) + 1:02d}",
                 "question": uncertainty["question"],
                 "why_unresolved": uncertainty["why_unresolved"],
                 "impact": uncertainty["impact"],
                 "source_locators": uncertainty["locators"],
-                "quality_dimensions": uncertainty["quality_dimensions"],
             }
         )
     method_claim_catalog = [
@@ -390,8 +403,8 @@ def build_quiz_context(
         for claim in summary_ledger["claims"]
         if str(claim.get("claim_id") or "").startswith("M")
     ]
-    if not uncertainty_catalog or not method_claim_catalog:
-        raise PaperQuizError("Quiz preparation requires non-empty uncertainty and method-claim catalogs.")
+    if not method_claim_catalog:
+        raise PaperQuizError("Quiz preparation requires a non-empty method-claim catalog.")
 
     metadata = summary_validation["metadata"]
     context = {
@@ -424,12 +437,13 @@ def build_quiz_context(
             },
         },
         "judgments": JUDGMENT_DEFINITIONS,
-        "uncertainty_catalog": uncertainty_catalog,
+        "scientific_uncertainty_catalog": scientific_uncertainty_catalog,
+        "source_quality_notes": source_quality_notes,
         "method_claim_catalog": method_claim_catalog,
         "completion_requirements": {
             "minimum_current_sessions": 1,
-            "require_uncertainty_anchor": True,
             "require_method_claim_anchor": True,
+            "require_scientific_uncertainty_anchor": bool(scientific_uncertainty_catalog),
             "citations_must_be_exact_source_excerpts": True,
         },
     }
@@ -514,7 +528,10 @@ def validate_session_input(
         raise PaperQuizError(f"session.judgment must be one of: {', '.join(JUDGMENTS)}.")
     rationale = require_quiz_string(payload["rationale"], "session.rationale", minimum=8)
     uncertainty_ids, method_ids = validate_anchor_shape(payload["anchors"], "session.anchors")
-    uncertainty_catalog = {item["uncertainty_id"]: item for item in context["uncertainty_catalog"]}
+    uncertainty_catalog = {
+        item["uncertainty_id"]: item
+        for item in context["scientific_uncertainty_catalog"]
+    }
     method_catalog = {item["claim_id"]: item for item in context["method_claim_catalog"]}
     unknown_uncertainties = sorted(set(uncertainty_ids) - set(uncertainty_catalog))
     unknown_methods = sorted(set(method_ids) - set(method_catalog))
@@ -606,7 +623,10 @@ def append_quiz_session(
 
 def next_quiz_question(context: JsonObject, sessions: list[JsonObject], *, context_fingerprint: str) -> JsonObject:
     current = [session for session in sessions if session["context_fingerprint"] == context_fingerprint]
-    uncertainty_usage = {item["uncertainty_id"]: 0 for item in context["uncertainty_catalog"]}
+    uncertainty_usage = {
+        item["uncertainty_id"]: 0
+        for item in context["scientific_uncertainty_catalog"]
+    }
     method_usage = {item["claim_id"]: 0 for item in context["method_claim_catalog"]}
     for session in current:
         for anchor_id in session["anchors"]["uncertainty_ids"]:
@@ -616,28 +636,50 @@ def next_quiz_question(context: JsonObject, sessions: list[JsonObject], *, conte
             if anchor_id in method_usage:
                 method_usage[anchor_id] += 1
 
-    if current and any(uncertainty_usage.values()) and not any(method_usage.values()):
+    has_method_coverage = any(method_usage.values())
+    has_uncertainty_coverage = any(uncertainty_usage.values())
+    unused_methods = [anchor_id for anchor_id, count in method_usage.items() if count == 0]
+    unused_uncertainties = [
+        anchor_id for anchor_id, count in uncertainty_usage.items() if count == 0
+    ]
+    if unused_methods and not has_method_coverage:
         kind = "method"
-    elif not any(uncertainty_usage.values()):
+        anchor_id = min(unused_methods)
+    elif unused_uncertainties and not has_uncertainty_coverage:
         kind = "uncertainty"
+        anchor_id = min(unused_uncertainties)
+    elif unused_methods:
+        kind = "method"
+        anchor_id = min(unused_methods)
+    elif unused_uncertainties:
+        kind = "uncertainty"
+        anchor_id = min(unused_uncertainties)
     else:
-        minimum_uncertainty = min(uncertainty_usage.values())
-        minimum_method = min(method_usage.values())
-        kind = "uncertainty" if minimum_uncertainty <= minimum_method else "method"
+        kind = "method"
+        anchor_id = min(method_usage, key=lambda value: (method_usage[value], value))
 
     if kind == "uncertainty":
-        anchor_id = min(uncertainty_usage, key=lambda value: (uncertainty_usage[value], value))
-        item = next(entry for entry in context["uncertainty_catalog"] if entry["uncertainty_id"] == anchor_id)
+        item = next(
+            entry
+            for entry in context["scientific_uncertainty_catalog"]
+            if entry["uncertainty_id"] == anchor_id
+        )
         question = item["question"]
         anchors = {"uncertainty_ids": [anchor_id], "method_claim_ids": []}
         locators = item["source_locators"]
     else:
-        anchor_id = min(method_usage, key=lambda value: (method_usage[value], value))
         item = next(entry for entry in context["method_claim_catalog"] if entry["claim_id"] == anchor_id)
-        question = (
-            "How does this method detail work, and why is it needed in the paper's approach? "
-            + item["claim_text"]
-        )
+        claim_text = item["claim_text"]
+        if CJK_PATTERN.search(claim_text):
+            question = (
+                f"论文指出：“{claim_text}”请结合论文的方法流程说明：这句话具体意味着什么、"
+                "对应哪个环节，以及理解它为什么有助于把握论文的核心贡献？"
+            )
+        else:
+            question = (
+                f'The paper states: "{claim_text}" Explain what this means, where it fits in '
+                "the method pipeline, and how it helps clarify the paper's core contribution."
+            )
         anchors = {"uncertainty_ids": [], "method_claim_ids": [anchor_id]}
         locators = item["source_locators"]
     return {
@@ -684,10 +726,15 @@ def validate_quiz(
         used_methods.update(session["anchors"]["method_claim_ids"])
         cited_locators.update(citation["source_locator"] for citation in session["citations"])
         judgment_counts[session["judgment"]] += 1
-    if not used_uncertainties:
-        raise PaperQuizError("Current quiz attempt must include at least one uncertainty-anchored session.")
     if not used_methods:
         raise PaperQuizError("Current quiz attempt must include at least one method-claim-anchored session.")
+    if (
+        context["completion_requirements"]["require_scientific_uncertainty_anchor"]
+        and not used_uncertainties
+    ):
+        raise PaperQuizError(
+            "Current quiz attempt must include at least one scientific-uncertainty-anchored session."
+        )
 
     return {
         "quiz_log_fingerprint": sha256_file(directory / QUIZ_LOG_FILE),

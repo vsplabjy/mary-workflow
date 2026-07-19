@@ -681,3 +681,24 @@ Baseline commit: `f2d9e9e` - `项目目录无法正常渲染问题解决`
 - `python -m unittest discover -s tests -v`：133/133 通过；P5 验收时的 119 项全部保持通过，P6 新增 14/14。
 - P6 覆盖 context/catalog、U→M 出题、四种 judgment、CLI 全链路、非法 judgment 无落盘、空/未知锚点、跨锚点 locator、虚构 evidence、双族完成门、context 漂移、输出 fingerprint、改判、删史、symlink 和 reset 跨 attempt 保史。
 - 真实 `arxiv-2308.04079` 的已完成 P2/P3 工件只读验收：解析出 4 条 Uxx uncertainty 与 13 条 Mxx Method claim，在临时目录追加 U01/M01 两条 session，得到 `supported=1`、`uncertain=1`，完整 lint 通过；原测试项目 state/log 未改动。
+
+### v2.2 P6.1 paper-understanding quiz correction
+
+Baseline commit: `147b8bc` - `P6 finished`
+
+完成内容：
+
+- 根据实弹反馈修正出题边界：双栏顺序、PDF 解析、公式抽取、缺失图像像素和表格对齐等解析质量问题不再进入用户题库，只保留为内部 `source_quality_notes` 审计信息。
+- `quiz_context_schema` 升级为 2；P2 uncertainty 按 `quality_dimensions` 分流，无质量维度的科学内容不确定性进入 `scientific_uncertainty_catalog`，带质量维度的条目转为不可出题的 SQxx note。
+- 出题顺序改为先问一个 P3.5 Mxx Method claim，content catalog 非空时再覆盖一个科学 Uxx，随后返回剩余 Method；完成门始终要求 Method，并且只在 content catalog 非空时动态要求 Uxx，纯解析质量论文降级为 method-only。
+- 方法题干按 claim 语言生成，中文 claim 直接生成中文论文理解题，要求用户解释论断的含义、对应的方法环节以及它如何帮助把握论文核心贡献。
+- `quiz-log.md` 明确为唯一交付归档：每道实际问答的 Question、用户 Answer、四值 Judgment、Rationale、Anchors 和原文 Citations 均追加在同一个 Markdown；`quiz-context.json` 与 `quiz-head.json` 仅为机器校验 sidecar。
+- append-only、哈希链、四值判定、exact source excerpt、旧 session 禁止改判/删史等 P6 机器骨架保持不变。
+- plugin 基础版本保持 `2.2.0-alpha.7`，cachebuster 刷新为 `2.2.0-alpha.7+codex.20260719062900`。
+- `README.md`、P0/P2/P3/P5 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：136/136 通过；P6 问答测试为 17/17，覆盖 content U 非空时缺 U 拒收与 parse-only 时 method-only 放行两个方向。
+- 真实 `arxiv-2308.04079` 重建 context 后得到 0 条 scientific uncertainty、4 条不可出题 SQ quality note、13 条 Method claim；第 1 题锚定 M01，题干为中文方法理解题，不再询问双栏 PDF 可靠性。
+- `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
