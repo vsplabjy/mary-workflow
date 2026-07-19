@@ -702,3 +702,24 @@ Baseline commit: `147b8bc` - `P6 finished`
 - `python -m unittest discover -s tests -v`：136/136 通过；P6 问答测试为 17/17，覆盖 content U 非空时缺 U 拒收与 parse-only 时 method-only 放行两个方向。
 - 真实 `arxiv-2308.04079` 重建 context 后得到 0 条 scientific uncertainty、4 条不可出题 SQ quality note、13 条 Method claim；第 1 题锚定 M01，题干为中文方法理解题，不再询问双栏 PDF 可靠性。
 - `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
+
+### v2.2 P6.2 source-grounded correct answers
+
+Baseline commit: `0450129` - `P6 updated`
+
+完成内容：
+
+- `quiz_context_schema` 升级为 3，`quiz_session_schema` 升级为 2；新 session 将 `correct_answer` 作为必填字段，与 question、用户 answer、judgment、rationale、anchors 和 citations 一起进入不可变哈希。
+- 可读归档固定为 Question → User answer → Judgment（含 rationale）→ Correct answer → Paper sources；anchors 继续保留在折叠机器记录中，不打断正文阅读。
+- 标准答案必须至少 8 个非空字符，并与 judgment 共用所选 Mxx/Uxx 可达的原文 citations；用户回答“下一题”“跳过”或“结束问答”时仍必须生成标准答案，缺字段或空答案在 append 前拒收且不产生部分日志/head 写入。
+- 保留 `quiz-log.md` 容器和 session marker v1：既有 schema 1 session 按原字节渲染、验链和保史，新 schema 2 session 可直接续接旧链；不回写旧记录，也不伪造历史标准答案。
+- completion gate 只接受当前 context 的 schema 2 session，避免旧 attempt 无标准答案记录满足新契约；`quiz-head.json` schema 和 append-only/reset 语义保持不变。
+- 同步 `/mw-paper` command、paper/root skill、quiz/paper-state contract 和 CLI help；plugin 基础版本保持 `2.2.0-alpha.7`，cachebuster 刷新为 `2.2.0-alpha.7+codex.20260719074927`。
+- `README.md`、P0/P2/P3/P5 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：138/138 通过；P6 问答测试为 19/19。
+- 新增缺失/空 `correct_answer` 无部分追加测试，以及 schema 1 → schema 2 混合日志续链测试；paper-state 集成夹具同步七字段后 stale 级联回归保持通过。
+- 用户提供的真实 3DGS 日志逐字解析通过：21/21 条 schema 1 session、末条 Q021；实际 workspace 的 log/head 验链通过，prepare 对已完成 quiz 正确拒绝，日志 SHA-256 前后保持 `ca7340bbb55bca04b87235f29437be7adbf2c8dac973f23748ac33db74c43d3b`。
+- `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。

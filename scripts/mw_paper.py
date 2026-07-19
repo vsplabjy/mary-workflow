@@ -1500,7 +1500,8 @@ def build_parser() -> argparse.ArgumentParser:
     quiz_next_parser.set_defaults(func=cmd_next_quiz_question)
 
     quiz_append_parser = subparsers.add_parser(
-        "append-quiz-session", help="validate and append one immutable expert Q&A session"
+        "append-quiz-session",
+        help="validate and append one immutable Q&A session with a correct answer",
     )
     quiz_append_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     quiz_session_source = quiz_append_parser.add_mutually_exclusive_group()

@@ -55,8 +55,8 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - never turn `source_quality_notes` into questions: PDF column order, parser reliability, formula extraction, missing image pixels, table alignment, and workflow contracts are audit concerns rather than paper-understanding quiz topics;
    - scientific Uxx uncertainties are eligible only when their `quality_dimensions` are empty; ask one after the first Method question when the content catalog is non-empty, while parse-quality SQxx notes remain non-selectable;
    - judge the answer as exactly `supported`, `partially-supported`, `unsupported`, or `uncertain`; do not translate the result into binary correct/incorrect language;
-   - copy at least one exact excerpt from an anchor-backed `source.md` locator and explain the judgment with calibrated reasoning;
-   - submit the six-field session through `append-quiz-session`; never edit, truncate, rejudge, or regenerate `quiz-log.md`/`quiz-head.json` directly;
+   - write a concise correct answer in the user's language from the selected anchors, relevant summary prose, and cited source spans, including when the user says next/skip/end; copy at least one exact source excerpt and explain the judgment with calibrated reasoning;
+   - submit the seven-field session through `append-quiz-session`; never edit, truncate, rejudge, or regenerate `quiz-log.md`/`quiz-head.json` directly;
    - repeat one question at a time while the user continues; corrections are new sessions and never replace history;
-   - keep every asked question, user answer, judgment, rationale, and citation in the single generated `quiz-log.md`; context/head files are internal validation sidecars;
+   - keep every Question, User answer, Judgment with rationale, Correct answer, and Paper sources in that order in the single generated `quiz-log.md`; context/head files are internal validation sidecars;
    - when the user ends the Q&A, run `lint-quiz` and then `complete-quiz`; cover at least one current-attempt Method anchor and, only when the scientific-content catalog is non-empty, at least one Uxx anchor.

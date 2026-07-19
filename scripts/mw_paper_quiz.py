@@ -28,9 +28,10 @@ from mw_paper_summary import (
 from mw_runtime import atomic_write_text
 
 
-QUIZ_CONTEXT_SCHEMA = 2
+QUIZ_CONTEXT_SCHEMA = 3
 QUIZ_HEAD_SCHEMA = 1
-QUIZ_SESSION_SCHEMA = 1
+LEGACY_QUIZ_SESSION_SCHEMA = 1
+QUIZ_SESSION_SCHEMA = 2
 QUIZ_CONTEXT_FILE = "quiz-context.json"
 QUIZ_LOG_FILE = "quiz-log.md"
 QUIZ_HEAD_FILE = "quiz-head.json"
@@ -46,13 +47,32 @@ JUDGMENT_DEFINITIONS = {
     "unsupported": "The cited paper does not support at least one material assertion in the answer.",
     "uncertain": "The available paper text or parse quality is insufficient to decide support confidently.",
 }
-SESSION_INPUT_FIELDS = (
+LEGACY_SESSION_INPUT_FIELDS = (
     "question",
     "anchors",
     "answer",
     "judgment",
     "rationale",
     "citations",
+)
+SESSION_INPUT_FIELDS = (
+    "question",
+    "anchors",
+    "answer",
+    "judgment",
+    "correct_answer",
+    "rationale",
+    "citations",
+)
+LEGACY_SESSION_FIELDS = (
+    "quiz_session_schema",
+    "paper_id",
+    "session_id",
+    "recorded_at",
+    "context_fingerprint",
+    *LEGACY_SESSION_INPUT_FIELDS,
+    "previous_entry_hash",
+    "entry_hash",
 )
 SESSION_FIELDS = (
     "quiz_session_schema",
@@ -102,33 +122,60 @@ def canonical_hash(payload: JsonObject) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def session_fields_for_schema(schema: object) -> tuple[str, ...]:
+    if schema == LEGACY_QUIZ_SESSION_SCHEMA:
+        return LEGACY_SESSION_FIELDS
+    if schema == QUIZ_SESSION_SCHEMA:
+        return SESSION_FIELDS
+    raise PaperQuizError(
+        "quiz_session_schema must be one of: "
+        f"{LEGACY_QUIZ_SESSION_SCHEMA}, {QUIZ_SESSION_SCHEMA}."
+    )
+
+
 def session_entry_hash(session: JsonObject) -> str:
-    return canonical_hash({field: session[field] for field in SESSION_FIELDS if field != "entry_hash"})
+    fields = session_fields_for_schema(session.get("quiz_session_schema"))
+    return canonical_hash({field: session[field] for field in fields if field != "entry_hash"})
 
 
 def render_quiz_session(session: JsonObject) -> str:
-    ordered = {field: session[field] for field in SESSION_FIELDS}
+    fields = session_fields_for_schema(session.get("quiz_session_schema"))
+    ordered = {field: session[field] for field in fields}
     uncertainty_ids = ", ".join(f"`{value}`" for value in session["anchors"]["uncertainty_ids"])
     method_ids = ", ".join(f"`{value}`" for value in session["anchors"]["method_claim_ids"])
     citations = "".join(
         f"- `{citation['source_locator']}`\n  > {citation['evidence']}\n"
         for citation in session["citations"]
     )
-    return (
-        f"{QUIZ_SESSION_MARKER}\n"
-        f"## {session['session_id']} · {session['judgment']}\n\n"
-        f"**Question:** {session['question']}\n\n"
-        f"**Answer:** {session['answer']}\n\n"
-        f"**Judgment:** `{session['judgment']}`\n\n"
-        f"**Rationale:** {session['rationale']}\n\n"
-        f"**Uncertainty anchors:** {uncertainty_ids or '(none)'}\n\n"
-        f"**Method anchors:** {method_ids or '(none)'}\n\n"
-        "**Source citations:**\n\n"
-        f"{citations}\n"
+    prefix = f"{QUIZ_SESSION_MARKER}\n## {session['session_id']} · {session['judgment']}\n\n"
+    machine_record = (
         f"{QUIZ_RECORD_OPEN}"
         "```json\n"
         + json.dumps(ordered, ensure_ascii=False, indent=2)
         + f"\n```\n\n{QUIZ_RECORD_CLOSE}"
+    )
+    if session["quiz_session_schema"] == LEGACY_QUIZ_SESSION_SCHEMA:
+        return (
+            prefix
+            + f"**Question:** {session['question']}\n\n"
+            + f"**Answer:** {session['answer']}\n\n"
+            + f"**Judgment:** `{session['judgment']}`\n\n"
+            + f"**Rationale:** {session['rationale']}\n\n"
+            + f"**Uncertainty anchors:** {uncertainty_ids or '(none)'}\n\n"
+            + f"**Method anchors:** {method_ids or '(none)'}\n\n"
+            + "**Source citations:**\n\n"
+            + f"{citations}\n"
+            + machine_record
+        )
+    return (
+        prefix
+        + f"**Question:** {session['question']}\n\n"
+        + f"**User answer:** {session['answer']}\n\n"
+        + f"**Judgment:** `{session['judgment']}` — {session['rationale']}\n\n"
+        + f"**Correct answer:** {session['correct_answer']}\n\n"
+        + "**Paper sources:**\n\n"
+        + f"{citations}\n"
+        + machine_record
     )
 
 
@@ -187,14 +234,13 @@ def require_string_array(
 
 
 def validate_session_shape(session: JsonObject, *, paper_id: str, position: int) -> None:
-    if tuple(session) != SESSION_FIELDS:
-        missing = [field for field in SESSION_FIELDS if field not in session]
-        extra = [field for field in session if field not in SESSION_FIELDS]
+    fields = session_fields_for_schema(session.get("quiz_session_schema"))
+    if tuple(session) != fields:
+        missing = [field for field in fields if field not in session]
+        extra = [field for field in session if field not in fields]
         raise PaperQuizError(
             f"quiz session {position} fields/order mismatch; missing={missing}, extra={extra}."
         )
-    if session.get("quiz_session_schema") != QUIZ_SESSION_SCHEMA:
-        raise PaperQuizError(f"quiz session {position} must use quiz_session_schema {QUIZ_SESSION_SCHEMA}.")
     if session.get("paper_id") != paper_id:
         raise PaperQuizError(f"quiz session {position} paper_id does not match the paper workspace.")
     expected_id = f"Q{position:03d}"
@@ -207,6 +253,8 @@ def validate_session_shape(session: JsonObject, *, paper_id: str, position: int)
     require_quiz_string(session.get("answer"), f"{expected_id}.answer", minimum=1)
     if session.get("judgment") not in JUDGMENTS:
         raise PaperQuizError(f"{expected_id}.judgment must be one of: {', '.join(JUDGMENTS)}.")
+    if session["quiz_session_schema"] == QUIZ_SESSION_SCHEMA:
+        require_quiz_string(session.get("correct_answer"), f"{expected_id}.correct_answer", minimum=8)
     require_quiz_string(session.get("rationale"), f"{expected_id}.rationale", minimum=8)
     validate_anchor_shape(session.get("anchors"), f"{expected_id}.anchors")
     validate_citation_shape(session.get("citations"), f"{expected_id}.citations")
@@ -444,6 +492,7 @@ def build_quiz_context(
             "minimum_current_sessions": 1,
             "require_method_claim_anchor": True,
             "require_scientific_uncertainty_anchor": bool(scientific_uncertainty_catalog),
+            "require_correct_answer": True,
             "citations_must_be_exact_source_excerpts": True,
         },
     }
@@ -526,6 +575,9 @@ def validate_session_input(
     judgment = str(payload["judgment"] or "").strip()
     if judgment not in JUDGMENTS:
         raise PaperQuizError(f"session.judgment must be one of: {', '.join(JUDGMENTS)}.")
+    correct_answer = require_quiz_string(
+        payload["correct_answer"], "session.correct_answer", minimum=8
+    )
     rationale = require_quiz_string(payload["rationale"], "session.rationale", minimum=8)
     uncertainty_ids, method_ids = validate_anchor_shape(payload["anchors"], "session.anchors")
     uncertainty_catalog = {
@@ -564,6 +616,7 @@ def validate_session_input(
         },
         "answer": answer,
         "judgment": judgment,
+        "correct_answer": correct_answer,
         "rationale": rationale,
         "citations": citations,
     }
@@ -720,6 +773,11 @@ def validate_quiz(
     cited_locators: set[str] = set()
     judgment_counts = {judgment: 0 for judgment in JUDGMENTS}
     for session in current:
+        if session["quiz_session_schema"] != QUIZ_SESSION_SCHEMA:
+            raise PaperQuizError(
+                "Current quiz attempt contains a legacy session without a correct answer; "
+                "run prepare-quiz and append a schema 2 session."
+            )
         payload = {field: session[field] for field in SESSION_INPUT_FIELDS}
         validate_session_input(payload, context=context, blocks=blocks)
         used_uncertainties.update(session["anchors"]["uncertainty_ids"])
