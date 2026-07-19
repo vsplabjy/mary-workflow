@@ -99,6 +99,7 @@ class PaperStateTests(unittest.TestCase):
                         "anchors": anchors,
                         "answer": "This answer explains the selected paper detail.",
                         "judgment": judgment,
+                        "correct_answer": "The source-grounded reference explains the full detail.",
                         "rationale": "The cited normalized source determines the judgment.",
                         "citations": citation,
                     },

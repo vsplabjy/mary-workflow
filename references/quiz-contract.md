@@ -1,4 +1,4 @@
-# Mary Paper Expert Q&A Contract v2
+# Mary Paper Expert Q&A Contract v3
 
 The `quiz` stage runs an interactive expert Q&A grounded in the completed close-reading and
 summary artifacts. Its final artifact is `quiz-log.md`; it does not depend on `slides`.
@@ -30,8 +30,8 @@ creates:
 Do not hand-edit any of these files. A reset starts a new attempt but retains all prior sessions in
 `quiz-log.md`; old sessions remain audit history and cannot satisfy the new attempt's coverage gate.
 `quiz-context.json` and `quiz-head.json` are internal validation sidecars. Every question actually
-asked, user answer, four-value judgment, rationale, and source citation is archived together in the
-single `quiz-log.md` file.
+asked, user answer, four-value judgment, correct answer, judgment rationale, and source citation is
+archived together in the single `quiz-log.md` file.
 
 ## Question Anchors
 
@@ -68,9 +68,10 @@ parse-quality-only papers therefore use method-only completion.
    one paper-understanding question in the user's language. Never ask about parser reliability,
    PDF column order, extraction quality, or artifact contracts.
 3. Stop and wait for the user's answer. Do not invent an answer on the user's behalf.
-4. Assess the answer with one four-value judgment, a calibrated rationale, and exact source
-   citations.
-5. Submit the six-field payload to `append-quiz-session`; never write `quiz-log.md` directly.
+4. Assess the answer with one four-value judgment, write a concise source-grounded correct answer
+   in the user's language, add a calibrated rationale, and copy exact source citations. A skipped
+   answer such as "next question" still requires the correct answer.
+5. Submit the seven-field payload to `append-quiz-session`; never write `quiz-log.md` directly.
 6. Repeat from step 2 while the user wants more questions.
 7. Run `lint-quiz`, then `complete-quiz` only when the user ends the session, at least one Method
    anchor is covered, and one scientific Uxx is covered when the content catalog is non-empty.
@@ -102,6 +103,7 @@ Submit one JSON object through `append-quiz-session --json`, `--file`, or stdin:
   },
   "answer": "The user's answer, recorded without silent correction.",
   "judgment": "partially-supported",
+  "correct_answer": "The source-grounded answer the user should retain after this question.",
   "rationale": "The answer identifies the update but omits the constraint stated by the paper.",
   "citations": [
     {
@@ -113,14 +115,15 @@ Submit one JSON object through `append-quiz-session --json`, `--file`, or stdin:
 ```
 
 The runtime owns `session_id`, timestamp, context fingerprint, previous-entry hash, and entry hash.
-It appends a canonical readable Markdown view containing Question, Answer, Judgment, Rationale,
-Anchors, and Source citations. The complete machine record is retained in a collapsed `<details>`
-block below that view; callers cannot provide or override audit fields, and the runtime rejects any
-divergence between the generated view and record.
+It appends a canonical readable Markdown view in this order: Question, User answer, Judgment with
+its rationale, Correct answer, and Paper sources. Anchors remain in the collapsed machine record
+rather than interrupting the readable study archive. Callers cannot provide or override audit
+fields, and the runtime rejects any divergence between the generated view and record.
 
 ## Source Citations
 
-Every judgment requires at least one citation with exactly `source_locator` and `evidence`:
+Every judgment and correct answer share at least one citation with exactly `source_locator` and
+`evidence`:
 
 - the locator must belong to at least one selected `Mxx` or scientific `Uxx` anchor;
 - the locator must resolve in the current `source.md` index;
@@ -141,9 +144,14 @@ Consequences:
 
 - there is no update, replace, delete, or rejudge command;
 - changing a prior question, answer, judgment, rationale, citation, or hash is rejected;
+- changing a schema 2 correct answer is rejected because it is part of the session hash;
 - deleting any prior session is rejected;
 - a later correction must be a new appended session, leaving the earlier decision visible;
 - resetting `quiz` preserves history and starts a new context-bound attempt.
+
+Existing schema 1 sessions remain byte-for-byte canonical and valid, but do not gain fabricated
+answer keys retroactively. New appends use `quiz_session_schema: 2` and require `correct_answer`;
+mixed schema 1 → schema 2 history remains one uninterrupted hash chain.
 
 ## Completion Gate
 
@@ -155,7 +163,8 @@ Consequences:
 4. at least one session from the current attempt;
 5. current-attempt coverage of at least one Method anchor, plus one scientific Uxx when
    `scientific_uncertainty_catalog` is non-empty;
-6. legal four-value judgments and source-resolvable citations for every current session;
+6. schema 2 correct answers, legal four-value judgments, and source-resolvable citations for every
+   current session;
 7. an `output_fingerprint` matching the exact current `quiz-log.md` bytes.
 
 State metadata records current and historical session counts, all four judgment counts, used anchor
@@ -164,6 +173,6 @@ ids, cited locators, context/head fingerprints, and the final entry hash.
 ## Human Validation Boundary
 
 The machine proves input lineage, anchor membership, exact evidence containment, append-only
-history, and artifact identity. The agent and user remain responsible for the scientific quality of
-questions, whether an answer is semantically entailed by the excerpts, and whether the selected
-four-value judgment is fair and sufficiently nuanced.
+history, required answer-key presence, and artifact identity. The agent and user remain responsible
+for the scientific quality of questions and correct answers, whether they are semantically entailed
+by the excerpts, and whether the selected four-value judgment is fair and sufficiently nuanced.

@@ -24,13 +24,17 @@ from mw_paper import (  # noqa: E402
     validate_prepared_quiz,
 )
 from mw_paper_quiz import (  # noqa: E402
+    GENESIS_HASH,
     JUDGMENTS,
     QUIZ_CONTEXT_SCHEMA,
     QUIZ_HEAD_FILE,
     QUIZ_LOG_FILE,
+    QUIZ_SESSION_SCHEMA,
+    build_quiz_head,
     next_quiz_question,
     parse_quiz_log,
     render_quiz_log,
+    session_entry_hash,
     validate_quiz_history,
 )
 from mw_paper_sources import sha256_file  # noqa: E402
@@ -108,6 +112,7 @@ class QuizContractTests(unittest.TestCase):
             },
             "answer": "This answer explains the selected paper detail.",
             "judgment": judgment,
+            "correct_answer": "A source-grounded reference answer explains the complete mechanism.",
             "rationale": "The judgment follows from the cited normalized source excerpt.",
             "citations": [{"source_locator": locator, "evidence": evidence}],
         }
@@ -155,6 +160,7 @@ class QuizContractTests(unittest.TestCase):
             self.context["completion_requirements"]["require_scientific_uncertainty_anchor"]
         )
         self.assertEqual(tuple(self.context["judgments"]), JUDGMENTS)
+        self.assertTrue(self.context["completion_requirements"]["require_correct_answer"])
         sessions, head = validate_quiz_history(self.workspace, paper_id=self.paper_id)
         self.assertEqual(sessions, [])
         self.assertEqual(head["session_count"], 0)
@@ -186,8 +192,15 @@ class QuizContractTests(unittest.TestCase):
         readable_log = (self.workspace / QUIZ_LOG_FILE).read_text(encoding="utf-8")
         self.assertIn("## Q001 · supported", readable_log)
         self.assertIn("**Question:**", readable_log)
-        self.assertIn("**Source citations:**", readable_log)
+        self.assertIn("**User answer:**", readable_log)
+        self.assertIn("**Correct answer:**", readable_log)
+        self.assertIn("**Paper sources:**", readable_log)
+        self.assertLess(readable_log.index("**Question:**"), readable_log.index("**User answer:**"))
+        self.assertLess(readable_log.index("**User answer:**"), readable_log.index("**Judgment:**"))
+        self.assertLess(readable_log.index("**Judgment:**"), readable_log.index("**Correct answer:**"))
+        self.assertLess(readable_log.index("**Correct answer:**"), readable_log.index("**Paper sources:**"))
         self.assertIn("<summary>Machine record</summary>", readable_log)
+        self.assertEqual(sessions[0]["quiz_session_schema"], QUIZ_SESSION_SCHEMA)
 
         state = self.complete()
         quiz = state["stages"]["quiz"]
@@ -213,6 +226,55 @@ class QuizContractTests(unittest.TestCase):
             )
         self.assertEqual((self.workspace / QUIZ_LOG_FILE).read_bytes(), log_before)
         self.assertEqual((self.workspace / QUIZ_HEAD_FILE).read_bytes(), head_before)
+
+    def test_correct_answer_is_required_without_partial_append(self) -> None:
+        log_before = (self.workspace / QUIZ_LOG_FILE).read_bytes()
+        head_before = (self.workspace / QUIZ_HEAD_FILE).read_bytes()
+        missing = self.payload(method_ids=["M01"])
+        del missing["correct_answer"]
+        with self.assertRaisesRegex(PaperError, "missing=.*correct_answer"):
+            append_prepared_quiz_session(self.project, self.paper_id, missing)
+        blank = self.payload(method_ids=["M01"])
+        blank["correct_answer"] = ""
+        with self.assertRaisesRegex(PaperError, "correct_answer must contain at least 8"):
+            append_prepared_quiz_session(self.project, self.paper_id, blank)
+        self.assertEqual((self.workspace / QUIZ_LOG_FILE).read_bytes(), log_before)
+        self.assertEqual((self.workspace / QUIZ_HEAD_FILE).read_bytes(), head_before)
+
+    def test_legacy_schema1_history_remains_valid_before_schema2_append(self) -> None:
+        legacy = {
+            "quiz_session_schema": 1,
+            "paper_id": self.paper_id,
+            "session_id": "Q001",
+            "recorded_at": "2026-07-19T00:00:00+00:00",
+            "context_fingerprint": fingerprint("e"),
+            "question": "How did the legacy paper mechanism work?",
+            "anchors": {"uncertainty_ids": [], "method_claim_ids": ["M01"]},
+            "answer": "The legacy user answer is preserved.",
+            "judgment": "supported",
+            "rationale": "The legacy rationale remains byte-for-byte canonical.",
+            "citations": [{"source_locator": "html#S1", "evidence": "Fixture source."}],
+            "previous_entry_hash": GENESIS_HASH,
+            "entry_hash": "",
+        }
+        legacy["entry_hash"] = session_entry_hash(legacy)
+        log_path = self.workspace / QUIZ_LOG_FILE
+        log_path.write_text(render_quiz_log([legacy]), encoding="utf-8")
+        head = build_quiz_head(self.workspace, paper_id=self.paper_id, sessions=[legacy])
+        (self.workspace / QUIZ_HEAD_FILE).write_text(
+            json.dumps(head, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        appended = self.append_method()
+        sessions, validated_head = validate_quiz_history(
+            self.workspace, paper_id=self.paper_id
+        )
+        self.assertEqual([item["quiz_session_schema"] for item in sessions], [1, 2])
+        self.assertNotIn("correct_answer", sessions[0])
+        self.assertIn("correct_answer", sessions[1])
+        self.assertEqual(appended["previous_entry_hash"], legacy["entry_hash"])
+        self.assertEqual(validated_head["session_count"], 2)
 
     def test_session_requires_known_nonempty_anchors(self) -> None:
         with self.assertRaisesRegex(PaperError, "must select at least one"):
@@ -444,6 +506,7 @@ class QualityUncertaintyFilteringTests(unittest.TestCase):
                     "anchors": {"uncertainty_ids": [], "method_claim_ids": ["M01"]},
                     "answer": "The method applies the grounded fixture mechanism.",
                     "judgment": "supported",
+                    "correct_answer": "The source-grounded mechanism is the expected answer.",
                     "rationale": "The direct method claim is present in the cited source span.",
                     "citations": [
                         {"source_locator": "html#S1", "evidence": "Fixture source."}

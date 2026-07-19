@@ -56,10 +56,10 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - use `next-quiz-question` to select P3.5 Mxx Method claims in order, then read the matching Method prose and ask one pedagogical paper-understanding question in the user's language;
    - never ask about entries under `source_quality_notes`, parser reliability, PDF column ordering, extraction quality, or workflow artifacts; Uxx questions must be scientific-content uncertainties only, and cover one after the first Method question when that catalog is non-empty;
    - wait for the user's answer instead of inventing one;
-   - classify only as `supported`, `partially-supported`, `unsupported`, or `uncertain`, with a concise rationale and an exact excerpt from an anchor-backed `source.md` locator;
-   - append the six-field record through `append-quiz-session`; never hand-edit, truncate, delete, or rejudge existing `quiz-log.md` sessions;
+   - classify only as `supported`, `partially-supported`, `unsupported`, or `uncertain`, then write a concise correct answer in the user's language using only the selected anchors, relevant summary prose, and cited source spans; produce it even when the user skips or ends the quiz;
+   - add a calibrated judgment rationale and at least one exact excerpt from an anchor-backed `source.md` locator, then append the seven-field record through `append-quiz-session`; never hand-edit, truncate, delete, or rejudge existing `quiz-log.md` sessions;
    - record a correction as a new session, preserving the earlier answer and judgment;
-   - keep all asked questions, answers, judgments, rationales, and citations in the single readable `quiz-log.md`; context/head are internal sidecars;
+   - keep each Question, User answer, Judgment with rationale, Correct answer, and Paper sources in that order in the single readable `quiz-log.md`; context/head are internal sidecars;
    - after the user ends Q&A, run `lint-quiz` and `complete-quiz` once at least one Method anchor is covered plus one scientific Uxx when that catalog is non-empty; parse-quality-only papers complete method-only.
 
 Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.
