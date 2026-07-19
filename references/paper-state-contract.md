@@ -21,7 +21,10 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
         ├── summary-ledger.json
         ├── slides-context.json
         ├── slides.md
-        └── figures/
+        ├── figures/
+        ├── quiz-context.json
+        ├── quiz-log.md
+        └── quiz-head.json
 ```
 
 `/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it.
@@ -89,7 +92,9 @@ The `read` stage has an additional P2 completion gate: `artifact` must be `paper
 
 The `summary` stage has a P3.5 completion gate: `artifact` remains `summary.md`, while the stage output fingerprint covers both `summary.md` and `summary-ledger.json`. The article must pass the three-section and bidirectional-anchor rules; every direct ledger claim must pass `references/summary-contract.md`, and its evidence and locators must resolve against the current source index.
 
-The `slides` stage has a P5 completion gate: `artifact` must be `slides.md`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `slides-context.json` must pass `references/slides-contract.md`. The lint enforces the ShanghaiTech Marp/KaTeX frontmatter, research-talk structure, summary-claim references, resolvable Figure placeholders, local media, multi-panel usage, and conservative per-page capacity. Marp compilation is optional and creates no persistent export artifact. Quiz remains state-only until P6.
+The `slides` stage has a P5 completion gate: `artifact` must be `slides.md`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `slides-context.json` must pass `references/slides-contract.md`. The lint enforces the ShanghaiTech Marp/KaTeX frontmatter, research-talk structure, summary-claim references, resolvable Figure placeholders, local media, multi-panel usage, and conservative per-page capacity. Marp compilation is optional and creates no persistent export artifact.
+
+The `quiz` stage has a P6 completion gate: `artifact` must be `quiz-log.md`, its byte fingerprint must match `output_fingerprint`, and the current read/summary lineage plus `quiz-context.json` must pass `references/quiz-contract.md`. Current-attempt sessions must cover at least one P2 uncertainty and one P3.5 Method claim, use a four-value judgment, and cite exact resolvable source excerpts. `quiz-log.md` is append-only across attempts; its session hash chain and `quiz-head.json` checkpoint reject deletion, answer edits, and rejudgment.
 
 ## Stale Propagation
 
@@ -121,7 +126,7 @@ Complete a stage:
 }
 ```
 
-For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality gate. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact rather than hand-constructing its completion envelope.
+For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality gate. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact. Use `prepare-quiz`, `next-quiz-question`, `append-quiz-session`, `lint-quiz`, and `complete-quiz` for P6; never hand-edit or replace its append-only files.
 
 Fail or reset a stage:
 

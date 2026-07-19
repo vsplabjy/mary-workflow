@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mw_paper import (  # noqa: E402
+    append_prepared_quiz_session,
     PAPER_STATE_SCHEMA,
     PaperError,
     apply_paper_action,
@@ -23,10 +24,12 @@ from mw_paper import (  # noqa: E402
     paper_progress,
     prepare_slides,
     prepare_summary,
+    prepare_quiz,
     read_paper_state,
     resolve_paper_id,
 )
 from mary_workflow import default_state as default_workflow_state  # noqa: E402
+from mw_paper_sources import sha256_file  # noqa: E402
 from tests.paper_read_helpers import (  # noqa: E402
     write_read_fixture,
     write_slides_fixture,
@@ -62,6 +65,8 @@ class PaperStateTests(unittest.TestCase):
             prepare_summary(self.project, self.paper_id)
         elif stage == "slides":
             prepare_slides(self.project, self.paper_id)
+        elif stage == "quiz":
+            prepare_quiz(self.project, self.paper_id)
         else:
             self.apply("start_stage", {"stage": stage})
         artifact = f"{stage}.md"
@@ -79,6 +84,26 @@ class PaperStateTests(unittest.TestCase):
         elif stage == "slides":
             artifact = "slides.md"
             digest = write_slides_fixture(paper_directory(self.project, self.paper_id))
+        elif stage == "quiz":
+            artifact = "quiz-log.md"
+            citation = [{"source_locator": "html#S1", "evidence": "Fixture source."}]
+            for anchors, judgment in (
+                ({"uncertainty_ids": ["U01"], "method_claim_ids": []}, "uncertain"),
+                ({"uncertainty_ids": [], "method_claim_ids": ["M01"]}, "supported"),
+            ):
+                append_prepared_quiz_session(
+                    self.project,
+                    self.paper_id,
+                    {
+                        "question": "How should this paper detail be understood?",
+                        "anchors": anchors,
+                        "answer": "This answer explains the selected paper detail.",
+                        "judgment": judgment,
+                        "rationale": "The cited normalized source determines the judgment.",
+                        "citations": citation,
+                    },
+                )
+            digest = sha256_file(paper_directory(self.project, self.paper_id) / artifact)
         return self.apply(
             "complete_stage",
             {
@@ -341,7 +366,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         state = read_paper_state(self.project, "arxiv-2501.00003v1")
         self.assertEqual(state["audit"]["rejected_actions"], 1)
 
-    def test_plugin_surfaces_read_summary_and_slides_but_not_quiz(self) -> None:
+    def test_plugin_surfaces_all_four_paper_stages(self) -> None:
         command = (REPO_ROOT / "commands/mw-paper.md").read_text(encoding="utf-8")
         skill = (REPO_ROOT / "skills/paper/SKILL.md").read_text(encoding="utf-8")
         contract = (REPO_ROOT / "references/paper-state-contract.md").read_text(encoding="utf-8")
@@ -354,16 +379,22 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("coherent article", command)
         self.assertIn("For `slides [paper-id]`", command)
         self.assertIn("complete-slides", command)
-        self.assertIn("Do not produce `quiz-log.md`", command)
+        self.assertIn("For `quiz [paper-id]`", command)
+        self.assertIn("partially-supported", command)
+        self.assertIn("append-quiz-session", command)
+        self.assertIn("complete-quiz", command)
         self.assertIn("name: paper", skill)
         self.assertIn("blog-style article", skill)
         self.assertIn("summary-ledger.json", skill)
         self.assertIn("references/slides-contract.md", skill)
         self.assertIn("Figure placeholders", skill)
         self.assertIn("quiz` depends on `read` and `summary`, not `slides`", skill)
+        self.assertIn("references/quiz-contract.md", skill)
+        self.assertIn("append-only", skill)
         self.assertIn("paper_state_schema", contract)
         self.assertIn("slides.md", contract)
-        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.6"))
+        self.assertIn("quiz-log.md", contract)
+        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.7"))
 
     def test_mw_init_reset_does_not_delete_paper_workspaces(self) -> None:
         self.run_cli(

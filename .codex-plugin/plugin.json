@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "2.2.0-alpha.6+codex.20260718151254",
-  "description": "Cycle-aware workflows with validated paper reading, grounded summaries, and linted ShanghaiTech Marp research slides for Codex.",
+  "version": "2.2.0-alpha.7+codex.20260719054059",
+  "description": "Cycle-aware workflows with validated paper reading, grounded summaries, ShanghaiTech Marp slides, and append-only expert Q&A for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -18,13 +18,14 @@
     "research",
     "papers",
     "marp",
-    "slides"
+    "slides",
+    "quiz"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Mary Workflow",
     "shortDescription": "Run milestone and research-paper workflows",
-    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine plus v2.2 research skills for independent paper states, arXiv HTML/PDF acquisition, parse-quality gating, contract-validated close reading, source-locator indexing, readable paper articles with grounded claim ledgers, and ShanghaiTech red Marp research slides with claim, Figure, layout, media, and page-capacity lint.",
+    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine plus v2.2 research skills for independent paper states, arXiv HTML/PDF acquisition, parse-quality gating, contract-validated close reading, grounded article summaries, ShanghaiTech red Marp slides, and append-only expert Q&A with four-value judgments and exact source citations.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [

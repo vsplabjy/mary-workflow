@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/` and v2.2 research-paper pipeline from `.mary-research/`, including contract-validated close reading, readable source-grounded summaries, and linted ShanghaiTech Marp research slides. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-paper`, asks to run Mary workflow, manage paper state, read or summarize a research paper, or build group-meeting slides from a completed summary.
+description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/` and v2.2 research-paper pipeline from `.mary-research/`, including contract-validated close reading, readable source-grounded summaries, linted ShanghaiTech Marp slides, and append-only expert Q&A. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-paper`, asks to run Mary workflow, manage paper state, read or summarize a research paper, build group-meeting slides, or run a source-grounded paper quiz.
 ---
 
 # Mary Workflow
@@ -19,7 +19,7 @@ User-facing command surface:
 - `/mw-stop`: pause while preserving state, logs, reports, and cycle.
 - `/mw-debug`: manually load debug phase when the workflow is in `DEBUGGING`.
 - `/mw-cycle`: archive the current cycle to `.mary-workflow/cycles/<cycle>/`, reset active short-term state, and point back to `/mw-plan`.
-- `/mw-paper`: manage independent paper states, produce validated notes and summaries, and create a linted `slides.md` research presentation without plan/run authorization.
+- `/mw-paper`: manage independent paper states, produce validated notes/summaries/slides, and run append-only expert Q&A without plan/run authorization.
 
 ## Runtime Rules
 
@@ -40,6 +40,7 @@ User-facing command surface:
 9. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
 10. `/mw-paper` uses `scripts/mw_paper.py` and `paper_state_schema: 1`; it does not read or mutate `.mary-workflow/` milestone state. Parse-quality and source-locator gates are machine enforced.
 11. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion.
+12. P6 anchors questions to P2 uncertainties and P3.5 Method claims, accepts only four-value judgments with exact source excerpts, and requires all `quiz-log.md` sessions to remain append-only under a verified hash chain.
 
 ## Memory Model
 
@@ -65,4 +66,4 @@ Command Markdown files also live under `commands/` for clients that support file
 
 ## File Contract
 
-See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring and lint, and `references/marp-assets-contract.md` for the offline presentation supply.
+See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring, `references/quiz-contract.md` for P6 expert Q&A, and `references/marp-assets-contract.md` for the offline presentation supply.

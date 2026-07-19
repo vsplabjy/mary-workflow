@@ -45,6 +45,18 @@ from mw_paper_slides import (
     validate_slides,
     write_slides_context,
 )
+from mw_paper_quiz import (
+    PaperQuizError,
+    QUIZ_CONTEXT_FILE,
+    QUIZ_HEAD_FILE,
+    QUIZ_LOG_FILE,
+    append_quiz_session,
+    next_quiz_question,
+    validate_quiz,
+    validate_quiz_context,
+    validate_quiz_history,
+    write_quiz_context,
+)
 
 
 RESEARCH_DIR = ".mary-research"
@@ -531,6 +543,29 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
         if output_fingerprint != validation["slides_fingerprint"]:
             raise PaperError("complete_stage slides output_fingerprint does not match slides.md.")
         metadata = validation["metadata"]
+    elif stage == "quiz":
+        if artifact != QUIZ_LOG_FILE:
+            raise PaperError(f"complete_stage quiz requires artifact {QUIZ_LOG_FILE}.")
+        read_stage = state["stages"]["read"]
+        summary_stage = state["stages"]["summary"]
+        source_format = str(read_stage["metadata"].get("source_format") or "")
+        if source_format not in {"html", "pdf"} or summary_stage["status"] != "complete":
+            raise PaperError("complete_stage quiz requires validated read and summary stages.")
+        try:
+            validation = validate_quiz(
+                paper_directory(project_root, state["paper_id"]),
+                paper_id=state["paper_id"],
+                quiz_attempt=item["attempts"],
+                source_format=source_format,
+                source_fingerprint=state["source"]["fingerprint"],
+                read_output_fingerprint=read_stage["output_fingerprint"],
+                summary_output_fingerprint=summary_stage["output_fingerprint"],
+            )
+        except PaperQuizError as exc:
+            raise PaperError(str(exc)) from exc
+        if output_fingerprint != validation["quiz_log_fingerprint"]:
+            raise PaperError("complete_stage quiz output_fingerprint does not match quiz-log.md.")
+        metadata = validation["metadata"]
     item.update(
         {
             "status": "complete",
@@ -868,6 +903,169 @@ def validate_prepared_slides(project_root: Path, paper_id: object | None = None)
     return state, validation
 
 
+def quiz_lineage(state: PaperState, command: str) -> tuple[JsonObject, JsonObject, str]:
+    read_stage = state["stages"]["read"]
+    summary_stage = state["stages"]["summary"]
+    if read_stage["status"] != "complete" or summary_stage["status"] != "complete":
+        raise PaperError(f"{command} requires completed read and summary stages.")
+    source_format = str(read_stage["metadata"].get("source_format") or "")
+    if source_format not in {"html", "pdf"}:
+        raise PaperError(f"{command} requires a P2-validated read stage.")
+    return read_stage, summary_stage, source_format
+
+
+def prepare_quiz(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
+    root = Path(project_root).resolve()
+    canonical_id = resolve_paper_id(root, paper_id)
+    state = read_paper_state(root, canonical_id)
+    read_stage, summary_stage, source_format = quiz_lineage(state, "prepare-quiz")
+    quiz_stage = state["stages"]["quiz"]
+    if quiz_stage["status"] == "complete":
+        raise PaperError("Quiz stage is already complete; reset_stage quiz before adding sessions.")
+    quiz_attempt = (
+        quiz_stage["attempts"]
+        if quiz_stage["status"] == "in_progress"
+        else quiz_stage["attempts"] + 1
+    )
+    try:
+        context = write_quiz_context(
+            paper_directory(root, canonical_id),
+            paper_id=canonical_id,
+            quiz_attempt=quiz_attempt,
+            source_format=source_format,
+            source_fingerprint=state["source"]["fingerprint"],
+            read_output_fingerprint=read_stage["output_fingerprint"],
+            summary_output_fingerprint=summary_stage["output_fingerprint"],
+        )
+    except PaperQuizError as exc:
+        raise PaperError(str(exc)) from exc
+    if quiz_stage["status"] in {"pending", "failed", "stale"}:
+        state = apply_paper_action(
+            root,
+            canonical_id,
+            {"action": "start_stage", "data": {"stage": "quiz"}},
+        )
+    elif quiz_stage["status"] != "in_progress":
+        raise PaperError(f"Quiz stage cannot be prepared from status {quiz_stage['status']}.")
+    append_paper_log(
+        root,
+        canonical_id,
+        "prepared quiz "
+        f"attempt={state['stages']['quiz']['attempts']} "
+        f"uncertainties={len(context['uncertainty_catalog'])} "
+        f"method_claims={len(context['method_claim_catalog'])}",
+    )
+    return state, context
+
+
+def load_prepared_quiz(
+    project_root: Path,
+    paper_id: object | None,
+    *,
+    command: str,
+) -> tuple[PaperState, Path, JsonObject, dict[str, list[JsonObject]], str]:
+    root = Path(project_root).resolve()
+    canonical_id = resolve_paper_id(root, paper_id)
+    state = read_paper_state(root, canonical_id)
+    read_stage, summary_stage, source_format = quiz_lineage(state, command)
+    quiz_stage = state["stages"]["quiz"]
+    if quiz_stage["status"] not in {"in_progress", "complete"}:
+        raise PaperError(f"{command} requires quiz to be in_progress or complete; run prepare-quiz first.")
+    workspace = paper_directory(root, canonical_id)
+    try:
+        context, blocks, context_fingerprint = validate_quiz_context(
+            workspace,
+            paper_id=canonical_id,
+            quiz_attempt=quiz_stage["attempts"],
+            source_format=source_format,
+            source_fingerprint=state["source"]["fingerprint"],
+            read_output_fingerprint=read_stage["output_fingerprint"],
+            summary_output_fingerprint=summary_stage["output_fingerprint"],
+        )
+    except PaperQuizError as exc:
+        raise PaperError(str(exc)) from exc
+    return state, workspace, context, blocks, context_fingerprint
+
+
+def propose_quiz_question(
+    project_root: Path,
+    paper_id: object | None = None,
+) -> tuple[PaperState, JsonObject]:
+    state, workspace, context, _, context_fingerprint = load_prepared_quiz(
+        project_root,
+        paper_id,
+        command="next-quiz-question",
+    )
+    if state["stages"]["quiz"]["status"] != "in_progress":
+        raise PaperError("next-quiz-question requires quiz to be in_progress.")
+    try:
+        sessions, _ = validate_quiz_history(workspace, paper_id=state["paper_id"])
+        proposal = next_quiz_question(
+            context,
+            sessions,
+            context_fingerprint=context_fingerprint,
+        )
+    except PaperQuizError as exc:
+        raise PaperError(str(exc)) from exc
+    return state, proposal
+
+
+def append_prepared_quiz_session(
+    project_root: Path,
+    paper_id: object | None,
+    payload: object,
+) -> tuple[PaperState, JsonObject]:
+    state, workspace, context, blocks, _ = load_prepared_quiz(
+        project_root,
+        paper_id,
+        command="append-quiz-session",
+    )
+    if state["stages"]["quiz"]["status"] != "in_progress":
+        raise PaperError("append-quiz-session requires quiz to be in_progress.")
+    try:
+        session = append_quiz_session(
+            workspace,
+            paper_id=state["paper_id"],
+            context=context,
+            blocks=blocks,
+            payload=payload,
+            recorded_at=now_iso(),
+        )
+    except PaperQuizError as exc:
+        raise PaperError(str(exc)) from exc
+    append_paper_log(
+        Path(project_root).resolve(),
+        state["paper_id"],
+        f"appended quiz session={session['session_id']} judgment={session['judgment']}",
+    )
+    return state, session
+
+
+def validate_prepared_quiz(
+    project_root: Path,
+    paper_id: object | None = None,
+) -> tuple[PaperState, JsonObject]:
+    state, workspace, _, _, _ = load_prepared_quiz(
+        project_root,
+        paper_id,
+        command="lint-quiz",
+    )
+    read_stage, summary_stage, source_format = quiz_lineage(state, "lint-quiz")
+    try:
+        validation = validate_quiz(
+            workspace,
+            paper_id=state["paper_id"],
+            quiz_attempt=state["stages"]["quiz"]["attempts"],
+            source_format=source_format,
+            source_fingerprint=state["source"]["fingerprint"],
+            read_output_fingerprint=read_stage["output_fingerprint"],
+            summary_output_fingerprint=summary_stage["output_fingerprint"],
+        )
+    except PaperQuizError as exc:
+        raise PaperError(str(exc)) from exc
+    return state, validation
+
+
 def load_action_payload(args: argparse.Namespace) -> JsonObject:
     if args.file:
         raw = Path(args.file).read_text(encoding="utf-8")
@@ -1120,6 +1318,94 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_prepare_quiz(args: argparse.Namespace) -> int:
+    state, context = prepare_quiz(Path(args.project_root), args.paper_id)
+    workspace = paper_directory(Path(args.project_root), state["paper_id"])
+    print(f"paper_workspace: {workspace}")
+    print(f"quiz_context: {workspace / QUIZ_CONTEXT_FILE}")
+    print(f"quiz_log: {workspace / QUIZ_LOG_FILE}")
+    print(f"quiz_head: {workspace / QUIZ_HEAD_FILE}")
+    print(
+        json.dumps(
+            {
+                "paper_id": state["paper_id"],
+                "quiz_status": state["stages"]["quiz"]["status"],
+                "quiz_attempt": context["quiz_attempt"],
+                "judgments": context["judgments"],
+                "uncertainty_catalog": context["uncertainty_catalog"],
+                "method_claim_catalog": context["method_claim_catalog"],
+                "completion_requirements": context["completion_requirements"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_next_quiz_question(args: argparse.Namespace) -> int:
+    state, proposal = propose_quiz_question(Path(args.project_root), args.paper_id)
+    print(
+        json.dumps(
+            {"paper_id": state["paper_id"], **proposal},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_append_quiz_session(args: argparse.Namespace) -> int:
+    payload = load_action_payload(args)
+    state, session = append_prepared_quiz_session(
+        Path(args.project_root),
+        args.paper_id,
+        payload,
+    )
+    print(
+        json.dumps(
+            {"paper_id": state["paper_id"], "appended_session": session},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_lint_quiz(args: argparse.Namespace) -> int:
+    _, validation = validate_prepared_quiz(Path(args.project_root), args.paper_id)
+    print(json.dumps({"lint": "passed", **validation}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_complete_quiz(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root)
+    paper_id = resolve_paper_id(project_root, args.paper_id)
+    workspace = paper_directory(project_root, paper_id)
+    quiz_log_path = workspace / QUIZ_LOG_FILE
+    if not quiz_log_path.is_file():
+        raise PaperError(f"{QUIZ_LOG_FILE} is missing: {quiz_log_path}")
+    state = apply_paper_action(
+        project_root,
+        paper_id,
+        {
+            "action": "complete_stage",
+            "data": {
+                "stage": "quiz",
+                "artifact": QUIZ_LOG_FILE,
+                "output_fingerprint": sha256_file(quiz_log_path),
+            },
+        },
+    )
+    append_paper_log(
+        project_root,
+        paper_id,
+        f"completed quiz sessions={state['stages']['quiz']['metadata']['session_count']}",
+    )
+    print(json.dumps(status_payload(state), ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Mary paper state runtime (paper_state_schema 1)")
     parser.add_argument("--project-root", default=".", help="Project root; defaults to current directory")
@@ -1198,6 +1484,39 @@ def build_parser() -> argparse.ArgumentParser:
         "--smoke-compile", action="store_true", help="also require a temporary Marp HTML compile"
     )
     slides_complete_parser.set_defaults(func=cmd_complete_slides)
+
+    quiz_prepare_parser = subparsers.add_parser(
+        "prepare-quiz", help="prepare uncertainty/method anchors and append-only quiz history"
+    )
+    quiz_prepare_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    quiz_prepare_parser.set_defaults(func=cmd_prepare_quiz)
+
+    quiz_next_parser = subparsers.add_parser(
+        "next-quiz-question", help="propose the next uncovered uncertainty or method question"
+    )
+    quiz_next_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    quiz_next_parser.set_defaults(func=cmd_next_quiz_question)
+
+    quiz_append_parser = subparsers.add_parser(
+        "append-quiz-session", help="validate and append one immutable expert Q&A session"
+    )
+    quiz_append_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    quiz_session_source = quiz_append_parser.add_mutually_exclusive_group()
+    quiz_session_source.add_argument("--json", help="JSON session payload")
+    quiz_session_source.add_argument("--file", help="path to JSON session payload")
+    quiz_append_parser.set_defaults(func=cmd_append_quiz_session)
+
+    quiz_lint_parser = subparsers.add_parser(
+        "lint-quiz", help="validate current quiz coverage and append-only history"
+    )
+    quiz_lint_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    quiz_lint_parser.set_defaults(func=cmd_lint_quiz)
+
+    quiz_complete_parser = subparsers.add_parser(
+        "complete-quiz", help="validate quiz-log.md and complete the quiz stage"
+    )
+    quiz_complete_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    quiz_complete_parser.set_defaults(func=cmd_complete_quiz)
     return parser
 
 
@@ -1205,7 +1524,7 @@ def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (PaperError, PaperReadError, PaperSummaryError, PaperSlidesError) as exc:
+    except (PaperError, PaperReadError, PaperSummaryError, PaperSlidesError, PaperQuizError) as exc:
         raise SystemExit(str(exc)) from exc
 
 

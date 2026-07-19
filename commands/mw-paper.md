@@ -1,6 +1,6 @@
 ---
-description: Manage paper state, close-read papers, write grounded summaries, or build linted Marp research slides.
-argument-hint: [read|summarize|slides|create|list|status|apply-action] [source/options]
+description: Manage paper state, close-read and summarize papers, build Marp slides, or run grounded expert Q&A.
+argument-hint: [read|summarize|slides|quiz|create|list|status|apply-action] [source/options]
 ---
 
 # /mw-paper
@@ -49,4 +49,11 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - use at least two VSP-Marp multi-panel layouts such as `cols-2-64`, `cols-3`, `rows-2-*`, or `pin-3` according to content shape;
    - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `slides-context.json`; do not download or crop figures, because the user will place screenshots in `figures/` later;
    - run `lint-slides`, fix every rejection, then run `complete-slides`; add `--smoke-compile` only when local Marp CLI is available and the user wants the optional check.
-10. Do not produce `quiz-log.md`; P6 is not implemented.
+10. For `quiz [paper-id]`:
+   - run `prepare-quiz`, specifying `--paper-id` when needed, then read `quiz-context.json` and `references/quiz-contract.md`;
+   - run `next-quiz-question`, ask exactly one localized question using its Uxx/Mxx anchors, and wait for the user's answer instead of inventing one;
+   - judge the answer as exactly `supported`, `partially-supported`, `unsupported`, or `uncertain`; do not translate the result into binary correct/incorrect language;
+   - copy at least one exact excerpt from an anchor-backed `source.md` locator and explain the judgment with calibrated reasoning;
+   - submit the six-field session through `append-quiz-session`; never edit, truncate, rejudge, or regenerate `quiz-log.md`/`quiz-head.json` directly;
+   - repeat one question at a time while the user continues; corrections are new sessions and never replace history;
+   - when the user ends the Q&A, run `lint-quiz` and then `complete-quiz`; both current-attempt uncertainty and Method anchors must be covered.
