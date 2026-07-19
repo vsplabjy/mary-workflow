@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Read papers and build grounded research slides"
-  default_prompt: "Use $mary-workflow to turn a completed paper summary into grounded ShanghaiTech Marp group-meeting slides."
+  short_description: "Read papers, build slides, and run grounded Q&A"
+  default_prompt: "Use $mary-workflow to ask me source-grounded expert questions about a completed paper summary and assess each answer with four-value judgments."
 
 policy:
   allow_implicit_invocation: true

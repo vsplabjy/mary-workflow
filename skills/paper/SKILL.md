@@ -1,11 +1,11 @@
 ---
 name: paper
-description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, write readable source-grounded summaries, and build linted ShanghaiTech Marp research slides with Figure placeholders. Use when the user invokes /mw-paper, asks to register or inspect a paper, read or summarize a paper, create group-meeting slides from a completed summary, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
+description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, write readable source-grounded summaries, build linted ShanghaiTech Marp research slides, and run append-only expert Q&A with four-value source judgments. Use when the user invokes /mw-paper, asks to register or inspect a paper, read or summarize a paper, create group-meeting slides, run paper questions or a research quiz, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
 ---
 
 # Mary Workflow: Paper
 
-Manage independent paper states, close reading, grounded summaries, and research slides under `.mary-research/papers/`.
+Manage independent paper states, close reading, grounded summaries, research slides, and expert Q&A under `.mary-research/papers/`.
 
 ## Procedure
 
@@ -51,6 +51,12 @@ Manage independent paper states, close reading, grounded summaries, and research
    - run `lint-slides`, repair every structure, reference, placeholder, media, or capacity error, and run `complete-slides` only after lint passes;
    - use `--smoke-compile` only as an optional temporary Marp check; do not deliver generated HTML, PDF, or PPTX.
 15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
-16. Do not generate `quiz-log.md`; P6 is not implemented yet.
+16. For `/mw-paper quiz [paper-id]`:
+   - run `prepare-quiz`, then read `quiz-context.json` and `references/quiz-contract.md`;
+   - use `next-quiz-question` to cover P2 Uxx uncertainties and P3.5 Mxx Method claims, ask one question in the user's language, and wait for the user's answer;
+   - classify only as `supported`, `partially-supported`, `unsupported`, or `uncertain`, with a concise rationale and an exact excerpt from an anchor-backed `source.md` locator;
+   - append the six-field record through `append-quiz-session`; never hand-edit, truncate, delete, or rejudge existing `quiz-log.md` sessions;
+   - record a correction as a new session, preserving the earlier answer and judgment;
+   - after the user ends Q&A and both anchor families are covered, run `lint-quiz` and `complete-quiz`.
 
-Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, and `references/slides-contract.md` before producing slides. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.
+Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.

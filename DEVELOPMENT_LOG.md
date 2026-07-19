@@ -658,3 +658,26 @@ Baseline commit: `c950395` - `P4 finished`
 - 完整 fixture 流水线从 read → summary → slides 生成 7 页 deck；`lint-slides --smoke-compile` 在 npm 离线模式通过，报告 pages=7、layouts=4、figures=1，状态目录没有残留导出物。
 - 使用同一 P5 `slides.md` 离线渲染 7 张 1280x720 PNG 并逐页检查：上科大封面/背景/Logo、KaTeX、双栏 Figure 占位、三栏、上下栏和尾页均正常，无空白页、资源缺失或文字重叠。
 - 对真实 `test/v2.2/.mary-research/papers/arxiv-2308.04079/slides.md` 复验通过：从 `test/v2.2` 独立工作目录仅注册项目内 CSS，离线生成 13/13 张 1280x720 PNG；封面、中文、校徽、红色母版、Figure 1/5 占位和尾页正常，证明不再依赖 Mary 仓库根 `.vscode` 或 Marp CLI config。
+
+### v2.2 P6 append-only expert Q&A
+
+Baseline commit: `f2d9e9e` - `项目目录无法正常渲染问题解决`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_quiz.py` 与 `references/quiz-contract.md`，将 P2 `uncertainties` 编为 Uxx 出题锚点，将 P3.5 Method direct claims 保留为 Mxx 锚点；`quiz-context.json` 固定 read/summary/source-index 字节 lineage 和当前 attempt。
+- 新增 `prepare-quiz`、`next-quiz-question`、`append-quiz-session`、`lint-quiz`、`complete-quiz` 五个命令；出题器先补 Uxx、再补 Mxx，之后按最少使用次数交替，quiz 继续只依赖 read + summary、不依赖 slides。
+- session 只接受 `supported`、`partially-supported`、`unsupported`、`uncertain` 四值，不提供二元判错；每条记录强制 question/anchors/answer/judgment/rationale/citations 六字段和至少一条原文引用。
+- citation locator 必须属于所选 U/M 锚点，evidence 必须是对应 `source.md` span 内 8-500 字符的逐字摘录；未知锚点、跨锚点 locator、虚构摘录和重复引用拒收。
+- `quiz-log.md` 使用真实 `O_APPEND + fsync` 追加规范 session；用户直接阅读 Question/Answer/Judgment/Rationale/Anchors/Source citations，完整机器记录折叠在 `<details>` 中并与可读视图一起确定性重建。每条 session 哈希全部不可变字段并串联前一条，`quiz-head.json` 固定 session count、链头和整文件 fingerprint；改答案、改判、删史、插入自由文本、断链、head 漂移和符号链接均拒收。
+- quiz reset 不删除旧 session；新 `quiz_attempt` 产生不同 context fingerprint，旧史继续可审计但不能替当前 attempt 满足 U/M 覆盖。更正只能新增 session，不能覆盖旧判定。
+- `complete_stage quiz` 接入专用 gate，要求 artifact=`quiz-log.md`、当前 attempt 至少一个 session且同时覆盖 U/M、四值/引用/链/head 全通过、声明 fingerprint 与日志字节一致；低层 action 不能绕过。
+- 同步 root/paper skill、`/mw-paper` command、paper state contract、OpenAI metadata 和 plugin manifest；交互 prompt 明确一次只问一题、等待用户回答后再判定，禁止替用户编答案。
+- plugin 预发布基础版本更新为 `2.2.0-alpha.7`，并通过 helper 写入单一 cachebuster `2.2.0-alpha.7+codex.20260719054059`。
+- `README.md`、P0 runtime、P2/P3/P5 专用 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：133/133 通过；P5 验收时的 119 项全部保持通过，P6 新增 14/14。
+- P6 覆盖 context/catalog、U→M 出题、四种 judgment、CLI 全链路、非法 judgment 无落盘、空/未知锚点、跨锚点 locator、虚构 evidence、双族完成门、context 漂移、输出 fingerprint、改判、删史、symlink 和 reset 跨 attempt 保史。
+- 真实 `arxiv-2308.04079` 的已完成 P2/P3 工件只读验收：解析出 4 条 Uxx uncertainty 与 13 条 Mxx Method claim，在临时目录追加 U01/M01 两条 session，得到 `supported=1`、`uncertain=1`，完整 lint 通过；原测试项目 state/log 未改动。
