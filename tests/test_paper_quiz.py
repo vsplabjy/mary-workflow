@@ -28,6 +28,7 @@ from mw_paper_quiz import (  # noqa: E402
     QUIZ_CONTEXT_SCHEMA,
     QUIZ_HEAD_FILE,
     QUIZ_LOG_FILE,
+    next_quiz_question,
     parse_quiz_log,
     render_quiz_log,
     validate_quiz_history,
@@ -140,12 +141,19 @@ class QuizContractTests(unittest.TestCase):
             },
         )
 
-    def test_prepare_quiz_builds_two_anchor_catalogs_and_empty_history(self) -> None:
+    def test_prepare_quiz_builds_pedagogical_catalogs_and_empty_history(self) -> None:
         self.assertEqual(self.state["stages"]["quiz"]["status"], "in_progress")
         self.assertEqual(self.context["quiz_context_schema"], QUIZ_CONTEXT_SCHEMA)
         self.assertEqual(self.context["quiz_attempt"], 1)
-        self.assertEqual(self.context["uncertainty_catalog"][0]["uncertainty_id"], "U01")
+        self.assertEqual(
+            self.context["scientific_uncertainty_catalog"][0]["uncertainty_id"],
+            "U01",
+        )
+        self.assertEqual(self.context["source_quality_notes"], [])
         self.assertEqual(self.context["method_claim_catalog"][0]["claim_id"], "M01")
+        self.assertTrue(
+            self.context["completion_requirements"]["require_scientific_uncertainty_anchor"]
+        )
         self.assertEqual(tuple(self.context["judgments"]), JUDGMENTS)
         sessions, head = validate_quiz_history(self.workspace, paper_id=self.paper_id)
         self.assertEqual(sessions, [])
@@ -154,15 +162,16 @@ class QuizContractTests(unittest.TestCase):
         self.assertTrue((self.workspace / QUIZ_LOG_FILE).is_file())
         self.assertTrue((self.workspace / QUIZ_HEAD_FILE).is_file())
 
-    def test_question_generator_covers_uncertainty_then_method(self) -> None:
+    def test_question_generator_covers_method_before_scientific_uncertainty(self) -> None:
         first = propose_quiz_question(self.project, self.paper_id)[1]
-        self.assertEqual(first["anchors"], {"uncertainty_ids": ["U01"], "method_claim_ids": []})
-        self.append_uncertainty()
-        second = propose_quiz_question(self.project, self.paper_id)[1]
-        self.assertEqual(second["anchors"], {"uncertainty_ids": [], "method_claim_ids": ["M01"]})
+        self.assertEqual(first["anchors"], {"uncertainty_ids": [], "method_claim_ids": ["M01"]})
+        self.assertIn("method pipeline", first["question"])
         self.append_method()
+        second = propose_quiz_question(self.project, self.paper_id)[1]
+        self.assertEqual(second["anchors"], {"uncertainty_ids": ["U01"], "method_claim_ids": []})
+        self.append_uncertainty()
         third = propose_quiz_question(self.project, self.paper_id)[1]
-        self.assertEqual(third["anchors"], {"uncertainty_ids": ["U01"], "method_claim_ids": []})
+        self.assertEqual(third["anchors"], {"uncertainty_ids": [], "method_claim_ids": ["M01"]})
 
     def test_all_four_judgments_append_and_complete_with_metadata(self) -> None:
         sessions = [
@@ -239,12 +248,20 @@ class QuizContractTests(unittest.TestCase):
                 self.payload(uncertainty_ids=["U01"], evidence="Invented source excerpt."),
             )
 
-    def test_completion_requires_both_anchor_families_for_current_attempt(self) -> None:
+    def test_completion_requires_a_method_anchor(self) -> None:
         self.append_uncertainty()
         with self.assertRaises(SystemExit) as rejection:
             self.complete()
         self.assertIn("at least one method-claim-anchored session", str(rejection.exception))
         self.append_method()
+        self.assertEqual(self.complete()["stages"]["quiz"]["status"], "complete")
+
+    def test_completion_requires_scientific_uncertainty_when_catalog_is_nonempty(self) -> None:
+        self.append_method()
+        with self.assertRaises(SystemExit) as rejection:
+            self.complete()
+        self.assertIn("scientific-uncertainty-anchored session", str(rejection.exception))
+        self.append_uncertainty()
         self.assertEqual(self.complete()["stages"]["quiz"]["status"], "complete")
 
     def test_changing_answer_or_judgment_is_detected(self) -> None:
@@ -337,10 +354,10 @@ class QuizContractTests(unittest.TestCase):
         prepared = run("prepare-quiz", "--paper-id", self.paper_id)
         self.assertIn("quiz_context:", prepared.stdout)
         next_question = json.loads(run("next-quiz-question", "--paper-id", self.paper_id).stdout)
-        self.assertEqual(next_question["anchors"]["uncertainty_ids"], ["U01"])
+        self.assertEqual(next_question["anchors"]["method_claim_ids"], ["M01"])
         for payload in (
-            self.payload(uncertainty_ids=["U01"], judgment="uncertain"),
             self.payload(method_ids=["M01"], judgment="partially-supported"),
+            self.payload(uncertainty_ids=["U01"], judgment="uncertain"),
         ):
             appended = run(
                 "append-quiz-session",
@@ -353,6 +370,105 @@ class QuizContractTests(unittest.TestCase):
         self.assertEqual(json.loads(run("lint-quiz", "--paper-id", self.paper_id).stdout)["lint"], "passed")
         completed = json.loads(run("complete-quiz", "--paper-id", self.paper_id).stdout)
         self.assertEqual(completed["paper"]["stages"]["quiz"]["status"], "complete")
+
+
+class QualityUncertaintyFilteringTests(unittest.TestCase):
+    def test_parse_quality_uncertainty_is_audit_only_and_method_can_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            locator = "https://arxiv.org/abs/2401.54321v1"
+            paper_id = "arxiv-2401.54321v1"
+            create_paper(project, locator, fingerprint("2"), paper_id)
+            apply_paper_action(
+                project,
+                paper_id,
+                {"action": "start_stage", "data": {"stage": "read"}},
+            )
+            workspace = paper_directory(project, paper_id)
+            notes_fingerprint = write_read_fixture(
+                workspace,
+                paper_id=paper_id,
+                locator=locator,
+                source_fingerprint=fingerprint("2"),
+                statuses={
+                    "text": "pass",
+                    "structure": "pass",
+                    "equations": "not_applicable",
+                    "figures": "degraded",
+                    "tables": "not_applicable",
+                },
+            )
+            apply_paper_action(
+                project,
+                paper_id,
+                {
+                    "action": "complete_stage",
+                    "data": {
+                        "stage": "read",
+                        "artifact": "paper-notes.md",
+                        "output_fingerprint": notes_fingerprint,
+                    },
+                },
+            )
+            prepare_summary(project, paper_id)
+            summary_fingerprint = write_summary_fixture(workspace)
+            apply_paper_action(
+                project,
+                paper_id,
+                {
+                    "action": "complete_stage",
+                    "data": {
+                        "stage": "summary",
+                        "artifact": "summary.md",
+                        "output_fingerprint": summary_fingerprint,
+                    },
+                },
+            )
+            _, context = prepare_quiz(project, paper_id)
+            self.assertEqual(context["scientific_uncertainty_catalog"], [])
+            self.assertEqual(context["source_quality_notes"][0]["note_id"], "SQ01")
+            self.assertEqual(context["source_quality_notes"][0]["quality_dimensions"], ["figures"])
+            self.assertFalse(
+                context["completion_requirements"]["require_scientific_uncertainty_anchor"]
+            )
+            proposal = propose_quiz_question(project, paper_id)[1]
+            self.assertEqual(
+                proposal["anchors"],
+                {"uncertainty_ids": [], "method_claim_ids": ["M01"]},
+            )
+            append_prepared_quiz_session(
+                project,
+                paper_id,
+                {
+                    "question": "How does the paper's core method mechanism work?",
+                    "anchors": {"uncertainty_ids": [], "method_claim_ids": ["M01"]},
+                    "answer": "The method applies the grounded fixture mechanism.",
+                    "judgment": "supported",
+                    "rationale": "The direct method claim is present in the cited source span.",
+                    "citations": [
+                        {"source_locator": "html#S1", "evidence": "Fixture source."}
+                    ],
+                },
+            )
+            validation = validate_prepared_quiz(project, paper_id)[1]
+            self.assertEqual(validation["metadata"]["uncertainty_anchor_ids"], [])
+            self.assertEqual(validation["metadata"]["method_claim_anchor_ids"], ["M01"])
+
+    def test_chinese_method_claim_produces_a_chinese_paper_question(self) -> None:
+        context = {
+            "scientific_uncertainty_catalog": [],
+            "method_claim_catalog": [
+                {
+                    "claim_id": "M01",
+                    "claim_text": "场景外观由球谐函数表示。",
+                    "evidence": "Fixture source.",
+                    "source_locators": ["html#S1"],
+                }
+            ],
+        }
+        proposal = next_quiz_question(context, [], context_fingerprint="f" * 64)
+        self.assertIn("请结合论文的方法流程说明", proposal["question"])
+        self.assertNotIn("PDF", proposal["question"])
 
 
 if __name__ == "__main__":

@@ -53,10 +53,13 @@ Manage independent paper states, close reading, grounded summaries, research sli
 15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
 16. For `/mw-paper quiz [paper-id]`:
    - run `prepare-quiz`, then read `quiz-context.json` and `references/quiz-contract.md`;
-   - use `next-quiz-question` to cover P2 Uxx uncertainties and P3.5 Mxx Method claims, ask one question in the user's language, and wait for the user's answer;
+   - use `next-quiz-question` to select P3.5 Mxx Method claims in order, then read the matching Method prose and ask one pedagogical paper-understanding question in the user's language;
+   - never ask about entries under `source_quality_notes`, parser reliability, PDF column ordering, extraction quality, or workflow artifacts; Uxx questions must be scientific-content uncertainties only, and cover one after the first Method question when that catalog is non-empty;
+   - wait for the user's answer instead of inventing one;
    - classify only as `supported`, `partially-supported`, `unsupported`, or `uncertain`, with a concise rationale and an exact excerpt from an anchor-backed `source.md` locator;
    - append the six-field record through `append-quiz-session`; never hand-edit, truncate, delete, or rejudge existing `quiz-log.md` sessions;
    - record a correction as a new session, preserving the earlier answer and judgment;
-   - after the user ends Q&A and both anchor families are covered, run `lint-quiz` and `complete-quiz`.
+   - keep all asked questions, answers, judgments, rationales, and citations in the single readable `quiz-log.md`; context/head are internal sidecars;
+   - after the user ends Q&A, run `lint-quiz` and `complete-quiz` once at least one Method anchor is covered plus one scientific Uxx when that catalog is non-empty; parse-quality-only papers complete method-only.
 
 Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.

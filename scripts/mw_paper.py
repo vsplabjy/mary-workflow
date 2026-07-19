@@ -952,7 +952,8 @@ def prepare_quiz(project_root: Path, paper_id: object | None = None) -> tuple[Pa
         canonical_id,
         "prepared quiz "
         f"attempt={state['stages']['quiz']['attempts']} "
-        f"uncertainties={len(context['uncertainty_catalog'])} "
+        f"scientific_uncertainties={len(context['scientific_uncertainty_catalog'])} "
+        f"source_quality_notes={len(context['source_quality_notes'])} "
         f"method_claims={len(context['method_claim_catalog'])}",
     )
     return state, context
@@ -1332,7 +1333,8 @@ def cmd_prepare_quiz(args: argparse.Namespace) -> int:
                 "quiz_status": state["stages"]["quiz"]["status"],
                 "quiz_attempt": context["quiz_attempt"],
                 "judgments": context["judgments"],
-                "uncertainty_catalog": context["uncertainty_catalog"],
+                "scientific_uncertainty_catalog": context["scientific_uncertainty_catalog"],
+                "source_quality_notes": context["source_quality_notes"],
                 "method_claim_catalog": context["method_claim_catalog"],
                 "completion_requirements": context["completion_requirements"],
             },
