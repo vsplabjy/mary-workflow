@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/`, course Lecture learning and ExamPass review profiles, and the v2.2 research-paper pipeline from `.mary-research/`. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, `/mw-slide`, or `/mw-paper`; asks to run Mary Workflow; or needs course learning, exam review, paper reading, grounded summaries, group-meeting slides, or source-grounded paper Q&A.
+description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/`, course Lecture learning and ExamPass review profiles, the v2.2 research-paper pipeline from `.mary-research/`, and schema-aware Notion MCP operations. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, `/mw-slide`, `/mw-paper`, or `/notion`; asks to run Mary Workflow; or needs course learning, exam review, paper reading, grounded summaries, group-meeting slides, source-grounded paper Q&A, or polished Notion page/database work.
 ---
 
 # Mary Workflow
@@ -24,6 +24,7 @@ User-facing command surface:
 - `/mw-review`: compatibility alias for `/mw-exam`.
 - `/mw-slide`: run the direct Slide to Lecture preparation profile.
 - `/mw-paper`: manage independent paper states, produce validated notes/summaries/slides, and run append-only expert Q&A without plan/run authorization.
+- `/notion`: execute a natural-language Notion MCP request with fetch-before-write safety, page-craft rules, and read-back verification.
 
 ## Runtime Rules
 
@@ -45,6 +46,7 @@ User-facing command surface:
 10. `/mw-paper` uses `scripts/mw_paper.py` and `paper_state_schema: 1`; it does not read or mutate `.mary-workflow/` milestone state. Parse-quality and source-locator gates are machine enforced.
 11. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion.
 12. P6 prioritizes paper-understanding questions grounded in P3.5 Method claims, permits only scientific-content P2 uncertainties as conditional follow-ups, requires one such Uxx only when that catalog is non-empty, excludes parse-quality uncertainties from the question pool, and archives Question, User answer, four-value Judgment, source-grounded Correct answer, and Paper sources in one append-only `quiz-log.md` under a verified hash chain.
+13. `/notion` is independent of Mary milestone and paper state. It requires an authorized Notion MCP connection, inspects live tool schemas, fetches existing targets before writes, applies `skills/notion/` formatting and safety rules, and verifies mutations by fetching the result again.
 
 ## Memory Model
 
@@ -69,9 +71,10 @@ Autocomplete is surfaced through command-specific sub-skills under `skills/`:
 - `skills/slide-to-lecture/SKILL.md` -> `/mw-slide` and the Lecture learning Stage 1
 - `skills/roundtrip-screenshot/SKILL.md` -> image/PDF crop verification when needed
 - `skills/paper/SKILL.md` -> `/mw-paper`
+- `skills/notion/SKILL.md` -> `/notion`
 
 Command Markdown files also live under `commands/` for clients that support file-based command loading.
 
 ## File Contract
 
-See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring, `references/quiz-contract.md` for P6 expert Q&A, and `references/marp-assets-contract.md` for the offline presentation supply.
+See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring, `references/quiz-contract.md` for P6 expert Q&A, `references/marp-assets-contract.md` for the offline presentation supply, and `skills/notion/references/` for Notion MCP and page-craft contracts.

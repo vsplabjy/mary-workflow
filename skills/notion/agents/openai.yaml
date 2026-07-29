@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notion"
+  short_description: "Read, create, update, and organize Notion content"
+  default_prompt: "Use $notion to carry out this Notion request safely and format the result as a polished, maintainable page."

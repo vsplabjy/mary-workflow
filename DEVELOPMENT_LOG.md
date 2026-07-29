@@ -723,3 +723,18 @@ Baseline commit: `0450129` - `P6 updated`
 - 新增缺失/空 `correct_answer` 无部分追加测试，以及 schema 1 → schema 2 混合日志续链测试；paper-state 集成夹具同步七字段后 stale 级联回归保持通过。
 - 用户提供的真实 3DGS 日志逐字解析通过：21/21 条 schema 1 session、末条 Q021；实际 workspace 的 log/head 验链通过，prepare 对已完成 quiz 正确拒绝，日志 SHA-256 前后保持 `ca7340bbb55bca04b87235f29437be7adbf2c8dac973f23748ac33db74c43d3b`。
 - `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
+
+### 2026-07-29 `/notion` MCP command and branch integration
+
+- Merged `origin/jy` into `shenby`, preserving the `shenby` Lecture/Exam profiles and the `jy` v2.2 paper pipeline, Marp assets, runtime, and tests.
+- Added the standalone `/notion <request>` command and `skills/notion/` entry point; Notion operations do not require `.mary-workflow/` or mutate Mary state.
+- Vendored MCP discovery, fetch-before-write, target resolution, database schema, protected-block, page-craft, Notion Markdown, personal workspace, and specialist task rules as exportable references.
+- Required sequential same-page updates and post-write fetch verification; unavailable/unauthorized MCP access must be reported instead of simulated.
+- Updated plugin metadata, root skill routing, README command documentation, and boundary tests.
+- Refreshed the plugin cachebuster with the official helper to `2.2.0-alpha.7+codex.20260729154240`; the local Codex/OpenCode installation uses direct symlinks rather than a marketplace reinstall.
+
+Validation:
+
+- `python -m unittest discover -s tests`: 145/145 passed after the branch merge and Notion command addition.
+- Root/Notion skill validation, plugin validation, JSON parsing, and `git diff --check` passed.
+- A fresh-context `/notion` forward test found only a non-matching near-title page and correctly refused to write until the exact target is shared.

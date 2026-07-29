@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run project, learning, exam, and paper workflows"
-  default_prompt: "Use $mary-workflow to plan and run project work, /mw-learn for Lecture notes, /mw-exam for scoped ExamPass review, or /mw-paper for validated paper reading, slides, and grounded Q&A."
+  short_description: "Run project, learning, paper, and Notion workflows"
+  default_prompt: "Use $mary-workflow for project milestones, learning, and paper workflows, or /notion for verified Notion MCP operations and polished pages."
 
 policy:
   allow_implicit_invocation: true
