@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run project, Lecture learning, and exam review milestones"
-  default_prompt: "Use $mary-workflow to plan and run project work, /mw-learn for slides plus lecture recordings, or /mw-exam for scoped ExamPass review."
+  short_description: "Run project, learning, exam, and paper workflows"
+  default_prompt: "Use $mary-workflow to plan and run project work, /mw-learn for Lecture notes, /mw-exam for scoped ExamPass review, or /mw-paper for validated paper reading, slides, and grounded Q&A."
 
 policy:
   allow_implicit_invocation: true

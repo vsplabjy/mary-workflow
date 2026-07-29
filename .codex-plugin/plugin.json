@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "2.1.0",
-  "description": "Full-depth project, course Lecture, and ExamPass milestone workflow for Codex.",
+  "version": "2.2.0-alpha.7+codex.20260719074927",
+  "description": "Cycle-aware project, course-learning, exam-review, and validated research-paper workflows for Codex.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -16,13 +16,18 @@
     "planning",
     "prompt-engineering",
     "codex",
-    "ai-agent"
+    "ai-agent",
+    "research",
+    "papers",
+    "marp",
+    "slides",
+    "quiz"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Mary Workflow",
-    "shortDescription": "Run a local milestone workflow",
-    "longDescription": "Mary Workflow packages project, course Lecture learning, and ExamPass review profiles with interviewed milestone planning, authorized execution and review, debug recovery, cycle archives, and audit-friendly updates through a .mary-workflow workspace.",
+    "shortDescription": "Run project, learning, exam, and paper workflows",
+    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine, course Lecture learning and ExamPass review profiles, plus v2.2 research skills for independent paper states, validated close reading, grounded summaries, ShanghaiTech Marp slides, and append-only expert Q&A.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [
@@ -36,7 +41,8 @@
       "/mw-plan",
       "/mw-run",
       "/mw-learn",
-      "/mw-exam"
+      "/mw-exam",
+      "/mw-paper"
     ],
     "brandColor": "#4F46E5",
     "screenshots": []

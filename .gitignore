@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 /test/
 .venv/
+/vsp-marp/
+/assets/marp/templates/offline-preview.html
+/assets/marp/templates/offline-preview.*.png

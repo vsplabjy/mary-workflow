@@ -461,3 +461,265 @@ Plan/run authorization boundary fix.
 - 二进制快速排除补齐 `.pt`、`.pth`、`.ckpt`、`.npy`、`.npz`、`.ply`、`.safetensors`、ONNX/HDF5/Parquet 等 ML 常用格式。
 - `/mw-init` 只在 `PLANNING`、`PLANNED`、`FINISHED` 检测简报漂移；执行、审查、调试阶段只刷新 prompt 并记录跳过，已有 `refresh_required` 也不会覆盖活动 phase 的合法动作。
 - 回归增加懒读取不调用探测、流式哈希不调用 `read_bytes`、config/.maryignore/ML 文件排除，以及 EXECUTING 中 rerun init 后继续完成 milestone。
+
+## 2026-07-17
+
+v2.2 P0 shared runtime foundation.
+
+Baseline commit: `83ea160` - `P0 finished`
+
+完成内容：
+
+- 新增 `scripts/mw_runtime.py`，集中提供无 workflow phase 知识的公共原语：
+  - 直接、Markdown fenced 和说明文字内嵌三种 JSON payload 解析。
+  - 顶层 JSON object 与 `action`/`data` 信封形状校验。
+  - 同目录临时文件、`O_EXCL`、file `fsync`、`os.replace` 的原子文本写入。
+  - 目标文件权限位保持，以及失败后的临时文件清理。
+  - Markdown 日志文件初始化与 timestamped entry 追加。
+- `scripts/mary_workflow.py` 改为通过兼容适配层调用公共 runtime：
+  - `write_state` 和 cycle 日志重置使用 `atomic_write_text`。
+  - `append_log` 使用 `append_log_entry`。
+  - CLI payload 使用公共 parser 和顶层 object 校验。
+  - `apply_action` 使用 `action_envelope_parts`；`EnvelopeError` 仍路由到原有 `reject_action`，保留 rejected state、计数、日志和 `SystemExit` 行为。
+- 删除 `mary_workflow.py` 中重复的 JSON 扫描与解析实现。
+- runtime 专项测试统一放在 `tests/test_mw_runtime.py`，便于按模块名直接发现。
+- P0 未加入 `/mw-paper`、paper schema、Marp、KaTeX 或其他 P1+ 功能。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：41/41 通过，其中原 v2.1 workflow 边界回归 29/29、P0 runtime 专项 12/12。
+- init 专项 3/3 通过：fresh init、active-phase init、prompt refresh state preservation。
+- 故障注入覆盖 file `fsync` 和 `os.replace` 失败；旧 `state.yaml` 保持完整，临时文件得到清理。
+- state read/write round trip 字节稳定，原 action 预日志顺序与 invalid data rejected path 保持不变。
+- `python -m py_compile`、`git diff --check` 和 P0 范围扫描通过。
+
+## 2026-07-18
+
+v2.2 P1 paper state and `/mw-paper` skeleton.
+
+完成内容：
+
+- 新增独立的 `.mary-research/papers/<paper-id>/` 工作区，每篇论文使用 `state.json` 和 `log.md`，状态契约固定为 `paper_state_schema: 1`。
+- paper state 不依赖 `/mw-init`，不读取或修改 `.mary-workflow/` 的 phase、grant 或 lease；`/mw-init --reset` 与 `/mw-cycle` 均保留论文工作区。
+- v2.1 项目扫描器忽略 `.mary-research/`，避免运行时状态进入项目理解账本和 fingerprint 基线。
+- 新增规范化 paper id：arXiv 使用保留显式版本号的 `arxiv-<identifier>`，其他来源默认使用 `local-<source-sha256-prefix>`；拒绝路径分隔符、`..` 和非规范 id。
+- source、阶段输入和阶段输出统一使用小写 SHA-256 指纹；P1 只接收预计算 fingerprint，不抓取或解析论文。
+- 新增 `read -> summary -> slides` 与 `read + summary -> quiz` 四阶段依赖图，以及 `pending`、`in_progress`、`complete`、`failed`、`stale` 进度机。
+- 新增 `start_stage`、`complete_stage`、`fail_stage`、`reset_stage`、`update_source` 信封；依赖未完成、输入 lineage 变化、非法 artifact 路径和非法 fingerprint 均拒收。
+- source fingerprint 变化或上游 reset 会将已经开始的下游阶段级联标记为 `stale`；从未开始的阶段保持 `pending`。
+- 新增 `scripts/mw_paper.py` 和 `/mw-paper` 的 `create`、`list`、`status`、`apply-action` 独立命令面，复用 P0 的信封校验、原子写和 append log 公共 runtime。
+- 新增 `commands/mw-paper.md`、`skills/paper/SKILL.md` 和 `references/paper-state-contract.md`，同步 plugin manifest、根 skill、OpenAI interface 与 README。
+- P1 明确不生成 `paper-notes.md`、`summary.md`、`slides.md` 或 `quiz-log.md`，未提前实现 P2 及后续内容阶段。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：59/59 通过，其中原 v2.1 workflow 边界 29/29、P0 runtime 12/12、P1 paper state 18/18。
+- init 专项 3/3 通过：fresh init、active-phase init、prompt refresh state preservation。
+- P1 回归覆盖独立创建与幂等、多论文隔离、arXiv/local id、schema 拒载、阶段 gate、失败重试、lineage、source/reset stale 级联、quiz 依赖、非法/损坏信封审计和 CLI 命令面。
+- `python -m py_compile`、plugin validator、paper skill validator、manifest JSON 校验和 `git diff --check` 通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.1+codex.20260718064000`；当前个人 marketplace 是本地目录而非 Git marketplace，Codex CLI 不支持对其执行 `marketplace upgrade`，现有 skill/plugin 安装均通过符号链接直接指向本仓库。
+
+### v2.2 P2 close-reading entry
+
+Baseline commit: `386cc6a` - `P1 finished`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_sources.py`，隔离单篇论文获取、HTML/PDF 规范化、五维解析质量评估和精读账本校验。
+- `prepare-read` 对 arXiv 固定先请求 `/html/<id>`；HTML 不可用或 `text`/`structure` 核心质量失败时自动回退 `/pdf/<id>`。普通本地/远程 HTML/PDF 使用同一解析层。
+- 网络获取使用明确 User-Agent、45 秒超时和 64 MiB 上限；PDF 通过 Poppler `pdftotext -layout` 降级抽取，无新增 Python 依赖。
+- 每次准备精读落盘 `source.html|pdf`、带 locator 的 `source.md`、`parse-quality.json` 和机器生成的 `read-context.json`。
+- 五维矩阵固定为 `text`、`structure`、`equations`、`figures`、`tables`；状态固定为 `pass`、`degraded`、`failed`、`not_applicable`，每维强制 metrics 和 evidence。
+- LaTeXML HTML 解析区分公式布局 `ltx_eqn_table` 与科研表格 `figure.ltx_table`，提取表格行和单元格；仅保留图注而没有视觉像素时，figure 诚实标记为 degraded。
+- 任一 failed 维度将质量 gate 设为 blocked；degraded/failed 维度必须出现在至少一个 uncertainty 的 `quality_dimensions` 中。
+- 新增 `references/paper-notes-contract.md`：`paper-notes.md` 必须包含 schema 1 JSON 账本，强制书目信息、背景、问题、贡献、方法、实验/证明、局限、结论、逐节账本、解析质量和非空不确定性。
+- HTML claim locator 使用 `html#<anchor>`，PDF 使用 `pdf:p<N>`；研究 claim、section ledger 和 uncertainty 均拒收无 locator 输入。
+- `complete-read` 校验 paper/source 身份、source fingerprint、质量报告 fingerprint、五维状态、必填字段、locator、uncertainty 覆盖和 notes 实际字节 fingerprint 后，才允许 `read -> complete`。
+- blocked gate 默认拒绝完成并保持 `read=in_progress`。只有明确 `--override-quality --override-reason` 才可覆盖；覆盖生成 `quality-override-<attempt>.json`，并在 state metadata 和 log 中记录原因与 fingerprint。
+- `paper_state_schema: 1` 保持不变，通过可选 stage metadata 向前兼容；source 变化继续复用 P1 stale 级联并自动开启新的 read attempt。
+- 更新 `/mw-paper` command、paper skill、根 skill、OpenAI metadata、paper state contract 和 plugin manifest；`summary.md`、`slides.md`、`quiz-log.md` 仍未实现。
+- `README.md` 未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：78/78 通过，其中原 v2.1 workflow 29/29、P0 runtime 12/12、P1 paper state 18/18、P2 close reading 19/19。
+- P2 覆盖 HTML 优先且不请求 PDF、HTML 404/核心质量失败自动 PDF 回退、LaTeXML 布局表排除、PDF 降级矩阵、source 变更重启、账本合法完成和各类拒收规则。
+- 阻断/覆盖测试覆盖静默完成拒收、pass gate 禁止无意义 override、显式用户覆盖、原因文件落盘和 state fingerprint 对齐。
+- 真实 arXiv `2401.00001` 冒烟通过：选择官方 HTML，表格行进入 `source.md`，最终 `gate=pass`；同一论文真实 PDF 经本机 `pdftotext` 抽取并生成页码 locator，`gate=pass`。
+- `python -m py_compile`、paper skill validator、plugin validator、manifest JSON、`git diff --check` 和 README 零差异检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.2+codex.20260718072135`；当前 Codex CLI 无 `plugin add` 子命令，现有 `~/.codex/skills/mary-workflow` 与 `~/plugins/mary-workflow` 均通过符号链接直接指向本仓库。
+
+### v2.2 P3 grounded summary
+
+Baseline commit: `4603b01` - `P2 test finished`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_locators.py`，将 `source.md` 的 HTML/PDF marker 构造成确定性 `source-locators.json` 索引。
+- source locator 合同固定为 HTML `html#<anchor>` 和 PDF `pdf:p<N>`；每个 locator 必须解析到至少一个非空 source span。
+- locator 索引记录 `source.md` fingerprint、raw source fingerprint、source format，以及每个 span 的行范围、规范化内容 SHA-256 和 preview。
+- 重复 HTML anchor 不覆盖，统一表示为同一 locator 下的多个 spans；evidence 可在任一对应 span 中解析。
+- `prepare-summary` 要求 P2 read 已完成且 `paper-notes.md` 字节与 read output fingerprint 一致，随后生成 `source-locators.json` 和 `summary-context.json` 并启动 summary 阶段。
+- summary context 只允许同时满足“存在于 source.md”与“已被 paper-notes.md 接受”的 locator，阻止总结阶段引入未经精读账本覆盖的新 source region。
+- 新增 `scripts/mw_paper_summary.py` 和 `references/summary-contract.md`；`summary.md` 固定为 ordered `background`、`method`、`experiments` 三段，每段至少一个 claim。
+- claim 四元组固定为 `claim_id`、`claim_text`、`evidence`、`source_locators`；背景/方法/实验 id 分别使用 `Bxx`、`Mxx`、`Exx` 且全局唯一。
+- evidence 必须是当前 normalized source span 中可解析的 8-500 字符原文片段；合法 locator 指向错误 span 同样拒收。
+- `complete-summary` 重建 locator index，校验 context/input/index/source/notes fingerprints、三段结构、四元组字段、ID、locator 存在性、notes allowlist、evidence containment 和 summary 实际 fingerprint 后才允许完成。
+- summary stage metadata 记录 claim 总数、分段计数、引用 locator 数量以及 context/index fingerprints；read reset/source change 继续通过 P1 DAG 使 summary 和下游 stale。
+- 更新 `/mw-paper summarize` command/skill、根 skill、OpenAI metadata、paper state contract 和 plugin manifest；slides/quiz 未实现。
+- `README.md` 未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：94/94 通过，其中原 v2.1 workflow 29/29、P0 runtime 12/12、P1 paper state 18/18、P2 close reading 20/20、P3 summary 15/15。
+- P3 覆盖 HTML 重复 span、PDF page locator、非法/空 span、三段顺序、四元组字段、ID 前缀/唯一性、notes allowlist、evidence 解析、input/output drift、index tamper、CLI 完成和 read dependency gate。
+- 真实 arXiv `2401.00001` 的 P2 `source.md` 内存索引通过：137 个 locator、141 个 spans、4 个重复 locator，抽样 evidence 可在对应 span 中解析。
+- `python -m py_compile`、paper skill validator、plugin validator、manifest JSON、`git diff --check`、下游产物范围扫描和 README 零差异检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.3+codex.20260718083702`；当前 Codex CLI 无 `plugin add` 子命令，现有 skill/plugin 安装均通过符号链接直接指向本仓库。
+
+### v2.2 P3.5 readable summary layer
+
+Baseline commit: `a834764` - `P3 finished`
+
+完成内容：
+
+- 保留 P3 的 source locator index、summary context、paper-notes allowlist、evidence span containment 和 summary 状态机衔接，移除 `summary.md` 内嵌 JSON 填表格式。
+- summary 阶段改为双文件产物：`summary.md` 只承载面向未读论文同行的博客体正文，`summary-ledger.json` 单独承载机器 claim 账本。
+- 正文强制按 Background/背景、Method/方法、Experiments/实验三个 H2 顺序组织且内容非空；编排 prompt 要求方法节成为篇幅和解释重心，讲清直觉、机制与信息流，并允许使用 LaTeX 公式。
+- claim ledger 固定为 `summary_ledger_schema: 1`、paper id、原样复制的 inputs 和扁平 claims 数组；每条 claim 仍严格使用 `claim_id`、`claim_text`、`evidence`、`source_locators` 四元组。
+- 取消 `direct/inferred` 分类字段，额外字段一律拒收；ledger 只接受直接事实，解释、直觉和串联内容留在正文，不确定内容继续归 P2 uncertainties 和后续专家问答。
+- 新增正文与账本双向锚定门禁：每个 ledger id 必须在正文出现，正文 claim id 必须存在于 ledger，B/M/E 前缀必须落在对应章节，独立成行的空锚点拒收。
+- `complete-summary` 继续机器校验 locator 可解析、paper-notes 背书交集和 evidence 原文包含；论断语义真伪、正文是否正确使用证据及写作质量明确保留给人工与后续问答验真。
+- summary stage output fingerprint 改为覆盖 `summary.md` 与 `summary-ledger.json` 精确字节的 bundle fingerprint；任一文件变化都会改变下游 lineage。metadata 分别记录正文/账本 fingerprint、claim/anchor 数和分节统计。
+- `prepare-summary` 同时报告两个输出目标；同步更新 `/mw-paper` command、paper skill、根 skill、OpenAI metadata、summary/paper-state contracts 和 plugin manifest。
+- `README.md`、`scripts/mw_paper_sources.py`、`scripts/mw_runtime.py` 均未修改；P2 遗留的 `atomic_write_bytes` 下沉 runtime 与 arXiv paper-id 版本解析本次未处理。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：100/100 通过，其中原 v2.1 workflow 29/29、P0 runtime 12/12、P1 paper state 18/18、P2 close reading 20/20、P3.5 summary 21/21。
+- P3.5 覆盖双文件合法完成、ledger 精确字段、禁用旧标签、B/M/E claim family、locator allowlist、evidence containment、正文三节、双向锚定、章节前缀、孤立锚点、旧/新内嵌账本拒收、双文件 fingerprint 漂移、index tamper、CLI 双目标和缺 ledger 拒收。
+- `python -m py_compile`、root/paper skill validator、plugin validator、manifest JSON、`git diff --check`、README 和 P2/runtime 零差异检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.4+codex.20260718093644`；当前 Codex CLI 仍无 `plugin add` 子命令，`~/.codex/skills/mary-workflow` 与 `~/plugins/mary-workflow` 均通过符号链接直接指向本仓库。
+
+### v2.2 P4 offline Marp template supply
+
+Baseline commit: `3fc715f` - `gitignore 更新`
+
+完成内容：
+
+- 以 `VSPlab/vsp-marp` commit `d3ac970227782445e77009ca53fa8fd526cd2b43` 的 `tutorial-red-shtu` 为基线，将编译后主题就地本地化为 `assets/marp/themes/mary-shanghaitech-red.css`；没有 fork、submodule 或运行时 git clone。
+- 按最终评审决定取消 `VENDOR.md`，仅在 CSS 第二行保留 `/* vendored from VSPlab/vsp-marp @ d3ac970, localized 2026-07 */` 工程溯源注释。
+- 复制上海科技大学 16:9 背景、校徽和校名资源；主题中的 COS URL 全部替换为仓库内相对路径，CSS HTTP(S)/协议相对 URL 数量为 0。
+- 本地化六个 Latin Modern OTF、完整 Noto Sans CJK SC regular/bold WOFF2，以及 KaTeX 0.16.45 的 20 个 WOFF2；中文、代码和数学公式均不依赖在线字体。
+- 新增 `assets/marp/marp.config.mjs` 与 `marp-engine.cjs`，注册本地主题、允许本地资源并强制 KaTeX font path 指向 `../fonts/katex/`；禁用会引入远程图片的 emoji 转换。
+- 新增四页 `offline-preview.md`，覆盖 `cover_e`、普通背景页、`toc_b` 和 `lastpage`，实测上海科技大学红色模板、校徽/校名、中文 regular/bold、背景及 KaTeX 求和/范数/上下标均正确显示。
+- 新增 `scripts/validate_marp_assets.py`、`references/marp-assets-contract.md` 和 P4 单测，机器校验主题 provenance、33 个本地 URL 闭包、20 个 KaTeX 字体、两个完整 Noto 字重、配置/engine 和 smoke deck 必填标记。
+- 修复 VS Code 预览未注册本地主题的问题：新增根目录 `.vscode/settings.json`，显式注册 `mary-shanghaitech-red`、允许模板 HTML 并选择 KaTeX；工作区内任意子目录的 Markdown 均使用同一主题。
+- 将可维护的相对路径 CSS 保留为 `mary-shanghaitech-red.source.css`，运行时 CSS 由 `scripts/build_marp_theme.py` 确定性编译并内嵌全部资源，消除背景、校徽与字体相对 Markdown 目录解析造成的跨目录失效。
+- 根 skill 与 paper skill 只声明 P4 离线供应基座；`slides.md` 生成和 slides completion gate 继续明确阻断，未提前实现 P5。
+- 私有仓库自用风险由项目方接受；若未来公开发布 Mary Workflow，须在发布前补做主题、字体、校徽和背景资源的许可/商标审查。
+- `README.md`、paper runtime、P0/P2/P3 源码均未修改，忽略的 `vsp-marp/` 源工作树保持 `main...origin/main` 干净状态。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：104/104 通过，其中既有 100 项全量回归保持通过，P4 asset contract 新增 4/4。
+- `npm_config_offline=true npx --yes @marp-team/marp-cli@4.3.1` 在 npm 离线模式成功生成四页 HTML/PNG；Marp CLI 4.3.1 搭配 Marp Core 4.4.0。
+- Chromium 使用 `--disable-background-networking --host-resolver-rules='MAP * ~NOTFOUND'` 仍成功打开本地 HTML，封面校徽、校名与中文完整；四页 PNG 均为 1280x720 且像素标准差非零。
+- 将同一 smoke deck 复制到仓库外 `/tmp/.../arbitrary/deep/paper/slides.md` 后，在 npm 离线模式重新渲染 4 页 PNG；日志无 missing local files，校徽、校名、16:9 背景、完整中文和 KaTeX 公式均正常，证明输出不再依赖 Markdown 所在目录。
+- 人工逐页检查通过：修正目录页重复标题和尾页非三列布局后，四页无文字重叠、空白资源或公式缺字；按 2026-07-18 修订口径不要求 PDF 导出。
+- `python -m py_compile`、Marp asset validator、root/paper skill validator、plugin validator、manifest JSON、`git diff --check`、无 `VENDOR.md`、README/runtime 零差异和上游工作树零修改检查通过。
+- plugin cachebuster 更新为 `2.2.0-alpha.5+codex.20260718125033`；现有 skill/plugin 安装继续通过符号链接直接指向本仓库。
+
+### v2.2 P5 grounded Marp research slides
+
+Baseline commit: `c950395` - `P4 finished`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_slides.py`，实现 `slides-context.json`、summary bundle 复验、claim catalog、可解析 Figure catalog、`slides.md` fingerprint 和 P5 lint；slides 完成不再接受通用占位 fingerprint。
+- `prepare-slides` 要求 P3.5 summary 已完成且当前双文件字节仍匹配状态，生成上下文与 `figures/` 目录并启动 slides；`lint-slides` 无状态变更；`complete-slides` 复用同一 lint 后完成状态。
+- 修复独立目标项目的 VS Code 主题作用域：`prepare-slides` 现在把 33/33 资源内嵌的自包含 CSS 原子部署到 `<project>/.mary-research/marp/themes/`，并合并 `<project>/.vscode/settings.json` 的 Marp HTML、KaTeX 与主题注册。已有无关设置和主题条目保留，重复执行幂等；lint 同时拒收缺失或漂移的项目主题/注册。
+- `slides.md` 强制 `mary-shanghaitech-red`、16:9、`math: katex`、封面/背景/至少两页方法/实验/尾页结构，Method 不得弱于其他主体章节。
+- 每个事实页使用隐藏 `<!-- claims: ... -->` 锚定 summary ledger；Background/Method/Experiments 分别限制 B/M/E claim family，未知 claim、可见 `[M01]` 标记和缺少任一 claim family 均拒收。
+- 从当前 `source-locators.json` 的可解析 span 提取 Figure 编号、图注与 locator；占位必须显示论文原 Figure 编号、携带匹配 locator 并落在 `limg/mimg/rimg/timg/bimg` 面板。未知 Figure、错 locator、缺编号/图注节点和只提 Figure 不留占位均拒收。
+- 本地媒体仅允许 paper workspace 内已存在的相对文件；HTTP(S)、data URI、绝对路径、`..` 越界和缺文件拒收。每页同时限制 900 可见字符、36 可见行、8 个列表项、14 行代码，总页数限制 6-24。
+- 强制至少两页使用既有 VSP-Marp 多面板布局，包括 `cols-2-*`、`cols-3`、`rows-2-*` 和 `pin-3`；没有另造布局系统。
+- 上科大主题新增 Figure 虚线占位、编号和图注样式，并重新确定性生成 33/33 资源内嵌的自包含 CSS；P4 远程 URL 继续为 0。
+- `lint-slides` 与 `complete-slides` 支持可选 `--smoke-compile`：优先本地 `marp`，否则使用 npm 离线缓存的 Marp CLI 4.3.1；只生成并删除临时 HTML，不把 HTML/PDF/PPTX 纳入交付。
+- 新增 `references/slides-contract.md`，同步 `/mw-paper` command、paper/root skill、paper state/Marp contract、OpenAI metadata 与 plugin manifest；P6 `quiz-log.md` 继续明确阻断。
+- plugin 预发布基础版本保持 `2.2.0-alpha.6`，并通过 helper 刷新单一 cachebuster 为 `2.2.0-alpha.6+codex.20260718151254`。
+- `README.md`、P0 runtime、P2 source acquisition、P3.5 summary runtime 均未修改；忽略的 `vsp-marp/` 来源仓库未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：119/119 通过，其中既有 104 项回归保持通过，P5 共 15 项契约测试。
+- P5 覆盖合法完成、prepare/lint/complete CLI、context/summary/fingerprint 漂移、frontmatter、结构顺序、方法页下限、claim allowlist/family/隐藏语义、Figure id/locator/节点/缺位、布局下限、远程/缺失媒体和单页超量拒收。
+- 跨 workspace 覆盖项目主题落盘、VS Code JSONC 设置合并、既有主题保留、单次注册、重复准备幂等、非法设置无部分主题写入，以及主题注册漂移后拒收/重备修复。
+- 完整 fixture 流水线从 read → summary → slides 生成 7 页 deck；`lint-slides --smoke-compile` 在 npm 离线模式通过，报告 pages=7、layouts=4、figures=1，状态目录没有残留导出物。
+- 使用同一 P5 `slides.md` 离线渲染 7 张 1280x720 PNG 并逐页检查：上科大封面/背景/Logo、KaTeX、双栏 Figure 占位、三栏、上下栏和尾页均正常，无空白页、资源缺失或文字重叠。
+- 对真实 `test/v2.2/.mary-research/papers/arxiv-2308.04079/slides.md` 复验通过：从 `test/v2.2` 独立工作目录仅注册项目内 CSS，离线生成 13/13 张 1280x720 PNG；封面、中文、校徽、红色母版、Figure 1/5 占位和尾页正常，证明不再依赖 Mary 仓库根 `.vscode` 或 Marp CLI config。
+
+### v2.2 P6 append-only expert Q&A
+
+Baseline commit: `f2d9e9e` - `项目目录无法正常渲染问题解决`
+
+完成内容：
+
+- 新增 `scripts/mw_paper_quiz.py` 与 `references/quiz-contract.md`，将 P2 `uncertainties` 编为 Uxx 出题锚点，将 P3.5 Method direct claims 保留为 Mxx 锚点；`quiz-context.json` 固定 read/summary/source-index 字节 lineage 和当前 attempt。
+- 新增 `prepare-quiz`、`next-quiz-question`、`append-quiz-session`、`lint-quiz`、`complete-quiz` 五个命令；出题器先补 Uxx、再补 Mxx，之后按最少使用次数交替，quiz 继续只依赖 read + summary、不依赖 slides。
+- session 只接受 `supported`、`partially-supported`、`unsupported`、`uncertain` 四值，不提供二元判错；每条记录强制 question/anchors/answer/judgment/rationale/citations 六字段和至少一条原文引用。
+- citation locator 必须属于所选 U/M 锚点，evidence 必须是对应 `source.md` span 内 8-500 字符的逐字摘录；未知锚点、跨锚点 locator、虚构摘录和重复引用拒收。
+- `quiz-log.md` 使用真实 `O_APPEND + fsync` 追加规范 session；用户直接阅读 Question/Answer/Judgment/Rationale/Anchors/Source citations，完整机器记录折叠在 `<details>` 中并与可读视图一起确定性重建。每条 session 哈希全部不可变字段并串联前一条，`quiz-head.json` 固定 session count、链头和整文件 fingerprint；改答案、改判、删史、插入自由文本、断链、head 漂移和符号链接均拒收。
+- quiz reset 不删除旧 session；新 `quiz_attempt` 产生不同 context fingerprint，旧史继续可审计但不能替当前 attempt 满足 U/M 覆盖。更正只能新增 session，不能覆盖旧判定。
+- `complete_stage quiz` 接入专用 gate，要求 artifact=`quiz-log.md`、当前 attempt 至少一个 session且同时覆盖 U/M、四值/引用/链/head 全通过、声明 fingerprint 与日志字节一致；低层 action 不能绕过。
+- 同步 root/paper skill、`/mw-paper` command、paper state contract、OpenAI metadata 和 plugin manifest；交互 prompt 明确一次只问一题、等待用户回答后再判定，禁止替用户编答案。
+- plugin 预发布基础版本更新为 `2.2.0-alpha.7`，并通过 helper 写入单一 cachebuster `2.2.0-alpha.7+codex.20260719054059`。
+- `README.md`、P0 runtime、P2/P3/P5 专用 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：133/133 通过；P5 验收时的 119 项全部保持通过，P6 新增 14/14。
+- P6 覆盖 context/catalog、U→M 出题、四种 judgment、CLI 全链路、非法 judgment 无落盘、空/未知锚点、跨锚点 locator、虚构 evidence、双族完成门、context 漂移、输出 fingerprint、改判、删史、symlink 和 reset 跨 attempt 保史。
+- 真实 `arxiv-2308.04079` 的已完成 P2/P3 工件只读验收：解析出 4 条 Uxx uncertainty 与 13 条 Mxx Method claim，在临时目录追加 U01/M01 两条 session，得到 `supported=1`、`uncertain=1`，完整 lint 通过；原测试项目 state/log 未改动。
+
+### v2.2 P6.1 paper-understanding quiz correction
+
+Baseline commit: `147b8bc` - `P6 finished`
+
+完成内容：
+
+- 根据实弹反馈修正出题边界：双栏顺序、PDF 解析、公式抽取、缺失图像像素和表格对齐等解析质量问题不再进入用户题库，只保留为内部 `source_quality_notes` 审计信息。
+- `quiz_context_schema` 升级为 2；P2 uncertainty 按 `quality_dimensions` 分流，无质量维度的科学内容不确定性进入 `scientific_uncertainty_catalog`，带质量维度的条目转为不可出题的 SQxx note。
+- 出题顺序改为先问一个 P3.5 Mxx Method claim，content catalog 非空时再覆盖一个科学 Uxx，随后返回剩余 Method；完成门始终要求 Method，并且只在 content catalog 非空时动态要求 Uxx，纯解析质量论文降级为 method-only。
+- 方法题干按 claim 语言生成，中文 claim 直接生成中文论文理解题，要求用户解释论断的含义、对应的方法环节以及它如何帮助把握论文核心贡献。
+- `quiz-log.md` 明确为唯一交付归档：每道实际问答的 Question、用户 Answer、四值 Judgment、Rationale、Anchors 和原文 Citations 均追加在同一个 Markdown；`quiz-context.json` 与 `quiz-head.json` 仅为机器校验 sidecar。
+- append-only、哈希链、四值判定、exact source excerpt、旧 session 禁止改判/删史等 P6 机器骨架保持不变。
+- plugin 基础版本保持 `2.2.0-alpha.7`，cachebuster 刷新为 `2.2.0-alpha.7+codex.20260719062900`。
+- `README.md`、P0/P2/P3/P5 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：136/136 通过；P6 问答测试为 17/17，覆盖 content U 非空时缺 U 拒收与 parse-only 时 method-only 放行两个方向。
+- 真实 `arxiv-2308.04079` 重建 context 后得到 0 条 scientific uncertainty、4 条不可出题 SQ quality note、13 条 Method claim；第 1 题锚定 M01，题干为中文方法理解题，不再询问双栏 PDF 可靠性。
+- `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
+
+### v2.2 P6.2 source-grounded correct answers
+
+Baseline commit: `0450129` - `P6 updated`
+
+完成内容：
+
+- `quiz_context_schema` 升级为 3，`quiz_session_schema` 升级为 2；新 session 将 `correct_answer` 作为必填字段，与 question、用户 answer、judgment、rationale、anchors 和 citations 一起进入不可变哈希。
+- 可读归档固定为 Question → User answer → Judgment（含 rationale）→ Correct answer → Paper sources；anchors 继续保留在折叠机器记录中，不打断正文阅读。
+- 标准答案必须至少 8 个非空字符，并与 judgment 共用所选 Mxx/Uxx 可达的原文 citations；用户回答“下一题”“跳过”或“结束问答”时仍必须生成标准答案，缺字段或空答案在 append 前拒收且不产生部分日志/head 写入。
+- 保留 `quiz-log.md` 容器和 session marker v1：既有 schema 1 session 按原字节渲染、验链和保史，新 schema 2 session 可直接续接旧链；不回写旧记录，也不伪造历史标准答案。
+- completion gate 只接受当前 context 的 schema 2 session，避免旧 attempt 无标准答案记录满足新契约；`quiz-head.json` schema 和 append-only/reset 语义保持不变。
+- 同步 `/mw-paper` command、paper/root skill、quiz/paper-state contract 和 CLI help；plugin 基础版本保持 `2.2.0-alpha.7`，cachebuster 刷新为 `2.2.0-alpha.7+codex.20260719074927`。
+- `README.md`、P0/P2/P3/P5 runtime 和忽略的 `vsp-marp/` 均未修改。
+
+验证：
+
+- `python -m unittest discover -s tests -v`：138/138 通过；P6 问答测试为 19/19。
+- 新增缺失/空 `correct_answer` 无部分追加测试，以及 schema 1 → schema 2 混合日志续链测试；paper-state 集成夹具同步七字段后 stale 级联回归保持通过。
+- 用户提供的真实 3DGS 日志逐字解析通过：21/21 条 schema 1 session、末条 Q021；实际 workspace 的 log/head 验链通过，prepare 对已完成 quiz 正确拒绝，日志 SHA-256 前后保持 `ca7340bbb55bca04b87235f29437be7adbf2c8dac973f23748ac33db74c43d3b`。
+- `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
