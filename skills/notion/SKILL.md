@@ -1,11 +1,11 @@
 ---
 name: notion
-description: "Operate on Notion through the connected Notion MCP server. Use when the user invokes `/notion` or asks to search, read, create, update, move, comment on, organize, format, or query Notion pages and databases. Enforces fetch-before-write safety, schema-aware database changes, polished Notion page structure, and read-back verification."
+description: "Run Mary Workflow Notion operations through the connected Notion MCP server. Use when the user invokes `/mw-notion` or asks Mary Workflow to search, read, create, update, move, comment on, organize, format, or query Notion pages and databases. Enforces fetch-before-write safety, schema-aware database changes, polished Notion page structure, and read-back verification."
 ---
 
 # Notion
 
-Treat the text after `/notion` as the complete task. This command is independent of
+Treat the text after `/mw-notion` as the complete task. This profile is independent of
 `.mary-workflow/` and `.mary-research/`; do not require `/mw-init`, open a milestone,
 or mutate Mary state.
 
@@ -13,13 +13,13 @@ or mutate Mary state.
 
 Before the first Notion tool call in a task, read:
 
-1. `references/mcp-playbook.md` for tool discovery, target resolution, mutation safety,
+1. `references/notion-mcp-playbook.md` for tool discovery, target resolution, mutation safety,
    and verification.
-2. `references/page-craft.md` for page and database structure.
-3. `references/personal-rules.md` for workspace language, routing, and study boundaries.
+2. `references/notion-page-craft.md` for page and database structure.
+3. `references/notion-personal-rules.md` for workspace language, routing, and study boundaries.
 
 Also read `references/notion-markdown.md` before creating or changing page content.
-Read `references/task-profiles.md` only when the task involves cleanup, math, papers,
+Read `references/notion-task-profiles.md` only when the task involves cleanup, math, papers,
 slides, screenshots, study notes, deadlines, or another matching specialist profile.
 
 ## Execution Flow
@@ -81,4 +81,4 @@ slides, screenshots, study notes, deadlines, or another matching specialist prof
 
 Do not declare completion until the read-back proves that the requested content and
 properties exist, protected structures remain, and the applicable checklist in
-`references/page-craft.md` passes.
+`references/notion-page-craft.md` passes.

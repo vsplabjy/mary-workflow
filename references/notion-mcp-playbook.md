@@ -30,7 +30,7 @@
 
 1. Resolve the parent and check for an existing same-purpose page.
 2. Choose a title without a decorative leading emoji and set a semantic page icon.
-3. Select the matching skeleton from `page-craft.md`.
+3. Select the matching skeleton from `references/notion-page-craft.md`.
 4. Write coherent content in one operation when practical.
 5. Fetch the created page and verify parent, title, icon, body, links, and blocks.
 
@@ -70,7 +70,7 @@
 ## Attachments and Images
 
 - Do not invent a `file-X` reference or upload URL.
-- When cropping from a PDF, use `../roundtrip-screenshot/SKILL.md`: render, inspect the
+- When cropping from a PDF, use `skills/roundtrip-screenshot/SKILL.md`: render, inspect the
   full page, crop generously, inspect the crop, then upload/embed.
 - Place images next to the text they explain and include a caption.
 - Put a complete source PDF in the final source section when the task calls for it.

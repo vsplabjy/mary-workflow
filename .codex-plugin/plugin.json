@@ -1,6 +1,6 @@
 {
   "name": "mary-workflow",
-  "version": "2.2.0-alpha.7+codex.20260729154240",
+  "version": "2.2.0-alpha.7+codex.20260730132249",
   "description": "Cycle-aware project, learning, research-paper, and polished Notion MCP workflows for Codex.",
   "author": {
     "name": "Mary Workflow",
@@ -40,7 +40,7 @@
     "defaultPrompt": [
       "/mw-plan Plan this project request into milestones.",
       "/mw-paper read <paper URL>",
-      "/notion Organize this page and verify the result."
+      "/mw-notion Organize this page and verify the result."
     ],
     "brandColor": "#4F46E5",
     "screenshots": []

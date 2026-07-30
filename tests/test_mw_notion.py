@@ -8,30 +8,50 @@ import unittest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-class NotionCommandTests(unittest.TestCase):
+class MwNotionCommandTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.command = (REPO_ROOT / "commands/notion.md").read_text(encoding="utf-8")
+        self.command = (REPO_ROOT / "commands/mw-notion.md").read_text(encoding="utf-8")
         self.skill = (REPO_ROOT / "skills/notion/SKILL.md").read_text(encoding="utf-8")
         self.root_skill = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
         self.readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.references = REPO_ROOT / "skills/notion/references"
+        self.references = REPO_ROOT / "references"
 
-    def test_command_is_wired_without_mary_state_dependency(self) -> None:
+    def test_command_uses_mary_workflow_naming_and_layout(self) -> None:
         manifest = json.loads(
             (REPO_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
         )
 
-        self.assertIn("# /notion", self.command)
+        self.assertIn("# /mw-notion", self.command)
         self.assertIn("$ARGUMENTS", self.command)
-        self.assertIn("Do not require `.mary-workflow/`", self.command)
+        self.assertIn("does not require or mutate", self.command)
         self.assertIn("skills/notion/SKILL.md", self.command)
-        self.assertIn("`/notion`", self.root_skill)
+        self.assertIn("`/mw-notion`", self.root_skill)
         self.assertIn("skills/notion/SKILL.md", self.root_skill)
-        self.assertIn("`/notion [请求]`", self.readme)
+        self.assertIn("`/mw-notion [请求]`", self.readme)
         self.assertTrue(
-            any(prompt.startswith("/notion ") for prompt in manifest["interface"]["defaultPrompt"])
+            any(
+                prompt.startswith("/mw-notion ")
+                for prompt in manifest["interface"]["defaultPrompt"]
+            )
         )
         self.assertIn("notion", manifest["keywords"])
+        command_surface = "\n".join(
+            (
+                self.command,
+                self.skill,
+                self.root_skill,
+                self.readme,
+                json.dumps(manifest, ensure_ascii=False),
+            )
+        )
+        self.assertNotIn("# /notion", command_surface)
+        self.assertNotIn("`/notion`", command_surface)
+        self.assertFalse(
+            any(prompt.startswith("/notion ") for prompt in manifest["interface"]["defaultPrompt"])
+        )
+        self.assertFalse((REPO_ROOT / "commands/notion.md").exists())
+        self.assertFalse((REPO_ROOT / "skills/notion/agents").exists())
+        self.assertFalse((REPO_ROOT / "skills/notion/references").exists())
 
     def test_skill_enforces_notions_read_write_safety_boundary(self) -> None:
         normalized_skill = " ".join(self.skill.split())
@@ -50,13 +70,13 @@ class NotionCommandTests(unittest.TestCase):
 
     def test_exported_reference_contract_is_complete(self) -> None:
         expected = {
-            "mcp-playbook.md",
             "notion-markdown.md",
-            "page-craft.md",
-            "personal-rules.md",
-            "task-profiles.md",
+            "notion-mcp-playbook.md",
+            "notion-page-craft.md",
+            "notion-personal-rules.md",
+            "notion-task-profiles.md",
         }
-        self.assertEqual({path.name for path in self.references.glob("*.md")}, expected)
+        self.assertEqual({path.name for path in self.references.glob("notion-*.md")}, expected)
 
         combined = "\n".join(
             (self.references / name).read_text(encoding="utf-8") for name in sorted(expected)
@@ -78,9 +98,8 @@ class NotionCommandTests(unittest.TestCase):
     def test_skill_has_no_scaffold_placeholders(self) -> None:
         files = [
             REPO_ROOT / "skills/notion/SKILL.md",
-            REPO_ROOT / "skills/notion/agents/openai.yaml",
-            REPO_ROOT / "commands/notion.md",
-            *sorted(self.references.glob("*.md")),
+            REPO_ROOT / "commands/mw-notion.md",
+            *sorted(self.references.glob("notion-*.md")),
         ]
         combined = "\n".join(path.read_text(encoding="utf-8") for path in files)
         self.assertNotIn("TODO", combined)

@@ -128,7 +128,7 @@ multiple views, have their own pages, or need relations/rollups.
   a diagram. Quote node text containing special characters.
 - Embed a complete source PDF in the final source section when appropriate.
 - Use date mentions with the correct time zone for deadlines, not plain text dates.
-- Apply the math profile in `task-profiles.md`; keep complex equations out of tables.
+- Apply the math profile in `references/notion-task-profiles.md`; keep complex equations out of tables.
 
 ## Ordered-List Continuity
 

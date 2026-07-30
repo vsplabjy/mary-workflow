@@ -61,8 +61,8 @@ Classify before writing:
 
 Reuse an existing empty page when the user prepared one. Otherwise create/reuse the
 canonical course-hub child. Use `<course code> Lecture <N> - <topic>` consistently.
-Read `../slide-to-lecture/SKILL.md` for the Mary course profile when that profile is
-installed. For image extraction or redaction, read `../roundtrip-screenshot/SKILL.md`.
+Read `skills/slide-to-lecture/SKILL.md` for the Mary course profile when that profile is
+installed. For image extraction or redaction, read `skills/roundtrip-screenshot/SKILL.md`.
 
 Place each essential image next to its concept. For a PDF: render at high resolution,
 inspect the full page, crop slightly wide, trim/pad, inspect the crop, then upload and

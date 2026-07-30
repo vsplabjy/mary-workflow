@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
   short_description: "Run project, learning, paper, and Notion workflows"
-  default_prompt: "Use $mary-workflow for project milestones, learning, and paper workflows, or /notion for verified Notion MCP operations and polished pages."
+  default_prompt: "Use $mary-workflow for project milestones, learning, paper workflows, or /mw-notion for verified Notion MCP operations and polished pages."
 
 policy:
   allow_implicit_invocation: true
