@@ -1,4 +1,4 @@
-# Notion-Flavored Markdown
+# Notion-Flavored Markdown Reference
 
 Use this as the page-body syntax reference. The active Notion MCP tool schema remains
 authoritative when it documents a different wire format.

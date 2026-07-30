@@ -15,7 +15,7 @@ Mary Workflow 是一套面向 Codex 的项目工作流。它会先完整理解�
 - **课程自学**：ai辅助课程学习，完成Slide → Lecture，并处理课堂录音转写和课堂增量融合。
 - **考试复习**： 结合课程自学中的资料生成章节/总复习、错题本和模拟卷交付物。
 - **论文研读**：独立管理论文阅读状态，生成可追溯笔记、总结、Marp 汇报和来源约束问答。
-- **Notion 操作**：通过 `/notion` 搜索、读取、新建、修改、移动和整理页面/数据库，并按统一规范排版和回读校验。
+- **Notion 操作**：通过 `/mw-notion` 搜索、读取、新建、修改、移动和整理页面/数据库，并按统一规范排版和回读校验。
 
 ## 适用场景
 
@@ -37,7 +37,7 @@ Mary Workflow 可以用于：
 - 已安装并可正常使用 [Codex CLI](https://developers.openai.com/codex/cli/)
 - Git
 - Python 3.10 或更高版本
-- 使用 `/notion` 时，需要在 Codex 中配置并授权 Notion MCP 连接
+- 使用 `/mw-notion` 时，需要在 Codex 中配置并授权 Notion MCP 连接
 
 Mary Workflow 不需要安装额外的 Python 依赖。
 
@@ -142,17 +142,17 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 | `/mw-review`       | `/mw-exam` 的兼容别名                                             |
 | `/mw-slide`        | 只执行 Slide → Lecture 基础整理                                    |
 | `/mw-paper`        | 研读论文、生成总结/幻灯片并运行来源约束问答                         |
-| `/notion [请求]`   | 读取或修改 Notion，并按页面规范排版和回读验证                       |
+| `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
 
 ## 常用操作
 
 ### 操作 Notion
 
 ```text
-/notion 把本周项目复盘整理到“项目记录”页面，保留现有子页面，并补充下一步待办
+/mw-notion 把本周项目复盘整理到“项目记录”页面，保留现有子页面，并补充下一步待办
 ```
 
-`/notion` 不依赖 `/mw-init`。它会先确认当前 Notion MCP 工具和参数、搜索并读取目标，再执行最小范围修改；数据库写入前会读取真实 schema，修改后会回读页面或数据行确认结果。
+`/mw-notion` 使用和其他 Mary Workflow 命令相同的命名与加载方式，但不依赖 `/mw-init`。它会先确认当前 Notion MCP 工具和参数、搜索并读取目标，再执行最小范围修改；数据库写入前会读取真实 schema，修改后会回读页面或数据行确认结果。
 
 ### 查看进度
 

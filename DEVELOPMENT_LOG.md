@@ -724,10 +724,10 @@ Baseline commit: `0450129` - `P6 updated`
 - 用户提供的真实 3DGS 日志逐字解析通过：21/21 条 schema 1 session、末条 Q021；实际 workspace 的 log/head 验链通过，prepare 对已完成 quiz 正确拒绝，日志 SHA-256 前后保持 `ca7340bbb55bca04b87235f29437be7adbf2c8dac973f23748ac33db74c43d3b`。
 - `python -m py_compile`、root/paper skill validator、plugin validator 和 `git diff --check` 通过。
 
-### 2026-07-29 `/notion` MCP command and branch integration
+### 2026-07-29 `/mw-notion` MCP command and branch integration
 
 - Merged `origin/jy` into `shenby`, preserving the `shenby` Lecture/Exam profiles and the `jy` v2.2 paper pipeline, Marp assets, runtime, and tests.
-- Added the standalone `/notion <request>` command and `skills/notion/` entry point; Notion operations do not require `.mary-workflow/` or mutate Mary state.
+- Added the `/mw-notion <request>` command and `skills/notion/` entry point; Notion operations do not require `.mary-workflow/` or mutate Mary state.
 - Vendored MCP discovery, fetch-before-write, target resolution, database schema, protected-block, page-craft, Notion Markdown, personal workspace, and specialist task rules as exportable references.
 - Required sequential same-page updates and post-write fetch verification; unavailable/unauthorized MCP access must be reported instead of simulated.
 - Updated plugin metadata, root skill routing, README command documentation, and boundary tests.
@@ -737,4 +737,17 @@ Validation:
 
 - `python -m unittest discover -s tests`: 145/145 passed after the branch merge and Notion command addition.
 - Root/Notion skill validation, plugin validation, JSON parsing, and `git diff --check` passed.
-- A fresh-context `/notion` forward test found only a non-matching near-title page and correctly refused to write until the exact target is shared.
+- A fresh-context `/mw-notion` forward test found only a non-matching near-title page and correctly refused to write until the exact target is shared.
+
+### 2026-07-30 Notion command layout normalization
+
+- Standardized the command as `/mw-notion` with `commands/mw-notion.md`, matching every other Mary Workflow command.
+- Kept the command skill at `skills/notion/SKILL.md`, moved all shared Notion guidance to root `references/notion-*.md`, and removed the Notion-only nested `agents/` and `references/` directories.
+- Renamed the boundary test to `tests/test_mw_notion.py` and added assertions that reject the old unprefixed command and nonstandard nested layout.
+- Refreshed the plugin cachebuster with the official helper to `2.2.0-alpha.7+codex.20260730132249`.
+
+Validation:
+
+- `python -m unittest discover -s tests`: 145/145 passed.
+- Root/Notion skill validation, plugin validation, JSON parsing, and `git diff --check` passed.
+- A fresh-context read-only `/mw-notion` run loaded the moved references, refused an ambiguous near-title match, and performed no write.

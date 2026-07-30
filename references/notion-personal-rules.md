@@ -1,4 +1,4 @@
-# Personal Workspace Rules
+# Notion Personal Workspace Rules
 
 Apply these rules to content written in the user's personal Notion workspace. Explicit
 instructions in the current request take precedence.
