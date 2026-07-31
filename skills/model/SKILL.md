@@ -7,6 +7,8 @@ description: Configure and switch the Codex model provider between the existing 
 
 Use this skill for `/mw-model`.
 
+Important: Codex reads `model` and `model_provider` when a session starts. This skill cannot hot-switch the model of the session that is currently answering. Run the Fish command from a separate terminal, or let the helper finish and then start a new Codex session.
+
 Run the repository helper from the installed Mary Workflow path:
 
 ```bash
@@ -19,7 +21,18 @@ Supported operations:
 - `/mw-model use deepseek`: select `deepseek-v4-flash` through the DeepSeek Responses API.
 - `/mw-model use vsp`: restore the top-level model settings captured before DeepSeek was enabled.
 - `/mw-model status`: show the active provider and model without exposing credentials.
-- `/mw-model install-shell`: install the Fish function and completion explicitly.
+- `/mw-model install-shell`: detect the current shell and install the command plus completion explicitly.
+
+On the first `/mw-init`, Mary Workflow detects `$SHELL` and installs the integration automatically. It is idempotent, so a later `/mw-init` repairs a missing integration without duplicating shell configuration. Fish uses autoloaded functions and completions; Bash and Zsh use a marked block in `~/.bashrc` or `~/.zshrc`.
+
+Recommended terminal workflow:
+
+```fish
+mw-model use deepseek
+codex
+```
+
+To return to VSP, exit the current Codex session first, then run `mw-model use vsp` and start `codex` again. `$mary-workflow:mw-model` only invokes this skill; it is not itself a live model switch.
 
 DeepSeek's current Responses API only supports `deepseek-v4-flash`; do not select `deepseek-v4-pro` until the provider documentation confirms it is available.
 

@@ -2413,8 +2413,10 @@ def cmd_init(args: argparse.Namespace) -> int:
             suffix = "已按当前 init.ignore 与 .maryignore 刷新机器探测。"
         else:
             suffix = "state 保持不变。"
+        shell_setup = install_shell_integration()
         print(f"Mary Workflow 已初始化，已刷新 {refreshed} 个核心 prompt；{suffix}")
         print_status(state, read_config(root).get("language", "zh"))
+        print(shell_setup)
         print("下一步：渲染 /mw-init 理解上下文；简报 complete 后才能运行 /mw-plan。")
         return 0
 

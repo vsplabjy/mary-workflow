@@ -12,6 +12,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
+import shlex
 import shutil
 import tempfile
 from typing import Any
@@ -403,6 +405,13 @@ def status() -> None:
     provider = current.get("model_provider", "(未设置)")
     print(f"Codex 当前 provider: {provider}")
     print(f"Codex 当前 model: {model}")
+    normalized_provider = provider.strip('"')
+    normalized_model = model.strip('"')
+    if normalized_provider == DEEPSEEK_PROVIDER and normalized_model not in {
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    }:
+        print("警告：DeepSeek provider 与当前 model 不匹配；请运行 mw-model use deepseek。")
     print(f"DeepSeek catalog: {'已安装' if models_path().exists() else '未安装'}")
 
 
@@ -410,31 +419,96 @@ def _fish_quote(value: str) -> str:
     return "'" + value.replace("'", "\\'") + "'"
 
 
+def _write_if_changed(path: Path, content: str) -> bool:
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _rc_block(path: Path, content: str, marker: str) -> bool:
+    begin = f"# >>> {marker} >>>"
+    end = f"# <<< {marker} <<<"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    pattern = re.compile(rf"(?ms)^{re.escape(begin)}$.*?^{re.escape(end)}$\n?")
+    block = f"{begin}\n{content.rstrip()}\n{end}\n"
+    if pattern.search(existing):
+        updated = pattern.sub(block, existing, count=1)
+    else:
+        separator = "" if not existing or existing.endswith("\n\n") else "\n"
+        updated = existing + separator + block
+    if updated == existing:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def install_shell_integration(force: bool = False) -> str:
     shell = Path(os.environ.get("SHELL", "")).name
-    fish = shutil.which("fish")
-    if shell != "fish" and not force:
-        return f"未安装 Fish 命令：当前 SHELL={shell or '(unknown)'}。可手动运行 /mw-model install-shell。"
-    if not fish:
-        return "未安装 Fish 命令：系统中没有找到 fish。"
-    fish_root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "fish"
-    function_path = fish_root / "functions" / "mw-model.fish"
-    completion_path = fish_root / "completions" / "mw-model.fish"
+    config_root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
     script = str(Path(__file__).resolve())
-    function_path.parent.mkdir(parents=True, exist_ok=True)
-    completion_path.parent.mkdir(parents=True, exist_ok=True)
-    function_path.write_text(
-        "function mw-model --description 'Switch Codex between VSP and DeepSeek'\n"
-        f"    command python3 {_fish_quote(script)} $argv\n"
-        "end\n",
-        encoding="utf-8",
-    )
-    completion_path.write_text(
-        "complete -c mw-model -f -n '__fish_use_subcommand' -a 'status use install-shell'\n"
-        "complete -c mw-model -f -n '__fish_seen_subcommand_from use' -a 'deepseek vsp'\n",
-        encoding="utf-8",
-    )
-    return f"已安装 Fish 命令 mw-model 及补全：{function_path}"
+    if shell == "fish":
+        if not shutil.which("fish"):
+            return "检测到 Fish，但系统中没有找到 fish 可执行文件。"
+        fish_root = config_root / "fish"
+        function_path = fish_root / "functions" / "mw-model.fish"
+        completion_path = fish_root / "completions" / "mw-model.fish"
+        _write_if_changed(
+            function_path,
+            "function mw-model --description 'Switch Codex between VSP and DeepSeek'\n"
+            f"    command python3 {_fish_quote(script)} $argv\n"
+            "end\n",
+        )
+        _write_if_changed(
+            completion_path,
+            "complete -c mw-model -f -n '__fish_use_subcommand' -a 'status configure use install-shell'\n"
+            "complete -c mw-model -f -n '__fish_seen_subcommand_from use' -a 'deepseek vsp'\n",
+        )
+        return f"已检测 shell=fish，并配置 mw-model 及补全：{function_path}"
+
+    if shell == "bash":
+        bashrc = Path.home() / ".bashrc"
+        content = (
+            "mw_model() { command python3 "
+            f"{shlex.quote(script)} \"$@\"; }}\n"
+            "alias mw-model=mw_model\n"
+            "_mw_model_complete() {\n"
+            "    local current=\"${COMP_WORDS[COMP_CWORD]}\"\n"
+            "    if [[ ${COMP_CWORD} -eq 1 ]]; then\n"
+            "        COMPREPLY=( $(compgen -W 'status configure use install-shell' -- \"$current\") )\n"
+            "    elif [[ ${COMP_CWORD} -eq 2 && ${COMP_WORDS[1]} == use ]]; then\n"
+            "        COMPREPLY=( $(compgen -W 'deepseek vsp' -- \"$current\") )\n"
+            "    fi\n"
+            "}\n"
+            "complete -F _mw_model_complete mw-model"
+        )
+        _rc_block(bashrc, content, "mary-workflow mw-model")
+        return f"已检测 shell=bash，并配置 mw-model：{bashrc}（新终端生效）"
+
+    if shell == "zsh":
+        zshrc = Path.home() / ".zshrc"
+        content = (
+            "mw_model() { command python3 "
+            f"{shlex.quote(script)} \"$@\"; }}\n"
+            "alias mw-model=mw_model\n"
+            "_mw_model() {\n"
+            "    if (( CURRENT == 2 )); then\n"
+            "        compadd status configure use install-shell\n"
+            "    elif [[ $words[2] == use ]]; then\n"
+            "        compadd deepseek vsp\n"
+            "    fi\n"
+            "}\n"
+            "(( $+functions[compdef] )) && compdef _mw_model mw-model"
+        )
+        _rc_block(zshrc, content, "mary-workflow mw-model")
+        return f"已检测 shell=zsh，并配置 mw-model：{zshrc}（新终端生效）"
+
+    if force and shutil.which("fish"):
+        os.environ["SHELL"] = "fish"
+        return install_shell_integration()
+    return f"当前 shell={shell or '(unknown)'}，未写入 shell 配置；支持 fish、bash、zsh。"
 
 
 def build_parser() -> argparse.ArgumentParser:

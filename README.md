@@ -179,6 +179,10 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 
 DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可；也可以只对单次启动使用 `codex -c 'model_provider="deepseek"' -m deepseek-v4-flash`，不会修改默认 VSP 配置。
 
+`$mary-workflow:mw-model` 是 Codex 技能调用，不是热切换接口。正在运行的 Codex 会话不会改变模型；请退出当前会话，在 Fish 中切换后重新启动 Codex。
+
+Mary Workflow 第一次执行 `/mw-init` 时会检测 `$SHELL`，自动配置 `mw-model` 和补全：Fish 写入 `~/.config/fish/`，Bash 写入 `~/.bashrc`，Zsh 写入 `~/.zshrc`。后续 `/mw-init` 会幂等修复缺失配置。
+
 ### 暂停和继续
 
 ```text
