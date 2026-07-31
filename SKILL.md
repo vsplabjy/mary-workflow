@@ -25,6 +25,7 @@ User-facing command surface:
 - `/mw-slide`: run the direct Slide to Lecture preparation profile.
 - `/mw-paper`: manage independent paper states, produce validated notes/summaries/slides, and run append-only expert Q&A without plan/run authorization.
 - `/mw-notion`: execute a natural-language Notion MCP request with fetch-before-write safety, page-craft rules, and read-back verification.
+- `/mw-model`: configure or switch Codex between the existing VSP provider and DeepSeek Responses API.
 
 ## Runtime Rules
 
@@ -72,6 +73,7 @@ Autocomplete is surfaced through command-specific sub-skills under `skills/`:
 - `skills/roundtrip-screenshot/SKILL.md` -> image/PDF crop verification when needed
 - `skills/paper/SKILL.md` -> `/mw-paper`
 - `skills/notion/SKILL.md` -> `/mw-notion`
+- `skills/model/SKILL.md` -> `/mw-model`
 
 Command Markdown files also live under `commands/` for clients that support file-based command loading.
 
