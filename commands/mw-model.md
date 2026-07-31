@@ -11,7 +11,7 @@ Run the model provider helper:
 python ~/.codex/skills/mary-workflow/scripts/mw_model.py $ARGUMENTS
 ```
 
-Use `configure` first to migrate the DeepSeek provider from OpenCode while keeping VSP as the default. Use `use deepseek` or `use vsp` only when changing the default for future Codex sessions. Never print the API key.
+Use `configure` to create the DeepSeek provider structure. Manually add `# experimental_bearer_token = "sk-..."` inside its provider block, then use `use deepseek` or `use vsp` to change the default for future Codex sessions. Python comments the inactive provider section and keeps its key in the config. Never print the API key.
 
 Provider/model changes are read at Codex startup and do not affect the current session. For a reliable switch, run `mw-model use deepseek` or `mw-model use vsp` in Fish after exiting Codex, then start a new `codex` session.
 

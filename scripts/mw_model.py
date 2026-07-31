@@ -17,11 +17,16 @@ import shlex
 import shutil
 import tempfile
 from typing import Any
+import tomllib
 
 
 DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PROVIDER = "deepseek"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/"
+DEFAULT_MODEL_BASE_INSTRUCTIONS = (
+    "You are Codex, a coding agent based on GPT-5. "
+    "You and the user share the same workspace and collaborate to achieve the user's goals."
+)
 MANAGED_TOP_LEVEL_KEYS = {
     "model",
     "model_provider",
@@ -63,62 +68,37 @@ def state_path() -> Path:
     return codex_home() / STATE_FILENAME
 
 
-def _strip_jsonc_comments(text: str) -> str:
-    result: list[str] = []
-    index = 0
-    in_string = False
-    escaped = False
-    while index < len(text):
-        char = text[index]
-        if in_string:
-            result.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
+def read_configured_deepseek_api_key(config: Path) -> str | None:
+    """Read the key recorded in Codex's active or commented provider block."""
+    if not config.exists():
+        return None
+    try:
+        payload = tomllib.loads(config.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    provider = payload.get("model_providers", {}).get(DEEPSEEK_PROVIDER, {})
+    key = provider.get("experimental_bearer_token")
+    if isinstance(key, str) and key.strip():
+        return key.strip()
+
+    in_provider = False
+    for line in config.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        section_header = stripped[1:].lstrip() if stripped.startswith("#") else stripped
+        if section_header.startswith("["):
+            in_provider = section_header == f"[model_providers.{DEEPSEEK_PROVIDER}]"
             continue
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-        elif text[index : index + 2] == "//":
-            newline = text.find("\n", index)
-            if newline == -1:
-                break
-            result.append("\n")
-            index = newline + 1
-        elif text[index : index + 2] == "/*":
-            end = text.find("*/", index + 2)
-            if end == -1:
-                raise ValueError("Unterminated JSONC block comment")
-            index = end + 2
-        else:
-            result.append(char)
-            index += 1
-    return "".join(result)
-
-
-def read_deepseek_api_key(opencode_path: Path | None = None) -> str:
-    configured_path = opencode_path or (
-        Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
-        / "opencode"
-        / "opencode.jsonc"
-    )
-    if configured_path.exists():
-        payload = json.loads(_strip_jsonc_comments(configured_path.read_text(encoding="utf-8")))
-        provider = payload.get("provider", {}).get(DEEPSEEK_PROVIDER, {})
-        key = provider.get("options", {}).get("apiKey")
-        if isinstance(key, str) and key.strip():
-            return key.strip()
-    key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-    if key:
-        return key
-    raise SystemExit(
-        f"没有找到 DeepSeek API key。请检查 {configured_path}，或设置 DEEPSEEK_API_KEY。"
-    )
+        if not in_provider:
+            continue
+        uncommented = stripped[1:].lstrip() if stripped.startswith("#") else stripped
+        if not uncommented.startswith("experimental_bearer_token"):
+            continue
+        try:
+            value = tomllib.loads(uncommented).get("experimental_bearer_token")
+        except tomllib.TOMLDecodeError:
+            return None
+        return value.strip() if isinstance(value, str) and value.strip() else None
+    return None
 
 
 def _top_level_key(line: str) -> str | None:
@@ -169,7 +149,8 @@ def _replace_config(
     while index < len(lines):
         line = lines[index]
         stripped = line.strip()
-        if stripped.startswith("["):
+        section_header = stripped[1:].lstrip() if stripped.startswith("#") else stripped
+        if section_header.startswith("["):
             if (
                 provider_block
                 and current_section == "[model_providers.vsp_lab_api]"
@@ -179,7 +160,7 @@ def _replace_config(
                     new_lines.pop()
                 new_lines.extend(["", *provider_block, ""])
                 provider_inserted = True
-            if stripped == "[model_providers.deepseek]":
+            if section_header == "[model_providers.deepseek]" and provider_block is not None:
                 index += 1
                 while index < len(lines) and not lines[index].lstrip().startswith("["):
                     index += 1
@@ -187,7 +168,7 @@ def _replace_config(
                 while new_lines and not new_lines[-1].strip():
                     new_lines.pop()
                 continue
-            current_section = stripped
+            current_section = section_header
         new_lines.append(line)
         index += 1
 
@@ -205,6 +186,69 @@ def _replace_config(
         os.fsync(handle.fileno())
     os.chmod(temporary, mode)
     os.replace(temporary, path)
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = path.stat().st_mode if path.exists() else 0o600
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary, mode)
+    os.replace(temporary, path)
+
+
+def _set_provider_section_active(config: Path, provider: str, active: bool) -> None:
+    """Comment or uncomment one provider section without changing its values."""
+    if not config.exists():
+        return
+    lines = config.read_text(encoding="utf-8").splitlines()
+    target_header = f"[model_providers.{provider}]"
+    in_target = False
+    changed = False
+    updated: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        section_header = stripped[1:].lstrip() if stripped.startswith("#") else stripped
+        if section_header.startswith("["):
+            is_target = section_header == target_header
+            in_target = is_target
+            if is_target and active and stripped.startswith("#"):
+                indentation = line[: len(line) - len(line.lstrip())]
+                updated.append(indentation + section_header)
+                changed = True
+            elif is_target and not active and not stripped.startswith("#"):
+                indentation = line[: len(line) - len(line.lstrip())]
+                updated.append(indentation + "# " + line.lstrip())
+                changed = True
+            else:
+                updated.append(line)
+            continue
+        if not in_target:
+            updated.append(line)
+            continue
+        if active:
+            if line.lstrip().startswith("#"):
+                indentation = line[: len(line) - len(line.lstrip())]
+                uncommented = line.lstrip()[1:]
+                if uncommented.startswith(" "):
+                    uncommented = uncommented[1:]
+                updated.append(indentation + uncommented)
+                changed = True
+            else:
+                updated.append(line)
+        else:
+            if line.strip() and not line.lstrip().startswith("#"):
+                indentation = line[: len(line) - len(line.lstrip())]
+                updated.append(indentation + "# " + line.lstrip())
+                changed = True
+            else:
+                updated.append(line)
+    if not changed:
+        return
+    _write_text_atomic(config, "\n".join(updated) + "\n")
 
 
 def _write_json_atomic(path: Path, payload: Any) -> None:
@@ -228,7 +272,10 @@ def _model_entry(slug: str, display_name: str, description: str, priority: int) 
         "apply_patch_tool_type": "freeform",
         "web_search_tool_type": "text",
         "input_modalities": ["text"],
+        "supports_image_detail_original": False,
         "supports_parallel_tool_calls": True,
+        "supports_reasoning_summaries": True,
+        "supports_search_tool": False,
         "tool_mode": None,
         "multi_agent_version": "v2",
         "use_responses_lite": False,
@@ -238,6 +285,10 @@ def _model_entry(slug: str, display_name: str, description: str, priority: int) 
         "max_context_window": 1048576,
         "effective_context_window_percent": 95,
         "auto_compact_token_limit": None,
+        "base_instructions": DEFAULT_MODEL_BASE_INSTRUCTIONS,
+        "model_messages": None,
+        "truncation_policy": {"mode": "tokens", "limit": 10000},
+        "experimental_supported_tools": [],
         "reasoning_summary_format": "experimental",
         "default_reasoning_summary": "none",
         "display_name": display_name,
@@ -316,25 +367,40 @@ def _deepseek_assignments() -> dict[str, str]:
     }
 
 
+def _deepseek_provider_block(config: Path) -> list[str]:
+    block = [
+        "[model_providers.deepseek]",
+        'name = "deepseek"',
+        f'base_url = "{DEEPSEEK_BASE_URL}"',
+        'wire_api = "responses"',
+    ]
+    api_key = read_configured_deepseek_api_key(config)
+    if api_key:
+        block.append(f"experimental_bearer_token = {_toml_string(api_key)}")
+    else:
+        block.append('# Add manually: experimental_bearer_token = "sk-..."')
+    return block
+
+
 def switch_deepseek(config: Path | None = None, state: Path | None = None, catalog: Path | None = None) -> None:
     target_config = config or config_path()
     target_state = state or state_path()
     target_catalog = catalog or models_path()
-    api_key = read_deepseek_api_key()
+    api_key = read_configured_deepseek_api_key(target_config)
+    if not api_key:
+        raise SystemExit(
+            "Codex 配置中没有 DeepSeek API key。请先运行 mw-model configure 完成一次迁移。"
+        )
     _save_original_state(target_config, target_state)
     write_model_catalog(target_catalog)
     _replace_config(
         target_config,
         _deepseek_assignments(),
         MANAGED_TOP_LEVEL_KEYS | DEEPSEEK_CONFLICT_KEYS,
-        [
-            "[model_providers.deepseek]",
-            'name = "deepseek"',
-            f'base_url = "{DEEPSEEK_BASE_URL}"',
-            'wire_api = "responses"',
-            f"experimental_bearer_token = {_toml_string(api_key)}",
-        ],
+        _deepseek_provider_block(target_config),
     )
+    _set_provider_section_active(target_config, "vsp_lab_api", False)
+    _set_provider_section_active(target_config, DEEPSEEK_PROVIDER, True)
     print(f"已切换到 DeepSeek：{DEEPSEEK_MODEL}（API key 未输出）")
 
 
@@ -343,7 +409,6 @@ def configure_deepseek(config: Path | None = None, state: Path | None = None, ca
     target_config = config or config_path()
     target_state = state or state_path()
     target_catalog = catalog or models_path()
-    api_key = read_deepseek_api_key()
     _save_original_state(target_config, target_state)
     write_model_catalog(target_catalog)
     current = _current_top_level(target_config)
@@ -359,13 +424,7 @@ def configure_deepseek(config: Path | None = None, state: Path | None = None, ca
         target_config,
         {key: current[key] for key in assignment_order if key in current},
         MANAGED_TOP_LEVEL_KEYS,
-        [
-            "[model_providers.deepseek]",
-            'name = "deepseek"',
-            f'base_url = "{DEEPSEEK_BASE_URL}"',
-            'wire_api = "responses"',
-            f"experimental_bearer_token = {_toml_string(api_key)}",
-        ],
+        _deepseek_provider_block(target_config),
     )
     print("已在 Codex 中添加/更新 DeepSeek provider；当前默认模型保持不变。")
 
@@ -394,8 +453,12 @@ def switch_vsp(config: Path | None = None, state: Path | None = None) -> None:
         target_config,
         assignments,
         MANAGED_TOP_LEVEL_KEYS | DEEPSEEK_CONFLICT_KEYS,
+        # Keep the DeepSeek provider and its recorded key available for the
+        # next switch. Only the top-level active provider changes here.
         None,
     )
+    _set_provider_section_active(target_config, "vsp_lab_api", True)
+    _set_provider_section_active(target_config, DEEPSEEK_PROVIDER, False)
     print(f"已切换回 VSP：{assignments['model']}")
 
 
@@ -412,6 +475,7 @@ def status() -> None:
         "deepseek-v4-pro",
     }:
         print("警告：DeepSeek provider 与当前 model 不匹配；请运行 mw-model use deepseek。")
+    print(f"DeepSeek API key: {'已配置' if read_configured_deepseek_api_key(config_path()) else '未配置（请手动填写）'}")
     print(f"DeepSeek catalog: {'已安装' if models_path().exists() else '未安装'}")
 
 
