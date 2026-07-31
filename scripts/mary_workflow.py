@@ -32,6 +32,7 @@ from mw_runtime import (
     parse_json_payload as parse_runtime_json_payload,
     require_json_object,
 )
+from mw_model import install_shell_integration
 
 
 WORKFLOW_DIR = ".mary-workflow"
@@ -2438,11 +2439,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     write_state(root, state)
     write_project_brief(root, state)
     append_log(root, "initialized workflow v2.1")
+    shell_setup = install_shell_integration()
 
     print(f"已初始化 {WORKFLOW_DIR} v2.1，写入 {len(prompts)} 个 prompt。")
     print(f"项目理解简报：{root / BRIEF_FILE}")
     print("机器探测骨架已生成；接下来必须完成三遍全量理解并提交 submit_brief。")
     print("后续 plan/run 默认使用中文。若希望改为 auto 或 en，请告诉我，我会写入 config.yaml 的 output.language。")
+    print(shell_setup)
     print("下一步：继续 /mw-init 理解流程；简报 complete 后再运行 /mw-plan。")
     if seeded:
         print(f"Seeded {seeded} core prompt(s).")

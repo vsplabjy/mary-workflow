@@ -143,6 +143,7 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 | `/mw-slide`        | 只执行 Slide → Lecture 基础整理                                    |
 | `/mw-paper`        | 研读论文、生成总结/幻灯片并运行来源约束问答                         |
 | `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
+| `/mw-model [操作]`  | 配置或切换 VSP 与 DeepSeek Responses API                            |
 
 ## 常用操作
 
@@ -159,6 +160,24 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 ```text
 /mw-status
 ```
+
+### 切换 Codex 模型
+
+首次使用先执行：
+
+```text
+/mw-model configure
+```
+
+这会从现有 OpenCode 配置迁移 DeepSeek provider，并保持 VSP 为默认模型。之后可以使用：
+
+```text
+/mw-model use deepseek
+/mw-model use vsp
+/mw-model status
+```
+
+DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可；也可以只对单次启动使用 `codex -c 'model_provider="deepseek"' -m deepseek-v4-flash`，不会修改默认 VSP 配置。
 
 ### 暂停和继续
 
