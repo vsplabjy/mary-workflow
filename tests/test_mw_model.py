@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -12,7 +13,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from mw_model import configure_deepseek, switch_deepseek, switch_vsp  # noqa: E402
+from mw_model import configure_deepseek, install_shell_integration, switch_deepseek, switch_vsp  # noqa: E402
 
 
 class ModelProviderTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class ModelProviderTests(unittest.TestCase):
         self.config = root / "config.toml"
         self.state = root / "mary-workflow-model.json"
         self.catalog = root / "models.json"
-        self.config.write_text( 
+        self.config.write_text(
             "model_provider = \"vsp_lab_api\"\n"
             "model = \"gpt-5.6-luna\"\n"
             "model_reasoning_effort = \"high\"\n"
@@ -74,6 +75,28 @@ class ModelProviderTests(unittest.TestCase):
         self.assertIn('model = "gpt-5.6-luna"', vsp_text)
         self.assertIn("model_context_window = 1000000", vsp_text)
         self.assertIn("model_auto_compact_token_limit = 900000", vsp_text)
+
+    def test_first_init_shell_setup_detects_fish_and_is_idempotent(self) -> None:
+        config_root = Path(self.tempdir.name) / "config"
+        environment = {"SHELL": "/usr/bin/fish", "XDG_CONFIG_HOME": str(config_root)}
+        with mock.patch.dict(os.environ, environment), mock.patch("mw_model.shutil.which", return_value="/usr/bin/fish"):
+            first = install_shell_integration()
+            second = install_shell_integration()
+        completion = (config_root / "fish/completions/mw-model.fish").read_text(encoding="utf-8")
+        self.assertIn("shell=fish", first)
+        self.assertIn("shell=fish", second)
+        self.assertIn("configure", completion)
+        self.assertEqual(completion.count("complete -c mw-model"), 2)
+
+    def test_first_init_shell_setup_detects_bash_and_updates_rc_once(self) -> None:
+        home = Path(self.tempdir.name) / "home"
+        environment = {"SHELL": "/bin/bash", "XDG_CONFIG_HOME": str(home / ".config")}
+        with mock.patch.dict(os.environ, environment), mock.patch("mw_model.Path.home", return_value=home):
+            install_shell_integration()
+            install_shell_integration()
+        bashrc = (home / ".bashrc").read_text(encoding="utf-8")
+        self.assertEqual(bashrc.count("# >>> mary-workflow mw-model >>>"), 1)
+        self.assertIn("complete -F _mw_model_complete mw-model", bashrc)
 
 
 if __name__ == "__main__":

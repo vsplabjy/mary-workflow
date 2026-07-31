@@ -48,6 +48,7 @@ User-facing command surface:
 11. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion.
 12. P6 prioritizes paper-understanding questions grounded in P3.5 Method claims, permits only scientific-content P2 uncertainties as conditional follow-ups, requires one such Uxx only when that catalog is non-empty, excludes parse-quality uncertainties from the question pool, and archives Question, User answer, four-value Judgment, source-grounded Correct answer, and Paper sources in one append-only `quiz-log.md` under a verified hash chain.
 13. `/mw-notion` uses the standard Mary command/skill/reference layout but remains independent of milestone and paper state. It requires an authorized Notion MCP connection, inspects live tool schemas, fetches existing targets before writes, applies the Notion references, and verifies mutations by fetching the result again.
+14. The first `/mw-init` detects the current terminal shell and installs the `mw-model` command integration idempotently for Fish, Bash, or Zsh.
 
 ## Memory Model
 
