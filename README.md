@@ -41,8 +41,6 @@ Mary Workflow 可以用于：
 
 Mary Workflow 不需要安装额外的 Python 依赖。
 
-（补充兼容性验证：后续已参考本机 OpenCode 配置在 OpenCode + DeepSeek 环境中试跑成功，配置为 `model: deepseek/deepseek-v4-pro`、provider `deepseek`、baseURL `https://api.deepseek.com`、`@opencode-ai/plugin` 1.17.7；这属于后续兼容性试跑环境，不是 Mary Workflow 一开始的原生开发环境。）
-
 ### 安装到 Codex
 
 在终端执行：
@@ -169,7 +167,7 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 /mw-model configure
 ```
 
-这会从现有 OpenCode 配置迁移 DeepSeek provider，并保持 VSP 为默认模型。之后可以使用：
+这会创建完整 DeepSeek provider 结构并保持 VSP 为默认模型，不会自动填写 key。请手动在 DeepSeek 段加入 `# experimental_bearer_token = "sk-..."`；之后 Python 切换器会注释不用的 provider 段、解除目标段注释。
 
 ```text
 /mw-model use deepseek
@@ -177,7 +175,7 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 /mw-model status
 ```
 
-DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可；也可以只对单次启动使用 `codex -c 'model_provider="deepseek"' -m deepseek-v4-flash`，不会修改默认 VSP 配置。
+DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可。
 
 `$mary-workflow:mw-model` 是 Codex 技能调用，不是热切换接口。正在运行的 Codex 会话不会改变模型；请退出当前会话，在 Fish 中切换后重新启动 Codex。
 

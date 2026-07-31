@@ -17,9 +17,9 @@ python ~/.codex/skills/mary-workflow/scripts/mw_model.py status
 
 Supported operations:
 
-- `/mw-model configure`: read the existing OpenCode DeepSeek provider, add or update `[model_providers.deepseek]` in `~/.codex/config.toml`, write `~/.codex/models.json`, and preserve the current default provider.
-- `/mw-model use deepseek`: select `deepseek-v4-flash` through the DeepSeek Responses API.
-- `/mw-model use vsp`: restore the top-level model settings captured before DeepSeek was enabled.
+- `/mw-model configure`: add or update `[model_providers.deepseek]` in `~/.codex/config.toml`, write `~/.codex/models.json`, and preserve the current default provider. It never fills the API key automatically.
+- `/mw-model use deepseek`: select `deepseek-v4-flash` through the DeepSeek Responses API, uncommenting the DeepSeek provider block and using its recorded key.
+- `/mw-model use vsp`: restore the top-level model settings and uncomment the VSP provider block while commenting the DeepSeek provider block.
 - `/mw-model status`: show the active provider and model without exposing credentials.
 - `/mw-model install-shell`: detect the current shell and install the command plus completion explicitly.
 
@@ -35,5 +35,7 @@ codex
 To return to VSP, exit the current Codex session first, then run `mw-model use vsp` and start `codex` again. `$mary-workflow:mw-model` only invokes this skill; it is not itself a live model switch.
 
 DeepSeek's current Responses API only supports `deepseek-v4-flash`; do not select `deepseek-v4-pro` until the provider documentation confirms it is available.
+
+Run mw-model configure once to create the complete DeepSeek provider structure. Then manually add the key as a commented line inside the DeepSeek block: `# experimental_bearer_token = "sk-..."`. Provider sections remain in the file; the Python switcher comments the inactive provider section and preserves its key.
 
 The API key must remain outside the repository and must never be printed in user-facing output.

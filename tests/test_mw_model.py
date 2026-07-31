@@ -44,14 +44,13 @@ class ModelProviderTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_configure_keeps_vsp_default_and_places_provider_after_vsp(self) -> None:
-        with mock.patch("mw_model.read_deepseek_api_key", return_value="sk-test"):
-            configure_deepseek(self.config, self.state, self.catalog)
+        configure_deepseek(self.config, self.state, self.catalog)
         text = self.config.read_text(encoding="utf-8")
         self.assertIn('model_provider = "vsp_lab_api"', text)
         self.assertIn('model = "gpt-5.6-luna"', text)
         self.assertLess(text.index("[model_providers.vsp_lab_api]"), text.index("[model_providers.deepseek]"))
         self.assertLess(text.index("[model_providers.deepseek]"), text.index('[projects."/tmp/project"]'))
-        self.assertIn('experimental_bearer_token = "sk-test"', text)
+        self.assertIn('# Add manually: experimental_bearer_token = "sk-..."', text)
         self.assertIn("model_context_window = 1000000", text)
         with self.config.open("rb") as handle:
             parsed = tomllib.load(handle)
@@ -59,11 +58,20 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(parsed["model_providers"]["deepseek"]["wire_api"], "responses")
         catalog = json.loads(self.catalog.read_text(encoding="utf-8"))
         self.assertEqual({item["slug"] for item in catalog["models"]}, {"deepseek-v4-flash", "deepseek-v4-pro"})
+        for item in catalog["models"]:
+            self.assertIn("base_instructions", item)
+            self.assertIn("truncation_policy", item)
+            self.assertIn("experimental_supported_tools", item)
+            self.assertIn("supports_reasoning_summaries", item)
 
     def test_switch_round_trip_restores_vsp_settings(self) -> None:
-        with mock.patch("mw_model.read_deepseek_api_key", return_value="sk-test"):
-            configure_deepseek(self.config, self.state, self.catalog)
-            switch_deepseek(self.config, self.state, self.catalog)
+        configure_deepseek(self.config, self.state, self.catalog)
+        text = self.config.read_text(encoding="utf-8").replace(
+            '# Add manually: experimental_bearer_token = "sk-..."',
+            '# experimental_bearer_token = "sk-test"',
+        )
+        self.config.write_text(text, encoding="utf-8")
+        switch_deepseek(self.config, self.state, self.catalog)
         deepseek_text = self.config.read_text(encoding="utf-8")
         self.assertIn('model_provider = "deepseek"', deepseek_text)
         self.assertIn('model = "deepseek-v4-flash"', deepseek_text)
@@ -75,6 +83,28 @@ class ModelProviderTests(unittest.TestCase):
         self.assertIn('model = "gpt-5.6-luna"', vsp_text)
         self.assertIn("model_context_window = 1000000", vsp_text)
         self.assertIn("model_auto_compact_token_limit = 900000", vsp_text)
+        self.assertIn("# [model_providers.deepseek]", vsp_text)
+        self.assertIn('# experimental_bearer_token = "sk-test"', vsp_text)
+
+    def test_switch_deepseek_uses_key_recorded_in_codex_config(self) -> None:
+        configure_deepseek(self.config, self.state, self.catalog)
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8").replace(
+                '# Add manually: experimental_bearer_token = "sk-..."',
+                '# experimental_bearer_token = "sk-manual"',
+            ),
+            encoding="utf-8",
+        )
+        switch_vsp(self.config, self.state)
+        switch_deepseek(self.config, self.state, self.catalog)
+        self.assertIn(
+            'experimental_bearer_token = "sk-manual"',
+            self.config.read_text(encoding="utf-8"),
+        )
+
+    def test_switch_deepseek_requires_key_in_codex_config(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "Codex 配置中没有 DeepSeek API key"):
+            switch_deepseek(self.config, self.state, self.catalog)
 
     def test_first_init_shell_setup_detects_fish_and_is_idempotent(self) -> None:
         config_root = Path(self.tempdir.name) / "config"
