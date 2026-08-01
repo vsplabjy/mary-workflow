@@ -16,6 +16,8 @@ READING_MARKER = "<!-- mary-reading:v1 -->"
 READING_SUMMARY_FILE = "reading-summary.md"
 READING_SUMMARY_MARKER = "<!-- mary-reading-summary:v1 -->"
 NOTION_READING_MARKER = "<!-- mary-notion-paper-reading:v1 -->"
+NOTION_ENGLISH_ORIGINAL_MARKER = "<!-- mary-notion-paper-english-original:v1 -->"
+NOTION_ENGLISH_ORIGINAL_TITLE = "English original"
 
 SUMMARY_SECTION_HEADINGS = (
     "一句话概括",
@@ -146,20 +148,20 @@ def validate_reading_summary(workspace: Path) -> dict[str, Any]:
 
 
 def render_notion_reading_page(reading_markdown: str, summary_markdown: str) -> str:
-    """Build the ordered Notion body: English original first, Chinese guide second."""
-    english = strip_document_title(reading_markdown, READING_MARKER)
+    """Build the parent Notion page body, leaving the English original to a child page."""
     chinese = strip_document_title(summary_markdown, READING_SUMMARY_MARKER)
-    if not english:
-        raise PaperReadingError("reading.md has no body to place in Notion.")
     if not chinese:
         raise PaperReadingError("reading-summary.md has no body to place in Notion.")
     return (
         f"{NOTION_READING_MARKER}\n\n"
-        "<details color=\"gray_bg\">\n"
-        "<summary>English original</summary>\n\n"
-        f"{english}\n\n"
-        "</details>\n\n"
-        "---\n\n"
         "## 中文概括\n\n"
         f"{chinese}\n"
     )
+
+
+def render_notion_english_original_page(reading_markdown: str) -> str:
+    """Build the complete English-original child page without its local document H1."""
+    english = strip_document_title(reading_markdown, READING_MARKER)
+    if not english:
+        raise PaperReadingError("reading.md has no body to place in Notion.")
+    return f"{NOTION_ENGLISH_ORIGINAL_MARKER}\n\n{english}\n"

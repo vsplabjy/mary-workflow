@@ -42,11 +42,17 @@ source continues to use the existing single-source path.
 
 The file must retain `<!-- mary-reading:v1 -->` and should be edited into a
 coherent paper document. The default profile is `.mary-research/reading-profile.md`.
+`/mw-init` seeds it from the versioned `defaults/reading-profile.md` only when
+the project copy is absent. The project copy is the active authority and can be
+committed with the project; later init runs do not overwrite it.
 
 - Keep the main prose in English and preserve original technical names,
   equations, citations, measurements, and figure/table numbers.
-- Add Chinese translation in parentheses at first useful use for difficult
-  terminology, methods, or sentences, not as a full Chinese translation.
+- Apply `.mary-research/reading-profile.md` as the authoritative rule for what
+  needs Chinese help. Put concise Chinese immediately after the relevant
+  English, and use a following Chinese paragraph when the profile calls for a
+  fuller explanation; do not annotate routine material within the learner
+  baseline.
 - Explain the reason for a method, its information flow, and the important
   trade-off when the paper assumes specialist knowledge.
 - Separate source facts from intuition and extensions; never add unsupported
@@ -94,11 +100,12 @@ After `reading.md`, `reading-summary.md`, and `paper-notes.md` pass validation:
    `本科学习` -> `科研 / 项目` -> `读论文`. Set a semantic book/research icon
    and preserve the paper title as the Notion title rather than repeating it as
    an H1 in the body.
-5. Write one Notion-flavored body in this order: a collapsed `English original`
-   block containing the full `reading.md` body, then the Chinese guide from
-   `reading-summary.md` under `## 中文概括`. Remove each local document's marker
-   and H1, preserve equations and empty Open question blocks, and never invent
-   media URLs. The English original must precede the Chinese guide.
+5. Make the paper page contain the Chinese guide from `reading-summary.md` under
+   `## 中文概括`. Create or reuse one child page named `English original` and put
+   the complete `reading.md` body there. Do not use a toggle or collapsed block
+   for the English original. Remove each local document's marker and H1,
+   preserve equations and empty Open question blocks, and never invent media
+   URLs.
 6. Follow `skills/notion/SKILL.md`: inspect live MCP schemas, fetch every
    existing target before changing it, write a page sequentially, preserve
    protected structures, and perform the final read-back.

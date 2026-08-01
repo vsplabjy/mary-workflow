@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import re
 import sys
 from typing import Any
+import unicodedata
 
 from mw_paper_artifacts import (
     NORMALIZED_SOURCE_FILE,
@@ -153,6 +154,80 @@ def derive_paper_id(source_locator: object, source_fingerprint: object) -> str:
         return normalize_paper_id(arxiv_id)
     fingerprint = normalize_fingerprint(source_fingerprint, "source fingerprint")
     return f"local-{fingerprint[:16]}"
+
+
+def acquisition_title(acquisition: JsonObject) -> str:
+    """Return the source-declared title when it is suitable for a workspace name."""
+    metadata = acquisition.get("reading_metadata")
+    title = metadata.get("title") if isinstance(metadata, dict) else ""
+    if not str(title or "").strip():
+        normalized = str(acquisition.get("normalized_source") or "")
+        match = re.search(r"^#[ \t]+(.+?)[ \t]*#*[ \t]*$", normalized, flags=re.MULTILINE)
+        title = match.group(1) if match else ""
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip()
+    if cleaned.lower() in {"", "untitled paper", "paper reading draft"}:
+        return ""
+    return cleaned
+
+
+def title_paper_id(title: object) -> str | None:
+    """Make a stable, readable ASCII id from a parsed paper title."""
+    normalized = unicodedata.normalize("NFKD", str(title or ""))
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.replace("&", " and ")
+    normalized = re.sub(r"[^A-Za-z0-9]+", "-", normalized).strip("-").lower()
+    if len(normalized) < 3:
+        return None
+    return normalized[:128].rstrip("-.") or None
+
+
+def source_matching_paper_id(project_root: Path, locator: str, fingerprint: str) -> str | None:
+    """Find an existing workspace for precisely the acquired source revision."""
+    for candidate in list_paper_ids(project_root):
+        state = read_paper_state(project_root, candidate)
+        source = state["source"]
+        if source["locator"] == locator and source["fingerprint"] == fingerprint:
+            return state["paper_id"]
+    return None
+
+
+def available_title_paper_id(project_root: Path, title: str, fingerprint: str) -> str | None:
+    base = title_paper_id(title)
+    if base is None:
+        return None
+    candidate = base
+    target = paper_directory(project_root, candidate)
+    if not target.exists():
+        return candidate
+    suffix = f"-{fingerprint[:8]}"
+    candidate = f"{base[:128 - len(suffix)].rstrip('-._')}{suffix}"
+    if not paper_directory(project_root, candidate).exists():
+        return candidate
+    return None
+
+
+def rename_paper_workspace(project_root: Path, state: PaperState, target_id: str) -> PaperState:
+    """Migrate an automatically created legacy workspace to its parsed title."""
+    root = Path(project_root).resolve()
+    old_id = state["paper_id"]
+    canonical_target = normalize_paper_id(target_id)
+    if old_id == canonical_target:
+        return state
+    source = paper_directory(root, old_id)
+    target = paper_directory(root, canonical_target)
+    if source.is_symlink() or target.is_symlink():
+        raise PaperError("Paper workspaces must not be symlinks during a title migration.")
+    if not source.is_dir():
+        raise PaperError(f"Paper workspace is missing during title migration: {source}")
+    if target.exists():
+        raise PaperError(f"Cannot rename paper workspace because target already exists: {target}")
+    source.rename(target)
+    migrated = copy.deepcopy(state)
+    migrated["paper_id"] = canonical_target
+    migrated["updated_at"] = now_iso()
+    write_paper_state(root, migrated)
+    append_paper_log(root, canonical_target, f"renamed workspace from {old_id} using parsed paper title")
+    return migrated
 
 
 def require_source_identity(paper_id: str, source_locator: str) -> None:
@@ -782,15 +857,41 @@ def prepare_read(
     except PaperReadError as exc:
         raise PaperError(str(exc)) from exc
     source_fingerprint = acquisition["report"]["source"]["fingerprint"]
+    parsed_title = acquisition_title(acquisition)
+    automatic_title_id = (
+        source_locator is not None and paper_id is None and extract_arxiv_id(locator) is None
+    )
+    if existing_state is None and automatic_title_id:
+        matching_id = source_matching_paper_id(root, locator, source_fingerprint)
+        if matching_id is not None:
+            existing_state = read_paper_state(root, matching_id)
     canonical_id = (
         existing_state["paper_id"]
         if existing_state is not None
         else normalize_paper_id(paper_id)
         if paper_id is not None
+        else (
+            available_title_paper_id(root, parsed_title, source_fingerprint)
+            or derive_paper_id(locator, source_fingerprint)
+        )
+        if automatic_title_id
         else derive_paper_id(locator, source_fingerprint)
     )
     if existing_state is None and paper_state_path(root, canonical_id).is_file():
         existing_state = read_paper_state(root, canonical_id)
+
+    # Older automatic folder imports used a hash-only id. Upgrade that workspace
+    # in place once the LaTeX/HTML title has been parsed, while preserving lineage.
+    if (
+        automatic_title_id
+        and existing_state is not None
+        and existing_state["paper_id"].startswith("local-")
+        and parsed_title
+    ):
+        desired_id = available_title_paper_id(root, parsed_title, source_fingerprint)
+        if desired_id is not None and desired_id != existing_state["paper_id"]:
+            existing_state = rename_paper_workspace(root, existing_state, desired_id)
+            canonical_id = desired_id
 
     if existing_state is None:
         state, _ = create_paper(root, locator, source_fingerprint, canonical_id)

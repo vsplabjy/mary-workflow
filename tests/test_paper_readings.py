@@ -22,6 +22,9 @@ from mw_paper_readings import (  # noqa: E402
     PaperReadingError,
     READING_SUMMARY_FILE,
     READING_SUMMARY_MARKER,
+    NOTION_ENGLISH_ORIGINAL_MARKER,
+    NOTION_ENGLISH_ORIGINAL_TITLE,
+    render_notion_english_original_page,
     render_notion_reading_page,
     validate_reading_summary,
 )
@@ -139,9 +142,16 @@ class PaperReadingTests(unittest.TestCase):
                 summary,
             )
             self.assertNotIn("# Folder Fixture", notion)
-            self.assertLess(notion.index("English original"), notion.index("## 中文概括"))
-            self.assertIn("English body.", notion)
+            self.assertNotIn("<details", notion)
+            self.assertNotIn("English body.", notion)
+            self.assertIn("## 中文概括", notion)
             self.assertIn("信息流与关键步骤", notion)
+            english_original = render_notion_english_original_page(
+                "<!-- mary-reading:v1 -->\n\n# Folder Fixture\n\n## Method\n\nEnglish body.\n"
+            )
+            self.assertIn(NOTION_ENGLISH_ORIGINAL_MARKER, english_original)
+            self.assertEqual(NOTION_ENGLISH_ORIGINAL_TITLE, "English original")
+            self.assertIn("English body.", english_original)
 
     def test_folder_read_keeps_machine_files_in_artifacts_and_requires_guide(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
