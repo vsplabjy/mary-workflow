@@ -41,7 +41,10 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 - `paper_id` is a canonical, path-safe lowercase id with at most 128 characters.
 - arXiv locators normalize to `arxiv-<identifier>`, retaining an explicit `vN` revision when present.
 - Changing an arXiv locator to a different identifier or `vN` revision requires a separate paper workspace.
-- non-arXiv inputs default to `local-<first-16-source-sha256>`.
+- local folder/HTML/PDF inputs with a parsed paper title default to a readable
+  lowercase title slug; the SHA-256 fallback is used only when no usable title
+  is available. Existing automatic `local-<first-16-source-sha256>` workspaces
+  are migrated to that title slug on the next `prepare-read` for the same source.
 - path separators, `..`, and non-canonical ids are rejected.
 
 ## Fingerprints
