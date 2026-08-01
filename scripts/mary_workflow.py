@@ -1898,7 +1898,8 @@ def seed_core_prompts(root: Path, overwrite: bool = False) -> int:
     if not source_dir.exists():
         return 0
     count = 0
-    for source in sorted(source_dir.glob("mw-*.md"), key=prompt_sort_key):
+    core_prompts = [*source_dir.glob("mw-*.md"), source_dir / "slide-learning.md"]
+    for source in sorted((path for path in core_prompts if path.is_file()), key=prompt_sort_key):
         target = target_dir / source.name
         if target.exists() and not overwrite:
             continue

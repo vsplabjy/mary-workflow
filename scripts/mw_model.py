@@ -319,11 +319,8 @@ def write_model_catalog(path: Path) -> None:
         except (OSError, json.JSONDecodeError):
             pass
     models = [item for item in payload["models"] if not str(item.get("slug", "")).startswith("deepseek-")]
-    models.extend(
-        [
-            _model_entry(DEEPSEEK_MODEL, "DeepSeek-V4-Flash", "Latest frontier agentic coding model.", 1),
-            _model_entry("deepseek-v4-pro", "DeepSeek-V4-Pro", "Most capable frontier agentic coding model.", 2),
-        ]
+    models.append(
+        _model_entry(DEEPSEEK_MODEL, "DeepSeek-V4-Flash", "DeepSeek Responses API model.", 1)
     )
     payload["models"] = models
     _write_json_atomic(path, payload)
@@ -341,10 +338,19 @@ def _read_state(path: Path) -> dict[str, Any]:
 
 def _save_original_state(config: Path, state: Path) -> dict[str, Any]:
     existing = _read_state(state)
-    if existing.get("original_top_level"):
-        return existing
     lines = config.read_text(encoding="utf-8").splitlines() if config.exists() else []
-    original = {key: value for key, value in _leading_assignments(lines).items() if key in MANAGED_TOP_LEVEL_KEYS or key in DEEPSEEK_CONFLICT_KEYS}
+    current = _leading_assignments(lines)
+    current_provider = current.get("model_provider", "").strip().strip('"').strip("'")
+    if existing.get("original_top_level") and current_provider != "vsp_lab_api":
+        return existing
+
+    original = {
+        key: value
+        for key, value in current.items()
+        if key in MANAGED_TOP_LEVEL_KEYS or key in DEEPSEEK_CONFLICT_KEYS
+    }
+    if not original and existing.get("original_top_level"):
+        return existing
     payload = {"version": 1, "original_top_level": original}
     _write_json_atomic(state, payload)
     return payload

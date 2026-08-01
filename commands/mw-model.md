@@ -15,4 +15,6 @@ Use `configure` to create the DeepSeek provider structure. Manually add `# exper
 
 Provider/model changes are read at Codex startup and do not affect the current session. For a reliable switch, run `mw-model use deepseek` or `mw-model use vsp` in Fish after exiting Codex, then start a new `codex` session.
 
+For the VS Code Codex sidebar, run `Developer: Reload Window` after the helper finishes. The extension keeps an app-server alive, so starting a new sidebar chat does not reload `~/.codex/config.toml`.
+
 The first `/mw-init` detects the current `$SHELL` and installs `mw-model` plus completion for Fish, Bash, or Zsh. Run `/mw-model install-shell` to repair the integration manually.

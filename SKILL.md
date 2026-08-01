@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/`, course Lecture learning and ExamPass review profiles, the v2.2 research-paper pipeline from `.mary-research/`, and schema-aware Notion MCP operations. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, `/mw-slide`, `/mw-paper`, or `/mw-notion`; asks to run Mary Workflow; or needs course learning, exam review, paper reading, grounded summaries, group-meeting slides, source-grounded paper Q&A, or polished Notion page/database work.
+description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/`, course Lecture learning and ExamPass review profiles, the v2.2 research-paper pipeline from `.mary-research/`, and schema-aware Notion MCP operations. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, `/slide-learning`, `/mw-paper`, or `/mw-notion`; asks to run Mary Workflow; or needs course learning, exam review, paper reading, grounded summaries, group-meeting slides, source-grounded paper Q&A, or polished Notion page/database work.
 ---
 
 # Mary Workflow
@@ -22,7 +22,7 @@ User-facing command surface:
 - `/mw-learn`: run the Course Lecture learning profile based on `skills/lecture-learning/`.
 - `/mw-exam`: run the ExamPass review profile based on `skills/exam-review/`.
 - `/mw-review`: compatibility alias for `/mw-exam`.
-- `/mw-slide`: run the direct Slide to Lecture preparation profile.
+- `/slide-learning`: run the direct Slide to Lecture preparation profile.
 - `/mw-paper`: manage independent paper states, produce validated notes/summaries/slides, and run append-only expert Q&A without plan/run authorization.
 - `/mw-notion`: execute a natural-language Notion MCP request with fetch-before-write safety, page-craft rules, and read-back verification.
 - `/mw-model`: configure or switch Codex between the existing VSP provider and DeepSeek Responses API.
@@ -71,7 +71,7 @@ Autocomplete is surfaced through command-specific sub-skills under `skills/`:
 - `skills/cycle/SKILL.md` -> `/mw-cycle`
 - `skills/lecture-learning/SKILL.md` -> `/mw-learn`
 - `skills/exam-review/SKILL.md` -> `/mw-exam`
-- `skills/slide-to-lecture/SKILL.md` -> `/mw-slide` and the Lecture learning Stage 1
+- `skills/slide-to-lecture/SKILL.md` -> `/slide-learning` and the Lecture learning Stage 1
 - `skills/roundtrip-screenshot/SKILL.md` -> image/PDF crop verification when needed
 - `skills/paper/SKILL.md` -> `/mw-paper`
 - `skills/notion/SKILL.md` -> `/mw-notion`

@@ -894,6 +894,8 @@ class WorkflowBoundaryTests(unittest.TestCase):
         config = read_config(workflow)
         self.assertIn("output/**", config["init_ignore"])
         self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
+        self.assertTrue((workflow / "prompts/slide-learning.md").is_file())
+        self.assertFalse((workflow / "prompts/mw-slide.md").exists())
         self.assertTrue((workflow / "analysis").is_dir())
         reading_profile = fresh / ".mary-research/reading-profile.md"
         self.assertTrue(reading_profile.is_file())
@@ -916,7 +918,7 @@ class WorkflowBoundaryTests(unittest.TestCase):
             ("mw-learn", "mw-learn.md", "Course Learning Profile"),
             ("mw-exam", "mw-exam.md", "ExamPass Profile"),
             ("mw-review", "mw-exam.md", "ExamPass Profile"),
-            ("mw-slide", "mw-slide.md", "Slide Profile"),
+            ("slide-learning", "slide-learning.md", "Slide Learning Profile"),
         ):
             phase, prompt = prompt_path_for(self.project, alias)
             self.assertEqual(phase, "PLANNING")
