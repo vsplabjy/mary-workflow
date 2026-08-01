@@ -138,7 +138,7 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 | `/mw-learn`        | 启动或继续 Lecture 学习：Course Hub、slides、录音转写和课堂增量融合 |
 | `/mw-exam`         | 启动或继续考试复习：范围、模式、复习页、错题本和模拟卷              |
 | `/mw-review`       | `/mw-exam` 的兼容别名                                             |
-| `/mw-slide`        | 只执行 Slide → Lecture 基础整理                                    |
+| `/slide-learning`  | 只执行 Slide → Lecture 基础整理                                    |
 | `/mw-paper`        | 研读论文、生成总结/幻灯片并运行来源约束问答                         |
 | `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
 | `/mw-model [操作]`  | 配置或切换 VSP 与 DeepSeek Responses API                            |

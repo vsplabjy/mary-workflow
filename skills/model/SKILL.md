@@ -7,7 +7,7 @@ description: Configure and switch the Codex model provider between the existing 
 
 Use this skill for `/mw-model`.
 
-Important: Codex reads `model` and `model_provider` when a session starts. This skill cannot hot-switch the model of the session that is currently answering. Run the Fish command from a separate terminal, or let the helper finish and then start a new Codex session.
+Important: Codex reads `model` and `model_provider` when its app-server starts. This skill cannot hot-switch an already running session. After a terminal switch, start a new Codex session. After a switch for the VS Code sidebar, run `Developer: Reload Window` in VS Code; creating a new sidebar chat is not sufficient because the extension keeps one app-server process alive.
 
 Run the repository helper from the installed Mary Workflow path:
 
@@ -32,7 +32,7 @@ mw-model use deepseek
 codex
 ```
 
-To return to VSP, exit the current Codex session first, then run `mw-model use vsp` and start `codex` again. `$mary-workflow:mw-model` only invokes this skill; it is not itself a live model switch.
+To return to VSP, exit the current Codex session first, then run `mw-model use vsp` and start `codex` again. For the VS Code sidebar, reload the VS Code window after the helper finishes. `$mary-workflow:mw-model` only invokes this skill; it is not itself a live model switch.
 
 DeepSeek's current Responses API only supports `deepseek-v4-flash`; do not select `deepseek-v4-pro` until the provider documentation confirms it is available.
 

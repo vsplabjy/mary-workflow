@@ -57,12 +57,29 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(parsed["model_provider"], "vsp_lab_api")
         self.assertEqual(parsed["model_providers"]["deepseek"]["wire_api"], "responses")
         catalog = json.loads(self.catalog.read_text(encoding="utf-8"))
-        self.assertEqual({item["slug"] for item in catalog["models"]}, {"deepseek-v4-flash", "deepseek-v4-pro"})
+        self.assertEqual({item["slug"] for item in catalog["models"]}, {"deepseek-v4-flash"})
         for item in catalog["models"]:
             self.assertIn("base_instructions", item)
             self.assertIn("truncation_policy", item)
             self.assertIn("experimental_supported_tools", item)
             self.assertIn("supports_reasoning_summaries", item)
+
+    def test_switch_deepseek_refreshes_saved_vsp_settings(self) -> None:
+        configure_deepseek(self.config, self.state, self.catalog)
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8")
+            .replace('model = "gpt-5.6-luna"', 'model = "gpt-5.6-terra"')
+            .replace(
+                '# Add manually: experimental_bearer_token = "sk-..."',
+                '# experimental_bearer_token = "sk-test"',
+            ),
+            encoding="utf-8",
+        )
+
+        switch_deepseek(self.config, self.state, self.catalog)
+        switch_vsp(self.config, self.state)
+
+        self.assertIn('model = "gpt-5.6-terra"', self.config.read_text(encoding="utf-8"))
 
     def test_switch_round_trip_restores_vsp_settings(self) -> None:
         configure_deepseek(self.config, self.state, self.catalog)

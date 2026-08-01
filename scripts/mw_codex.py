@@ -30,7 +30,7 @@ SPECIALIZED_PROMPTS = {
     "mw-learn": "mw-learn.md",
     "mw-exam": "mw-exam.md",
     "mw-review": "mw-exam.md",
-    "mw-slide": "mw-slide.md",
+    "slide-learning": "slide-learning.md",
 }
 
 
@@ -83,7 +83,7 @@ def prompt_path_for(root: Path, alias: str) -> tuple[str, Path | None]:
             "mw-plan",
             "mw-run",
             "mw-review",
-            "mw-slide",
+            "slide-learning",
             "mw-status",
         ]
     )
@@ -354,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
             "mw-learn",
             "mw-exam",
             "mw-review",
-            "mw-slide",
+            "slide-learning",
         ],
         help="Slash alias without the leading slash",
     )
