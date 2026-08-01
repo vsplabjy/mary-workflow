@@ -24,7 +24,7 @@ from mw_paper_artifacts import (
     artifact_path,
     resolve_artifact_path,
 )
-from mw_paper_readings import PaperReadingError, validate_reading_summary
+from mw_paper_readings import PaperReadingError, validate_reading_document, validate_reading_summary
 from mw_runtime import (
     EnvelopeError,
     action_envelope_parts,
@@ -586,15 +586,15 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
             raise PaperError(f"Could not inspect parse-quality.json for reading artifacts: {exc}") from exc
         source_payload = report_payload.get("source") if isinstance(report_payload, dict) else {}
         if isinstance(source_payload, dict) and source_payload.get("input_kind") == "folder":
-            reading_path = workspace / "reading.md"
-            if not reading_path.is_file() or "<!-- mary-reading:v1 -->" not in reading_path.read_text(encoding="utf-8"):
-                raise PaperError("Folder-backed read requires a learner-facing reading.md with the mary-reading:v1 marker.")
             try:
+                reading_document = validate_reading_document(workspace)
                 reading_summary = validate_reading_summary(workspace)
             except PaperReadingError as exc:
                 raise PaperError(str(exc)) from exc
             metadata["reading_artifact"] = "reading.md"
-            metadata["reading_fingerprint"] = sha256_file(reading_path)
+            metadata["reading_fingerprint"] = reading_document["fingerprint"]
+            metadata["reading_annotations"] = reading_document["annotations"]
+            metadata["reading_chinese_characters"] = reading_document["chinese_characters"]
             metadata["reading_summary_artifact"] = reading_summary["artifact"]
             metadata["reading_summary_fingerprint"] = reading_summary["fingerprint"]
             metadata["source_manifest"] = SOURCE_MANIFEST_FILE

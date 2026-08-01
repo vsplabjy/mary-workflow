@@ -97,7 +97,7 @@ in_progress|complete|failed|stale --reset_stage--> pending
 
 A complete stage must be reset before rerun. Dependencies must be complete before a stage starts.
 
-The `read` stage has an additional P2 completion gate: `artifact` must be `paper-notes.md`, its byte fingerprint must match `output_fingerprint`, and the ledger must pass `references/paper-notes-contract.md`. For folder-backed sources, a marker-bearing `reading.md` and complete `reading-summary.md` must also pass `references/paper-reading-contract.md`. A successful read stores parse-quality and reading-artifact metadata.
+The `read` stage has an additional P2 completion gate: `artifact` must be `paper-notes.md`, its byte fingerprint must match `output_fingerprint`, and the ledger must pass `references/paper-notes-contract.md`. For folder-backed sources, `reading.md` must have meaningful Chinese parenthetical annotations plus empty Open question / Reader notes blocks, and the complete `reading-summary.md` must also pass `references/paper-reading-contract.md`. A successful read stores parse-quality and reading-artifact metadata.
 
 The `summary` stage has a P3.5 completion gate: `artifact` remains `summary.md`, while the stage output fingerprint covers both `summary.md` and `artifacts/summary-ledger.json`. The article must pass the three-section and bidirectional-anchor rules; every direct ledger claim must pass `references/summary-contract.md`, and its evidence and locators must resolve against the current source index.
 

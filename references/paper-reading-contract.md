@@ -49,17 +49,23 @@ committed with the project; later init runs do not overwrite it.
 - Keep the main prose in English and preserve original technical names,
   equations, citations, measurements, and figure/table numbers.
 - Apply `.mary-research/reading-profile.md` as the authoritative rule for what
-  needs Chinese help. Put concise Chinese immediately after the relevant
-  English, and use a following Chinese paragraph when the profile calls for a
-  fuller explanation; do not annotate routine material within the learner
-  baseline.
+  needs Chinese help. Preserve the full English original and append Chinese
+  only in parentheses immediately after the relevant English span. A detailed
+  explanation may use a longer or multiline parenthetical annotation after its
+  English passage; it must never replace English or become a standalone Chinese
+  paragraph. Do not annotate routine material within the learner baseline.
+- Before editing, inspect every section and deliberately select the spans that
+  need help under that profile. A generated LaTeX/PDF draft is not deliverable
+  unchanged, and `complete-read` rejects a document without meaningful Chinese
+  parenthetical annotations, including rejecting Chinese outside such
+  annotations. Do not turn `reading.md` into a full translation.
 - Explain the reason for a method, its information flow, and the important
   trade-off when the paper assumes specialist knowledge.
 - Separate source facts from intuition and extensions; never add unsupported
   results or background claims.
-- At genuinely difficult or unresolved points, retain an empty `Open question`
-  block so the learner can add a question later. Do not fill it with invented
-  explanation.
+- Retain empty `Open question` and `Reader notes` blocks at the end so the
+  learner can record questions, connections, and conclusions after reading;
+  do not fill them with invented explanation.
 - Keep figures as exact numbered caption/asset references unless a real inspected
   image is available. Never invent a URL for a local asset.
 
@@ -100,12 +106,12 @@ After `reading.md`, `reading-summary.md`, and `paper-notes.md` pass validation:
    `本科学习` -> `科研 / 项目` -> `读论文`. Set a semantic book/research icon
    and preserve the paper title as the Notion title rather than repeating it as
    an H1 in the body.
-5. Make the paper page contain the Chinese guide from `reading-summary.md` under
-   `## 中文概括`. Create or reuse one child page named `English original` and put
-   the complete `reading.md` body there. Do not use a toggle or collapsed block
-   for the English original. Remove each local document's marker and H1,
-   preserve equations and empty Open question blocks, and never invent media
-   URLs.
+5. Create or reuse one child page named `Original paper` before writing the
+   Chinese guide, and put the complete annotated `reading.md` body there. Then
+   make the paper page contain the Chinese guide from `reading-summary.md` under
+   `## 中文概括`. Do not use a toggle or collapsed block for the child page.
+   Remove each local document's marker and H1, preserve equations and empty
+   Open question / Reader notes blocks, and never invent media URLs.
 6. Follow `skills/notion/SKILL.md`: inspect live MCP schemas, fetch every
    existing target before changing it, write a page sequentially, preserve
    protected structures, and perform the final read-back.

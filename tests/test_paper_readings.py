@@ -22,10 +22,11 @@ from mw_paper_readings import (  # noqa: E402
     PaperReadingError,
     READING_SUMMARY_FILE,
     READING_SUMMARY_MARKER,
-    NOTION_ENGLISH_ORIGINAL_MARKER,
-    NOTION_ENGLISH_ORIGINAL_TITLE,
-    render_notion_english_original_page,
+    NOTION_ORIGINAL_PAPER_MARKER,
+    NOTION_ORIGINAL_PAPER_TITLE,
+    render_notion_original_paper_page,
     render_notion_reading_page,
+    validate_reading_document,
     validate_reading_summary,
 )
 from mw_paper_sources import sha256_file  # noqa: E402
@@ -124,6 +125,18 @@ def write_notes(workspace: Path) -> None:
     )
 
 
+def annotate_reading(workspace: Path) -> None:
+    path = workspace / "reading.md"
+    text = path.read_text(encoding="utf-8")
+    text += """
+
+The method first creates an intermediate representation（这里先把原始输入转换成更适合后续模块处理的中间表示；它的作用是把复杂信息组织成可学习的形式，而不是直接得到最终答案。）
+
+The objective constrains both reconstruction and temporal consistency（这个训练目标同时要求输出接近观测结果，并限制相邻时刻的变化不要互相矛盾；前者保证重建质量，后者减少动态场景中的不稳定。）
+"""
+    path.write_text(text, encoding="utf-8")
+
+
 class PaperReadingTests(unittest.TestCase):
     def test_summary_requires_chinese_method_detail_and_renders_notion_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -146,12 +159,12 @@ class PaperReadingTests(unittest.TestCase):
             self.assertNotIn("English body.", notion)
             self.assertIn("## 中文概括", notion)
             self.assertIn("信息流与关键步骤", notion)
-            english_original = render_notion_english_original_page(
+            original_paper = render_notion_original_paper_page(
                 "<!-- mary-reading:v1 -->\n\n# Folder Fixture\n\n## Method\n\nEnglish body.\n"
             )
-            self.assertIn(NOTION_ENGLISH_ORIGINAL_MARKER, english_original)
-            self.assertEqual(NOTION_ENGLISH_ORIGINAL_TITLE, "English original")
-            self.assertIn("English body.", english_original)
+            self.assertIn(NOTION_ORIGINAL_PAPER_MARKER, original_paper)
+            self.assertEqual(NOTION_ORIGINAL_PAPER_TITLE, "Original paper")
+            self.assertIn("English body.", original_paper)
 
     def test_folder_read_keeps_machine_files_in_artifacts_and_requires_guide(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -177,13 +190,28 @@ class PaperReadingTests(unittest.TestCase):
             }
             with self.assertRaises(SystemExit) as rejection:
                 apply_paper_action(project, state["paper_id"], payload)
+            self.assertIn("Chinese parenthetical annotations", str(rejection.exception))
+
+            annotate_reading(workspace)
+            with self.assertRaises(SystemExit) as rejection:
+                apply_paper_action(project, state["paper_id"], payload)
             self.assertIn("reading-summary.md still contains a draft placeholder", str(rejection.exception))
 
             (workspace / READING_SUMMARY_FILE).write_text(completed_summary(), encoding="utf-8")
+            reading_path = workspace / "reading.md"
+            annotated_reading = reading_path.read_text(encoding="utf-8")
+            reading_path.write_text(annotated_reading + "\n\n这段中文不能替换英文原文。\n", encoding="utf-8")
+            with self.assertRaisesRegex(PaperReadingError, "only inside parenthetical annotations"):
+                validate_reading_document(workspace)
+
+            reading_path.write_text(annotated_reading, encoding="utf-8")
+            reading_validation = validate_reading_document(workspace)
+            self.assertGreaterEqual(reading_validation["annotations"], 2)
             completed = apply_paper_action(project, state["paper_id"], payload)
             metadata = completed["stages"]["read"]["metadata"]
             self.assertEqual(metadata["reading_summary_artifact"], READING_SUMMARY_FILE)
             self.assertEqual(len(metadata["reading_summary_fingerprint"]), 64)
+            self.assertGreaterEqual(metadata["reading_annotations"], 2)
 
 
 if __name__ == "__main__":
