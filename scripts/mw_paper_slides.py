@@ -13,6 +13,12 @@ import subprocess
 import tempfile
 from typing import Any
 
+from mw_paper_artifacts import (
+    SLIDES_CONTEXT_FILE,
+    SOURCE_LOCATOR_FILE,
+    artifact_path,
+    resolve_artifact_path,
+)
 from mw_paper_locators import SourceLocatorError, validate_source_locator_index
 from mw_paper_sources import sha256_file
 from mw_paper_summary import (
@@ -27,7 +33,6 @@ from mw_runtime import atomic_write_text
 
 SLIDES_CONTEXT_SCHEMA = 1
 SLIDES_FILE = "slides.md"
-SLIDES_CONTEXT_FILE = "slides-context.json"
 FIGURES_DIR = "figures"
 THEME_NAME = "mary-shanghaitech-red"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -306,7 +311,7 @@ def build_slides_context(
             source_fingerprint=source_fingerprint,
             read_output_fingerprint=read_output_fingerprint,
         )
-        ledger = load_summary_ledger(directory / SUMMARY_LEDGER_FILE)
+        ledger = load_summary_ledger(resolve_artifact_path(directory, SUMMARY_LEDGER_FILE))
     except PaperSummaryError as exc:
         raise PaperSlidesError(str(exc)) from exc
     if summary_validation["summary_bundle_fingerprint"] != summary_output_fingerprint:
@@ -352,7 +357,7 @@ def build_slides_context(
             },
             "summary_bundle": {"fingerprint": summary_output_fingerprint},
             "source_locators": {
-                "artifact": "source-locators.json",
+                "artifact": SOURCE_LOCATOR_FILE,
                 "fingerprint": locator_fingerprint,
             },
         },
@@ -395,7 +400,7 @@ def write_slides_context(
         summary_output_fingerprint=summary_output_fingerprint,
     )
     atomic_write_text(
-        directory / SLIDES_CONTEXT_FILE,
+        artifact_path(directory, SLIDES_CONTEXT_FILE, create_parent=True),
         json.dumps(context, ensure_ascii=False, indent=2) + "\n",
     )
     (directory / FIGURES_DIR).mkdir(exist_ok=True)
@@ -411,7 +416,7 @@ def validate_slides_context(
     read_output_fingerprint: str,
     summary_output_fingerprint: str,
 ) -> tuple[JsonObject, str]:
-    context_path = Path(workspace) / SLIDES_CONTEXT_FILE
+    context_path = resolve_artifact_path(workspace, SLIDES_CONTEXT_FILE)
     if not context_path.is_file():
         raise PaperSlidesError(f"{SLIDES_CONTEXT_FILE} is missing; run prepare-slides first.")
     try:

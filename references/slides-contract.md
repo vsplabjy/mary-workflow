@@ -16,14 +16,14 @@ The `slides` stage produces one final artifact: `slides.md`, a ShanghaiTech red 
 
 ## Preparation
 
-`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, creates `figures/`, and writes `slides-context.json` with:
+`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, creates `figures/`, and writes `artifacts/slides-context.json` with:
 
-- exact `summary.md`, `summary-ledger.json`, summary-bundle, source-index, and theme fingerprints;
+- exact `summary.md`, `artifacts/summary-ledger.json`, summary-bundle, source-index, and theme fingerprints;
 - the allowed summary claim catalog;
 - Figure ids, captions, and source locators parsed from the normalized paper;
 - the required theme, format, math engine, and lint limits.
 
-Read all of `summary.md`, `summary-ledger.json`, and `slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
+Read all of `summary.md`, `artifacts/summary-ledger.json`, and `artifacts/slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
 
 Preparation also copies the self-contained offline theme to
 `<project>/.mary-research/marp/themes/mary-shanghaitech-red.css` and merges its registration into
@@ -75,18 +75,18 @@ Allowed sections are `background`, `method`, `experiments`, and `takeaways`. Str
 
 ## Claim References
 
-Each factual content page requires one `<!-- claims: ... -->` comment. Claim ids must exist in `slides-context.json`:
+Each factual content page requires one `<!-- claims: ... -->` comment. Claim ids must exist in `artifacts/slides-context.json`:
 
 - Background pages use only `Bxx` claims.
 - Method pages use only `Mxx` claims.
 - Experiments pages use only `Exx` claims.
 - Takeaways may combine all three families.
 
-Reference at least one claim from every family across the deck. Keep claim ids hidden in comments; do not display P3 markers such as `[M01]` to the audience. Claim comments prove lineage, not semantic truth. Do not add facts that exist only in `source.md` or general knowledge.
+Reference at least one claim from every family across the deck. Keep claim ids hidden in comments; do not display P3 markers such as `[M01]` to the audience. Claim comments prove lineage, not semantic truth. Do not add facts that exist only in `artifacts/source.md` or general knowledge.
 
 ## Figure Placeholders
 
-When `slides-context.json` contains figures, use at least one. Do not download, crop, invent, or embed paper images. Reserve the intended panel with this exact shape:
+When `artifacts/slides-context.json` contains figures, use at least one. Do not download, crop, invent, or embed paper images. Reserve the intended panel with this exact shape:
 
 ```html
 <div class="rimg figure-placeholder"

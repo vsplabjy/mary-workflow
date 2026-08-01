@@ -19,6 +19,13 @@ from mw_paper import (  # noqa: E402
     prepare_read,
     read_paper_state,
 )
+from mw_paper_artifacts import (  # noqa: E402
+    NORMALIZED_SOURCE_FILE,
+    PARSE_QUALITY_FILE,
+    RAW_SOURCE_HTML,
+    READ_CONTEXT_FILE,
+    artifact_path,
+)
 from mw_paper_sources import (  # noqa: E402
     PaperReadError,
     QUALITY_DIMENSIONS,
@@ -72,8 +79,8 @@ def write_notes(
     uncertainty_dimensions: list[str] | None = None,
     mutate: object = None,
 ) -> dict[str, object]:
-    context = json.loads((workspace / "read-context.json").read_text(encoding="utf-8"))
-    source_text = (workspace / "source.md").read_text(encoding="utf-8")
+    context = json.loads(artifact_path(workspace, READ_CONTEXT_FILE).read_text(encoding="utf-8"))
+    source_text = artifact_path(workspace, NORMALIZED_SOURCE_FILE).read_text(encoding="utf-8")
     locator_match = re.search(r"<!-- locator: ([^ ]+) -->", source_text)
     if locator_match is None:
         raise AssertionError("normalized source has no locator")
@@ -244,9 +251,9 @@ class ReadContractTests(unittest.TestCase):
     def test_prepare_read_writes_artifacts_and_starts_stage(self) -> None:
         self.assertEqual(self.state["stages"]["read"]["status"], "in_progress")
         self.assertEqual(self.report["source"]["format"], "html")
-        for filename in ("source.html", "source.md", "parse-quality.json", "read-context.json"):
+        for filename in (RAW_SOURCE_HTML, NORMALIZED_SOURCE_FILE, PARSE_QUALITY_FILE, READ_CONTEXT_FILE):
             self.assertTrue((self.workspace / filename).is_file(), filename)
-        context = json.loads((self.workspace / "read-context.json").read_text(encoding="utf-8"))
+        context = json.loads(artifact_path(self.workspace, READ_CONTEXT_FILE).read_text(encoding="utf-8"))
         self.assertEqual(context["paper_id"], self.paper_id)
         self.assertEqual(context["source"]["fingerprint"], self.state["source"]["fingerprint"])
         self.assertEqual(set(context["parse_quality"]["dimensions"]), set(QUALITY_DIMENSIONS))

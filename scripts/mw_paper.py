@@ -12,6 +12,18 @@ import re
 import sys
 from typing import Any
 
+from mw_paper_artifacts import (
+    NORMALIZED_SOURCE_FILE,
+    PARSE_QUALITY_FILE,
+    READ_CONTEXT_FILE,
+    READING_CONTEXT_FILE,
+    SOURCE_LOCATOR_FILE,
+    SOURCE_MANIFEST_FILE,
+    SUMMARY_CONTEXT_FILE,
+    artifact_path,
+    resolve_artifact_path,
+)
+from mw_paper_readings import PaperReadingError, validate_reading_summary
 from mw_runtime import (
     EnvelopeError,
     action_envelope_parts,
@@ -28,6 +40,7 @@ from mw_paper_sources import (
     validate_paper_notes,
     write_read_context,
 )
+from mw_reading_profile import ensure_reading_profile
 from mw_paper_summary import (
     PaperSummaryError,
     SUMMARY_FILE,
@@ -490,11 +503,31 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
         if output_fingerprint != validation["notes_fingerprint"]:
             raise PaperError("complete_stage read output_fingerprint does not match paper-notes.md.")
         metadata = validation["quality"]
+        workspace = paper_directory(project_root, state["paper_id"])
+        report_path = resolve_artifact_path(workspace, PARSE_QUALITY_FILE)
+        try:
+            report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PaperError(f"Could not inspect parse-quality.json for reading artifacts: {exc}") from exc
+        source_payload = report_payload.get("source") if isinstance(report_payload, dict) else {}
+        if isinstance(source_payload, dict) and source_payload.get("input_kind") == "folder":
+            reading_path = workspace / "reading.md"
+            if not reading_path.is_file() or "<!-- mary-reading:v1 -->" not in reading_path.read_text(encoding="utf-8"):
+                raise PaperError("Folder-backed read requires a learner-facing reading.md with the mary-reading:v1 marker.")
+            try:
+                reading_summary = validate_reading_summary(workspace)
+            except PaperReadingError as exc:
+                raise PaperError(str(exc)) from exc
+            metadata["reading_artifact"] = "reading.md"
+            metadata["reading_fingerprint"] = sha256_file(reading_path)
+            metadata["reading_summary_artifact"] = reading_summary["artifact"]
+            metadata["reading_summary_fingerprint"] = reading_summary["fingerprint"]
+            metadata["source_manifest"] = SOURCE_MANIFEST_FILE
         override_record = validation["override_record"]
         if override_record is not None:
             override_record["recorded_at"] = now_iso()
-            override_artifact = f"quality-override-{item['attempts']}.json"
-            override_path = paper_directory(project_root, state["paper_id"]) / override_artifact
+            override_artifact = f"artifacts/quality-override-{item['attempts']}.json"
+            override_path = artifact_path(workspace, override_artifact, create_parent=True)
             atomic_write_text(override_path, json.dumps(override_record, ensure_ascii=False, indent=2) + "\n")
             metadata["override_artifact"] = override_artifact
             metadata["override_fingerprint"] = sha256_file(override_path)
@@ -730,6 +763,7 @@ def prepare_read(
     pdf_extractor: object = None,
 ) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
+    ensure_reading_profile(root)
     existing_state: PaperState | None = None
     if source_locator is None:
         canonical_id = resolve_paper_id(root, paper_id)
@@ -1130,9 +1164,16 @@ def cmd_prepare_read(args: argparse.Namespace) -> int:
     )
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     print(f"paper_workspace: {workspace}")
-    print(f"normalized_source: {workspace / 'source.md'}")
-    print(f"parse_quality: {workspace / 'parse-quality.json'}")
-    print(f"read_context: {workspace / 'read-context.json'}")
+    print(f"artifacts: {workspace / 'artifacts'}")
+    print(f"normalized_source: {workspace / NORMALIZED_SOURCE_FILE}")
+    print(f"parse_quality: {workspace / PARSE_QUALITY_FILE}")
+    print(f"read_context: {workspace / READ_CONTEXT_FILE}")
+    if report["source"].get("input_kind") == "folder":
+        print(f"reading_draft: {workspace / 'reading.md'}")
+        print(f"reading_summary_target: {workspace / 'reading-summary.md'}")
+        print(f"reading_context: {workspace / READING_CONTEXT_FILE}")
+        print(f"source_manifest: {workspace / SOURCE_MANIFEST_FILE}")
+        print(f"reading_profile: {Path(args.project_root).resolve() / '.mary-research' / 'reading-profile.md'}")
     print(f"paper_notes_target: {workspace / 'paper-notes.md'}")
     print(
         json.dumps(
@@ -1195,8 +1236,8 @@ def cmd_prepare_summary(args: argparse.Namespace) -> int:
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     print(f"paper_workspace: {workspace}")
     print(f"paper_notes: {workspace / 'paper-notes.md'}")
-    print(f"source_locators: {workspace / 'source-locators.json'}")
-    print(f"summary_context: {workspace / 'summary-context.json'}")
+    print(f"source_locators: {workspace / SOURCE_LOCATOR_FILE}")
+    print(f"summary_context: {workspace / SUMMARY_CONTEXT_FILE}")
     print(f"summary_target: {workspace / SUMMARY_FILE}")
     print(f"summary_ledger_target: {workspace / SUMMARY_LEDGER_FILE}")
     print(
@@ -1433,9 +1474,9 @@ def build_parser() -> argparse.ArgumentParser:
     action_parser.set_defaults(func=cmd_apply_action)
 
     prepare_parser = subparsers.add_parser(
-        "prepare-read", help="acquire and normalize one paper source, preferring arXiv HTML"
+        "prepare-read", help="acquire and normalize a paper URL, file, or folder"
     )
-    prepare_parser.add_argument("--source", help="arXiv id/URL or local/remote HTML/PDF")
+    prepare_parser.add_argument("--source", help="arXiv id/URL or local HTML/PDF/folder")
     prepare_parser.add_argument("--paper-id", help="existing or explicit canonical paper id")
     prepare_parser.set_defaults(func=cmd_prepare_read)
 

@@ -10,6 +10,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mw_paper_locators import parse_source_locator_blocks  # noqa: E402
+from mw_paper_artifacts import (  # noqa: E402
+    NORMALIZED_SOURCE_FILE,
+    PARSE_QUALITY_FILE,
+    SLIDES_CONTEXT_FILE,
+    SOURCE_LOCATOR_FILE,
+    SUMMARY_CONTEXT_FILE,
+    SUMMARY_LEDGER_FILE,
+    artifact_path,
+    raw_source_file,
+)
 from mw_paper_sources import QUALITY_DIMENSIONS, quality_gate, sha256_file, write_read_context  # noqa: E402
 from mw_paper_summary import summary_bundle_fingerprint  # noqa: E402
 from mw_paper_slides import SLIDES_FILE  # noqa: E402
@@ -49,8 +59,8 @@ def write_read_fixture(
             "resolved_locator": locator,
             "format": source_format,
             "fingerprint": source_fingerprint,
-            "raw_artifact": f"source.{source_format}",
-            "normalized_artifact": "source.md",
+            "raw_artifact": raw_source_file(source_format),
+            "normalized_artifact": NORMALIZED_SOURCE_FILE,
         },
         "dimensions": dimensions,
         "gate": gate,
@@ -58,7 +68,7 @@ def write_read_fixture(
         "acquisition_attempts": [{"format": source_format, "locator": locator, "result": "selected"}],
     }
     locator_value = "html#S1" if source_format == "html" else "pdf:p1"
-    (workspace / f"source.{source_format}").write_bytes(
+    artifact_path(workspace, raw_source_file(source_format), create_parent=True).write_bytes(
         b"<html>fixture</html>" if source_format == "html" else b"%PDF-fixture"
     )
     source_text = f"<!-- mary-normalized-source:v1 -->\n<!-- locator: {locator_value} -->\nFixture source.\n"
@@ -66,8 +76,8 @@ def write_read_fixture(
         source_text += "<!-- locator: html#S1.F1 -->\nFigure 1: Fixture method overview.\n"
     else:
         source_text = source_text.rstrip() + " Figure 1: Fixture method overview.\n"
-    (workspace / "source.md").write_text(source_text, encoding="utf-8")
-    (workspace / "parse-quality.json").write_text(
+    artifact_path(workspace, NORMALIZED_SOURCE_FILE, create_parent=True).write_text(source_text, encoding="utf-8")
+    artifact_path(workspace, PARSE_QUALITY_FILE, create_parent=True).write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     context = write_read_context(workspace, paper_id, locator)
@@ -112,9 +122,9 @@ def write_read_fixture(
 
 
 def write_summary_fixture(workspace: Path, mutate: object = None) -> str:
-    context = json.loads((workspace / "summary-context.json").read_text(encoding="utf-8"))
+    context = json.loads(artifact_path(workspace, SUMMARY_CONTEXT_FILE).read_text(encoding="utf-8"))
     source_format = context["inputs"]["source"]["format"]
-    blocks = parse_source_locator_blocks(workspace / "source.md", source_format)
+    blocks = parse_source_locator_blocks(artifact_path(workspace, NORMALIZED_SOURCE_FILE), source_format)
     locator = context["allowed_source_locators"][0]
     evidence = blocks[locator][0]["content"][:120]
     claim = {
@@ -147,14 +157,14 @@ def write_summary_fixture(workspace: Path, mutate: object = None) -> str:
         "The evaluation reports a directly supported experimental observation. [E01]\n"
     )
     (workspace / "summary.md").write_text(summary, encoding="utf-8")
-    (workspace / "summary-ledger.json").write_text(
+    artifact_path(workspace, SUMMARY_LEDGER_FILE, create_parent=True).write_text(
         json.dumps(ledger, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     return summary_bundle_fingerprint(workspace)
 
 
 def write_slides_fixture(workspace: Path, mutate: object = None) -> str:
-    context = json.loads((workspace / "slides-context.json").read_text(encoding="utf-8"))
+    context = json.loads(artifact_path(workspace, SLIDES_CONTEXT_FILE).read_text(encoding="utf-8"))
     figure = context["figure_catalog"][0]
     figure_id = escape(figure["figure_id"], quote=True)
     figure_locator = escape(figure["source_locators"][0], quote=True)

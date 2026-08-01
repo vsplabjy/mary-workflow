@@ -18,6 +18,17 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from mw_paper_artifacts import (
+    NORMALIZED_SOURCE_FILE,
+    PARSE_QUALITY_FILE,
+    READ_CONTEXT_FILE,
+    READING_CONTEXT_FILE,
+    SOURCE_MANIFEST_FILE,
+    artifact_path,
+    raw_source_file,
+    resolve_artifact_path,
+)
+from mw_paper_readings import write_reading_summary_draft
 from mw_runtime import atomic_write_text
 
 
@@ -520,8 +531,8 @@ def build_acquisition(
                 "resolved_locator": final_locator,
                 "format": source_format,
                 "fingerprint": sha256_bytes(content),
-                "raw_artifact": f"source.{source_format}",
-                "normalized_artifact": "source.md",
+                "raw_artifact": raw_source_file(source_format),
+                "normalized_artifact": NORMALIZED_SOURCE_FILE,
             },
             "dimensions": dimensions,
             "gate": gate,
@@ -618,6 +629,13 @@ def acquire_source(
         content, content_type, final_url = fetcher(source_locator)
     else:
         local_path = Path(unquote(parsed.path) if parsed.scheme == "file" else source_locator).expanduser().resolve()
+        if local_path.is_dir():
+            from mw_paper_latex import LatexFolderError, acquire_folder_source
+
+            try:
+                return acquire_folder_source(local_path, lambda data: pdf_to_normalized_source(data, pdf_extractor))
+            except LatexFolderError as exc:
+                raise PaperReadError(str(exc)) from exc
         if not local_path.is_file():
             raise PaperReadError(f"Local source does not exist: {local_path}")
         if local_path.stat().st_size > MAX_SOURCE_BYTES:
@@ -634,10 +652,42 @@ def persist_acquisition(workspace: Path, acquisition: JsonObject) -> JsonObject:
     directory = Path(workspace)
     directory.mkdir(parents=True, exist_ok=True)
     report = acquisition["report"]
-    raw_path = directory / report["source"]["raw_artifact"]
+    raw_path = artifact_path(directory, str(report["source"]["raw_artifact"]), create_parent=True)
     atomic_write_bytes(raw_path, acquisition["raw"])
-    atomic_write_text(directory / "source.md", acquisition["normalized_source"])
-    atomic_write_text(directory / "parse-quality.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_text(
+        artifact_path(directory, NORMALIZED_SOURCE_FILE, create_parent=True),
+        acquisition["normalized_source"],
+    )
+    atomic_write_text(
+        artifact_path(directory, PARSE_QUALITY_FILE, create_parent=True),
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+    )
+    source_manifest = report.get("source_manifest")
+    if isinstance(source_manifest, dict):
+        atomic_write_text(
+            artifact_path(directory, SOURCE_MANIFEST_FILE, create_parent=True),
+            json.dumps(source_manifest, ensure_ascii=False, indent=2) + "\n",
+        )
+    reading_markdown = acquisition.get("reading_markdown")
+    if isinstance(reading_markdown, str) and reading_markdown.strip():
+        atomic_write_text(directory / "reading.md", reading_markdown)
+        write_reading_summary_draft(directory, reading_markdown)
+        reading_metadata = acquisition.get("reading_metadata")
+        if isinstance(reading_metadata, dict):
+            atomic_write_text(
+                artifact_path(directory, READING_CONTEXT_FILE, create_parent=True),
+                json.dumps(
+                    {
+                        "reading_context_schema": 1,
+                        "artifact": "reading.md",
+                        "fingerprint": sha256_bytes(reading_markdown.encode("utf-8")),
+                        **reading_metadata,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+            )
     return report
 
 
@@ -651,10 +701,10 @@ def write_read_context(workspace: Path, paper_id: str, source_locator: str) -> J
             "locator": source_locator,
             "fingerprint": report["source"]["fingerprint"],
             "format": report["source"]["format"],
-            "artifact": "source.md",
+            "artifact": NORMALIZED_SOURCE_FILE,
         },
         "parse_quality": {
-            "report": "parse-quality.json",
+            "report": PARSE_QUALITY_FILE,
             "report_fingerprint": report_fingerprint,
             "gate": report["gate"],
             "dimensions": {
@@ -667,7 +717,21 @@ def write_read_context(workspace: Path, paper_id: str, source_locator: str) -> J
             if report["dimensions"][name]["status"] in {"degraded", "failed"}
         ],
     }
-    atomic_write_text(directory / "read-context.json", json.dumps(context, ensure_ascii=False, indent=2) + "\n")
+    source = report.get("source") if isinstance(report.get("source"), dict) else {}
+    if source.get("input_kind") == "folder":
+        context["source_bundle"] = {
+            "input_kind": "folder",
+            "manifest": SOURCE_MANIFEST_FILE,
+            "reading_artifact": "reading.md",
+            "reading_summary_artifact": "reading-summary.md",
+            "reading_context": READING_CONTEXT_FILE,
+            "selected_pdf": source.get("selected_pdf", ""),
+            "latex_entry": source.get("latex_entry", ""),
+        }
+    atomic_write_text(
+        artifact_path(directory, READ_CONTEXT_FILE, create_parent=True),
+        json.dumps(context, ensure_ascii=False, indent=2) + "\n",
+    )
     return context
 
 
@@ -727,7 +791,7 @@ def validate_claim(value: object, field: str, source_format: str) -> None:
 
 
 def load_quality_report(workspace: Path) -> tuple[JsonObject, str]:
-    report_path = Path(workspace) / "parse-quality.json"
+    report_path = resolve_artifact_path(workspace, PARSE_QUALITY_FILE)
     if not report_path.is_file():
         raise PaperReadError("parse-quality.json is missing; run prepare-read first.")
     try:
@@ -798,7 +862,7 @@ def validate_paper_notes(
         "locator": expected_locator,
         "fingerprint": expected_source_fingerprint,
         "format": source_format,
-        "artifact": "source.md",
+        "artifact": NORMALIZED_SOURCE_FILE,
     }
     if source != expected_source:
         raise PaperReadError("paper-notes source must exactly match the current acquired source.")
@@ -850,7 +914,7 @@ def validate_paper_notes(
     if not isinstance(parse_quality, dict):
         raise PaperReadError("paper-notes parse_quality must be an object.")
     expected_quality = {
-        "report": "parse-quality.json",
+        "report": PARSE_QUALITY_FILE,
         "report_fingerprint": report_fingerprint,
         "gate": report["gate"],
         "dimensions": {name: report["dimensions"][name]["status"] for name in QUALITY_DIMENSIONS},
@@ -922,7 +986,7 @@ def validate_paper_notes(
         "quality": {
             "decision": decision,
             "source_format": source_format,
-            "report": "parse-quality.json",
+            "report": PARSE_QUALITY_FILE,
             "report_fingerprint": report_fingerprint,
             "blocking_dimensions": report["blocking_dimensions"],
         },

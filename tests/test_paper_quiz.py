@@ -37,6 +37,7 @@ from mw_paper_quiz import (  # noqa: E402
     session_entry_hash,
     validate_quiz_history,
 )
+from mw_paper_artifacts import QUIZ_CONTEXT_FILE, artifact_path  # noqa: E402
 from mw_paper_sources import sha256_file  # noqa: E402
 from tests.paper_read_helpers import write_read_fixture, write_summary_fixture  # noqa: E402
 
@@ -164,9 +165,9 @@ class QuizContractTests(unittest.TestCase):
         sessions, head = validate_quiz_history(self.workspace, paper_id=self.paper_id)
         self.assertEqual(sessions, [])
         self.assertEqual(head["session_count"], 0)
-        self.assertTrue((self.workspace / "quiz-context.json").is_file())
+        self.assertTrue(artifact_path(self.workspace, QUIZ_CONTEXT_FILE).is_file())
         self.assertTrue((self.workspace / QUIZ_LOG_FILE).is_file())
-        self.assertTrue((self.workspace / QUIZ_HEAD_FILE).is_file())
+        self.assertTrue(artifact_path(self.workspace, QUIZ_HEAD_FILE).is_file())
 
     def test_question_generator_covers_method_before_scientific_uncertainty(self) -> None:
         first = propose_quiz_question(self.project, self.paper_id)[1]
@@ -217,7 +218,7 @@ class QuizContractTests(unittest.TestCase):
 
     def test_invalid_judgment_is_rejected_without_appending(self) -> None:
         log_before = (self.workspace / QUIZ_LOG_FILE).read_bytes()
-        head_before = (self.workspace / QUIZ_HEAD_FILE).read_bytes()
+        head_before = artifact_path(self.workspace, QUIZ_HEAD_FILE).read_bytes()
         with self.assertRaisesRegex(PaperError, "judgment must be one of"):
             append_prepared_quiz_session(
                 self.project,
@@ -225,11 +226,11 @@ class QuizContractTests(unittest.TestCase):
                 self.payload(uncertainty_ids=["U01"], judgment="correct"),
             )
         self.assertEqual((self.workspace / QUIZ_LOG_FILE).read_bytes(), log_before)
-        self.assertEqual((self.workspace / QUIZ_HEAD_FILE).read_bytes(), head_before)
+        self.assertEqual(artifact_path(self.workspace, QUIZ_HEAD_FILE).read_bytes(), head_before)
 
     def test_correct_answer_is_required_without_partial_append(self) -> None:
         log_before = (self.workspace / QUIZ_LOG_FILE).read_bytes()
-        head_before = (self.workspace / QUIZ_HEAD_FILE).read_bytes()
+        head_before = artifact_path(self.workspace, QUIZ_HEAD_FILE).read_bytes()
         missing = self.payload(method_ids=["M01"])
         del missing["correct_answer"]
         with self.assertRaisesRegex(PaperError, "missing=.*correct_answer"):
@@ -239,7 +240,7 @@ class QuizContractTests(unittest.TestCase):
         with self.assertRaisesRegex(PaperError, "correct_answer must contain at least 8"):
             append_prepared_quiz_session(self.project, self.paper_id, blank)
         self.assertEqual((self.workspace / QUIZ_LOG_FILE).read_bytes(), log_before)
-        self.assertEqual((self.workspace / QUIZ_HEAD_FILE).read_bytes(), head_before)
+        self.assertEqual(artifact_path(self.workspace, QUIZ_HEAD_FILE).read_bytes(), head_before)
 
     def test_legacy_schema1_history_remains_valid_before_schema2_append(self) -> None:
         legacy = {
@@ -261,7 +262,7 @@ class QuizContractTests(unittest.TestCase):
         log_path = self.workspace / QUIZ_LOG_FILE
         log_path.write_text(render_quiz_log([legacy]), encoding="utf-8")
         head = build_quiz_head(self.workspace, paper_id=self.paper_id, sessions=[legacy])
-        (self.workspace / QUIZ_HEAD_FILE).write_text(
+        artifact_path(self.workspace, QUIZ_HEAD_FILE).write_text(
             json.dumps(head, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -359,7 +360,7 @@ class QuizContractTests(unittest.TestCase):
             validate_quiz_history(self.workspace, paper_id=self.paper_id)
 
     def test_context_tampering_is_rejected(self) -> None:
-        context_path = self.workspace / "quiz-context.json"
+        context_path = artifact_path(self.workspace, QUIZ_CONTEXT_FILE)
         context = json.loads(context_path.read_text(encoding="utf-8"))
         context["quiz_attempt"] = 99
         context_path.write_text(json.dumps(context), encoding="utf-8")

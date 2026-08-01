@@ -11,6 +11,14 @@ import re
 import stat
 from typing import Any
 
+from mw_paper_artifacts import (
+    NORMALIZED_SOURCE_FILE,
+    QUIZ_CONTEXT_FILE,
+    QUIZ_HEAD_FILE,
+    SOURCE_LOCATOR_FILE,
+    artifact_path,
+    resolve_artifact_path,
+)
 from mw_paper_locators import (
     SourceLocatorError,
     evidence_resolves,
@@ -32,9 +40,7 @@ QUIZ_CONTEXT_SCHEMA = 3
 QUIZ_HEAD_SCHEMA = 1
 LEGACY_QUIZ_SESSION_SCHEMA = 1
 QUIZ_SESSION_SCHEMA = 2
-QUIZ_CONTEXT_FILE = "quiz-context.json"
 QUIZ_LOG_FILE = "quiz-log.md"
-QUIZ_HEAD_FILE = "quiz-head.json"
 QUIZ_LOG_HEADER = "<!-- mary-quiz-log:v1 -->\n# Expert Q&A Log\n\n"
 QUIZ_SESSION_MARKER = "<!-- mary-quiz-session:v1 -->"
 QUIZ_RECORD_OPEN = '<details class="mary-quiz-record">\n<summary>Machine record</summary>\n\n'
@@ -347,7 +353,8 @@ def load_quiz_head(path: Path) -> JsonObject:
 def initialize_quiz_history(workspace: Path, *, paper_id: str) -> tuple[list[JsonObject], JsonObject]:
     directory = Path(workspace)
     log_path = directory / QUIZ_LOG_FILE
-    head_path = directory / QUIZ_HEAD_FILE
+    head_path = resolve_artifact_path(directory, QUIZ_HEAD_FILE)
+    head_path.parent.mkdir(parents=True, exist_ok=True)
     if log_path.is_symlink() or head_path.is_symlink():
         raise PaperQuizError("Quiz history files must not be symbolic links.")
     if not log_path.exists() and not head_path.exists():
@@ -365,7 +372,7 @@ def initialize_quiz_history(workspace: Path, *, paper_id: str) -> tuple[list[Jso
 def validate_quiz_history(workspace: Path, *, paper_id: str) -> tuple[list[JsonObject], JsonObject]:
     directory = Path(workspace)
     log_path = directory / QUIZ_LOG_FILE
-    head_path = directory / QUIZ_HEAD_FILE
+    head_path = resolve_artifact_path(directory, QUIZ_HEAD_FILE)
     if log_path.is_symlink() or head_path.is_symlink():
         raise PaperQuizError("Quiz history files must not be symbolic links.")
     if not log_path.is_file() or not head_path.is_file():
@@ -401,7 +408,7 @@ def build_quiz_context(
             source_fingerprint=source_fingerprint,
             read_output_fingerprint=read_output_fingerprint,
         )
-        summary_ledger = load_summary_ledger(directory / SUMMARY_LEDGER_FILE)
+        summary_ledger = load_summary_ledger(resolve_artifact_path(directory, SUMMARY_LEDGER_FILE))
         _, blocks, locator_fingerprint = validate_source_locator_index(
             directory,
             paper_id=paper_id,
@@ -474,13 +481,15 @@ def build_quiz_context(
             },
             "summary_bundle": {"fingerprint": summary_output_fingerprint},
             "source": {
-                "artifact": "source.md",
-                "artifact_fingerprint": sha256_file(directory / "source.md"),
+                "artifact": NORMALIZED_SOURCE_FILE,
+                "artifact_fingerprint": sha256_file(
+                    resolve_artifact_path(directory, NORMALIZED_SOURCE_FILE)
+                ),
                 "format": source_format,
                 "source_fingerprint": source_fingerprint,
             },
             "source_locators": {
-                "artifact": "source-locators.json",
+                "artifact": SOURCE_LOCATOR_FILE,
                 "fingerprint": locator_fingerprint,
             },
         },
@@ -521,7 +530,7 @@ def write_quiz_context(
     )
     initialize_quiz_history(directory, paper_id=paper_id)
     atomic_write_text(
-        directory / QUIZ_CONTEXT_FILE,
+        artifact_path(directory, QUIZ_CONTEXT_FILE, create_parent=True),
         json.dumps(context, ensure_ascii=False, indent=2) + "\n",
     )
     return context
@@ -537,7 +546,7 @@ def validate_quiz_context(
     read_output_fingerprint: str,
     summary_output_fingerprint: str,
 ) -> tuple[JsonObject, dict[str, list[JsonObject]], str]:
-    context_path = Path(workspace) / QUIZ_CONTEXT_FILE
+    context_path = resolve_artifact_path(workspace, QUIZ_CONTEXT_FILE)
     if not context_path.is_file():
         raise PaperQuizError("quiz-context.json is missing; run prepare-quiz first.")
     try:
@@ -652,7 +661,7 @@ def append_quiz_session(
     directory = Path(workspace)
     sessions, _ = validate_quiz_history(directory, paper_id=paper_id)
     normalized = validate_session_input(payload, context=context, blocks=blocks)
-    context_fingerprint = sha256_file(directory / QUIZ_CONTEXT_FILE)
+    context_fingerprint = sha256_file(resolve_artifact_path(directory, QUIZ_CONTEXT_FILE))
     session: JsonObject = {
         "quiz_session_schema": QUIZ_SESSION_SCHEMA,
         "paper_id": paper_id,
@@ -668,7 +677,7 @@ def append_quiz_session(
     append_quiz_block(directory / QUIZ_LOG_FILE, render_quiz_session(session))
     head = build_quiz_head(directory, paper_id=paper_id, sessions=updated_sessions)
     atomic_write_text(
-        directory / QUIZ_HEAD_FILE,
+        artifact_path(directory, QUIZ_HEAD_FILE, create_parent=True),
         json.dumps(head, ensure_ascii=False, indent=2) + "\n",
     )
     return session
@@ -801,7 +810,7 @@ def validate_quiz(
             "quiz_context": QUIZ_CONTEXT_FILE,
             "quiz_context_fingerprint": context_fingerprint,
             "quiz_head": QUIZ_HEAD_FILE,
-            "quiz_head_fingerprint": sha256_file(directory / QUIZ_HEAD_FILE),
+            "quiz_head_fingerprint": sha256_file(resolve_artifact_path(directory, QUIZ_HEAD_FILE)),
             "session_count": len(current),
             "history_session_count": len(sessions),
             "last_entry_hash": head["last_entry_hash"],
