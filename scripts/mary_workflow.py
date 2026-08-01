@@ -33,6 +33,7 @@ from mw_runtime import (
     require_json_object,
 )
 from mw_model import install_shell_integration
+from mw_reading_profile import ensure_reading_profile
 
 
 WORKFLOW_DIR = ".mary-workflow"
@@ -2373,6 +2374,7 @@ def write_project_brief(root: Path, state: State) -> None:
 
 def cmd_init(args: argparse.Namespace) -> int:
     root = workflow_root(Path.cwd())
+    reading_profile, profile_created = ensure_reading_profile(Path.cwd())
     if args.reset and root.exists():
         remove_tree(root)
     elif (root / "state.yaml").exists():
@@ -2417,6 +2419,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"Mary Workflow 已初始化，已刷新 {refreshed} 个核心 prompt；{suffix}")
         print_status(state, read_config(root).get("language", "zh"))
         print(shell_setup)
+        print(f"论文阅读配置：{reading_profile}" + ("（已创建，可编辑）" if profile_created else ""))
         print("下一步：渲染 /mw-init 理解上下文；简报 complete 后才能运行 /mw-plan。")
         return 0
 
@@ -2448,6 +2451,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("机器探测骨架已生成；接下来必须完成三遍全量理解并提交 submit_brief。")
     print("后续 plan/run 默认使用中文。若希望改为 auto 或 en，请告诉我，我会写入 config.yaml 的 output.language。")
     print(shell_setup)
+    print(f"论文阅读配置：{reading_profile}（已创建，可编辑）")
     print("下一步：继续 /mw-init 理解流程；简报 complete 后再运行 /mw-plan。")
     if seeded:
         print(f"Seeded {seeded} core prompt(s).")

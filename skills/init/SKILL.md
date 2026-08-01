@@ -27,4 +27,5 @@ Initialize the project-local `.mary-workflow/` workspace.
 6. Present the entire `.mary-workflow/project-brief.md` to the user, then ask for factual corrections and `zh`/`auto`/`en` preference.
 7. Apply `config.yaml` `init.ignore` and project-root `.maryignore` before treating the remaining inventory as exhaustive.
 8. On an existing v2.1 project, preserve state and refresh prompts. Detect drift only in `PLANNING`, `PLANNED`, or `FINISHED`; in active execution phases report that the brief check was skipped. Earlier contracts require `--reset`.
-9. Do not hand off to `/mw-plan` until `project_brief_status: complete`.
+9. Ensure `.mary-research/reading-profile.md` exists during init. It is a short, visible, user-editable Markdown file for paper-reading language, prerequisite, explanation-depth, evidence, and open-question preferences; preserve it on later init runs.
+10. Do not hand off to `/mw-plan` until `project_brief_status: complete`.

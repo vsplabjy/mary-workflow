@@ -895,6 +895,9 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("output/**", config["init_ignore"])
         self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
         self.assertTrue((workflow / "analysis").is_dir())
+        reading_profile = fresh / ".mary-research/reading-profile.md"
+        self.assertTrue(reading_profile.is_file())
+        self.assertIn("<!-- mary-reading-profile:v1 -->", reading_profile.read_text(encoding="utf-8"))
         self.assertIn("继续 /mw-init 理解流程", result.stdout)
         init_context = render_prompt(fresh, "mw-init")
         self.assertIn("# Mary Init Understanding Phase", init_context)

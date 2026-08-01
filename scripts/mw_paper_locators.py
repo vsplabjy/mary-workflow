@@ -9,12 +9,17 @@ from pathlib import Path
 import re
 from typing import Any
 
+from mw_paper_artifacts import (
+    NORMALIZED_SOURCE_FILE,
+    SOURCE_LOCATOR_FILE,
+    artifact_path,
+    resolve_artifact_path,
+)
 from mw_paper_sources import SOURCE_FORMATS, sha256_file, valid_locator
 from mw_runtime import atomic_write_text
 
 
 SOURCE_LOCATOR_SCHEMA = 1
-SOURCE_LOCATOR_FILE = "source-locators.json"
 LOCATOR_MARKER = re.compile(r"^\s*<!-- locator: ([^ ]+) -->\s*$")
 
 JsonObject = dict[str, Any]
@@ -71,13 +76,13 @@ def build_source_locator_index(
     source_format: str,
     source_fingerprint: str,
 ) -> tuple[JsonObject, LocatorBlocks]:
-    source_path = Path(workspace) / "source.md"
+    source_path = resolve_artifact_path(workspace, NORMALIZED_SOURCE_FILE)
     blocks = parse_source_locator_blocks(source_path, source_format)
     index = {
         "source_locator_schema": SOURCE_LOCATOR_SCHEMA,
         "paper_id": paper_id,
         "source": {
-            "artifact": "source.md",
+            "artifact": NORMALIZED_SOURCE_FILE,
             "artifact_fingerprint": sha256_file(source_path),
             "format": source_format,
             "source_fingerprint": source_fingerprint,
@@ -111,7 +116,7 @@ def write_source_locator_index(
         source_format=source_format,
         source_fingerprint=source_fingerprint,
     )
-    index_path = Path(workspace) / SOURCE_LOCATOR_FILE
+    index_path = artifact_path(workspace, SOURCE_LOCATOR_FILE, create_parent=True)
     atomic_write_text(index_path, json.dumps(index, ensure_ascii=False, indent=2) + "\n")
     return index, blocks, sha256_file(index_path)
 
@@ -123,7 +128,7 @@ def validate_source_locator_index(
     source_format: str,
     source_fingerprint: str,
 ) -> tuple[JsonObject, LocatorBlocks, str]:
-    index_path = Path(workspace) / SOURCE_LOCATOR_FILE
+    index_path = resolve_artifact_path(workspace, SOURCE_LOCATOR_FILE)
     if not index_path.is_file():
         raise SourceLocatorError(f"{SOURCE_LOCATOR_FILE} is missing; run prepare-summary first.")
     try:

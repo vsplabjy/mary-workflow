@@ -9,6 +9,12 @@ from pathlib import Path
 import re
 from typing import Any
 
+from mw_paper_artifacts import (
+    SUMMARY_CONTEXT_FILE,
+    SUMMARY_LEDGER_FILE,
+    artifact_path,
+    resolve_artifact_path,
+)
 from mw_paper_locators import (
     SOURCE_LOCATOR_FILE,
     SourceLocatorError,
@@ -25,8 +31,6 @@ from mw_runtime import atomic_write_text
 SUMMARY_LEDGER_SCHEMA = 1
 SUMMARY_CONTEXT_SCHEMA = 1
 SUMMARY_FILE = "summary.md"
-SUMMARY_LEDGER_FILE = "summary-ledger.json"
-SUMMARY_CONTEXT_FILE = "summary-context.json"
 SUMMARY_SECTIONS = ("background", "method", "experiments")
 CLAIM_PREFIXES = {"background": "B", "method": "M", "experiments": "E"}
 PREFIX_SECTIONS = {prefix: section for section, prefix in CLAIM_PREFIXES.items()}
@@ -71,7 +75,8 @@ def summary_bundle_fingerprint(workspace: Path) -> str:
     digest = hashlib.sha256()
     digest.update(b"mary-summary-bundle:v1\n")
     for filename in (SUMMARY_FILE, SUMMARY_LEDGER_FILE):
-        data = (directory / filename).read_bytes()
+        path = directory / filename if filename == SUMMARY_FILE else resolve_artifact_path(directory, filename)
+        data = path.read_bytes()
         encoded_name = filename.encode("utf-8")
         digest.update(len(encoded_name).to_bytes(4, "big"))
         digest.update(encoded_name)
@@ -164,7 +169,7 @@ def write_summary_context(
         persist_locator_index=True,
     )
     atomic_write_text(
-        Path(workspace) / SUMMARY_CONTEXT_FILE,
+        artifact_path(workspace, SUMMARY_CONTEXT_FILE, create_parent=True),
         json.dumps(context, ensure_ascii=False, indent=2) + "\n",
     )
     return context
@@ -178,7 +183,7 @@ def validate_summary_context(
     source_fingerprint: str,
     read_output_fingerprint: str,
 ) -> tuple[JsonObject, dict[str, list[JsonObject]], str]:
-    context_path = Path(workspace) / SUMMARY_CONTEXT_FILE
+    context_path = resolve_artifact_path(workspace, SUMMARY_CONTEXT_FILE)
     if not context_path.is_file():
         raise PaperSummaryError(f"{SUMMARY_CONTEXT_FILE} is missing; run prepare-summary first.")
     try:
@@ -332,7 +337,7 @@ def validate_summary(
     summary_path = directory / SUMMARY_FILE
     if not summary_path.is_file():
         raise PaperSummaryError(f"{SUMMARY_FILE} is missing.")
-    ledger_path = directory / SUMMARY_LEDGER_FILE
+    ledger_path = resolve_artifact_path(directory, SUMMARY_LEDGER_FILE)
     ledger = load_summary_ledger(ledger_path)
     context, blocks, context_fingerprint = validate_summary_context(
         directory,

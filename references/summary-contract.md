@@ -3,7 +3,7 @@
 The `summary` stage produces two coupled artifacts:
 
 - `summary.md`: readable blog-style prose for a peer who has not read the paper;
-- `summary-ledger.json`: a machine-validated ledger of direct factual claims used by the prose.
+- `artifacts/summary-ledger.json`: a machine-validated ledger of direct factual claims used by the prose.
 
 The stage output fingerprint covers the exact bytes of both files. Neither file is complete without the other.
 
@@ -23,10 +23,10 @@ The stage output fingerprint covers the exact bytes of both files. Neither file 
 
 | File | Purpose |
 | --- | --- |
-| `source-locators.json` | Deterministic index of every locator marker in `source.md` |
-| `summary-context.json` | Exact input fingerprints and locators accepted by `paper-notes.md` |
+| `artifacts/source-locators.json` | Deterministic index of every locator marker in `artifacts/source.md` |
+| `artifacts/summary-context.json` | Exact input fingerprints and locators accepted by `paper-notes.md` |
 
-Read `paper-notes.md`, `summary-context.json`, and the relevant spans of `source.md` before writing either output. Never invent or hand-edit the generated context/index files.
+Read `paper-notes.md`, `artifacts/summary-context.json`, and the relevant spans of `artifacts/source.md` before writing either output. Never invent or hand-edit the generated context/index files.
 
 ## Writing Contract
 
@@ -74,15 +74,15 @@ Anchor factual sentences inline with claim ids such as `[B01]`, `[M03]`, or `[E0
 - `Bxx` anchors belong in Background.
 - `Mxx` anchors belong in Method.
 - `Exx` anchors belong in Experiments.
-- Every id in `summary-ledger.json` must appear in `summary.md` at least once.
-- Every claim-like anchor in `summary.md` must exist in `summary-ledger.json`.
+- Every id in `artifacts/summary-ledger.json` must appear in `summary.md` at least once.
+- Every claim-like anchor in `summary.md` must exist in `artifacts/summary-ledger.json`.
 - Put an anchor on the same line as meaningful prose; a standalone `[M01]` is invalid.
 
 An anchor establishes traceability, not semantic truth. Multiple sentences may cite the same direct claim, and one sentence may cite more than one claim.
 
 ## Claim Ledger
 
-Write `summary-ledger.json` as a standalone JSON object:
+Write `artifacts/summary-ledger.json` as a standalone JSON object:
 
 ```json
 {
@@ -128,7 +128,7 @@ Write `summary-ledger.json` as a standalone JSON object:
 }
 ```
 
-Copy `inputs` exactly from `summary-context.json`. The ledger contains only direct facts from the paper and requires at least one `Bxx`, `Mxx`, and `Exx` claim. Do not add `direct`, `inferred`, `kind`, confidence, commentary, or other classification fields.
+Copy `inputs` exactly from `artifacts/summary-context.json`. The ledger contains only direct facts from the paper and requires at least one `Bxx`, `Mxx`, and `Exx` claim. Do not add `direct`, `inferred`, `kind`, confidence, commentary, or other classification fields.
 
 Every claim contains exactly four fields:
 
@@ -136,7 +136,7 @@ Every claim contains exactly four fields:
 | --- | --- |
 | `claim_id` | globally unique `Bxx`, `Mxx`, or `Exx`; at least two digits |
 | `claim_text` | non-empty direct factual assertion with at least 10 characters |
-| `evidence` | exact 8-500 character excerpt from normalized `source.md` |
+| `evidence` | exact 8-500 character excerpt from normalized `artifacts/source.md` |
 | `source_locators` | non-empty, duplicate-free array of allowed canonical locators |
 
 ## Source Locator Contract
@@ -146,10 +146,10 @@ Canonical locator forms are:
 - HTML/TeX-derived source: `html#<anchor>` for a section, paragraph, equation, table, or figure label;
 - PDF-derived source: `pdf:p<N>` for a positive page number.
 
-`summary-context.json` permits only locators in the intersection of:
+`artifacts/summary-context.json` permits only locators in the intersection of:
 
 1. locators already accepted by the validated `paper-notes.md` ledger;
-2. locators that resolve to a non-empty span in the current `source.md`.
+2. locators that resolve to a non-empty span in the current `artifacts/source.md`.
 
 Whitespace is normalized before evidence matching. The exact evidence excerpt must occur within at least one span addressed by its `source_locators`; citing a real locator that contains different text is rejected.
 
@@ -166,7 +166,7 @@ Whitespace is normalized before evidence matching. The exact evidence excerpt mu
 7. Require exactly the three ordered, non-empty article sections.
 8. Require every ledger id in the body and reject every unknown body id.
 9. Require anchor prefixes to match their article sections and reject standalone anchors.
-10. Match the declared output fingerprint to the exact `summary.md` plus `summary-ledger.json` bundle.
+10. Match the declared output fingerprint to the exact `summary.md` plus `artifacts/summary-ledger.json` bundle.
 
 On success, state metadata records body and ledger fingerprints, claim and anchor counts, per-section counts, cited locators, and context/index fingerprints.
 

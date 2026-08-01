@@ -28,6 +28,7 @@ from mw_paper_slides import (  # noqa: E402
     install_project_marp_support,
     validate_slides,
 )
+from mw_paper_artifacts import SLIDES_CONTEXT_FILE, artifact_path  # noqa: E402
 from mw_paper_sources import sha256_file  # noqa: E402
 from tests.paper_read_helpers import (  # noqa: E402
     write_read_fixture,
@@ -123,7 +124,7 @@ class SlidesContractTests(unittest.TestCase):
         self.assertEqual(
             self.context["figure_catalog"][0]["source_locators"], ["html#S1.F1"]
         )
-        self.assertTrue((self.workspace / "slides-context.json").is_file())
+        self.assertTrue(artifact_path(self.workspace, SLIDES_CONTEXT_FILE).is_file())
         self.assertTrue((self.workspace / "figures").is_dir())
         self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
         self.assertEqual(
@@ -289,7 +290,7 @@ class SlidesContractTests(unittest.TestCase):
 
     def test_context_summary_and_declared_fingerprint_cannot_drift(self) -> None:
         write_slides_fixture(self.workspace)
-        context_path = self.workspace / "slides-context.json"
+        context_path = artifact_path(self.workspace, SLIDES_CONTEXT_FILE)
         context = json.loads(context_path.read_text(encoding="utf-8"))
         context["presentation"]["math"] = "mathjax"
         context_path.write_text(json.dumps(context), encoding="utf-8")
