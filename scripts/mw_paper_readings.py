@@ -16,8 +16,8 @@ READING_MARKER = "<!-- mary-reading:v1 -->"
 READING_SUMMARY_FILE = "reading-summary.md"
 READING_SUMMARY_MARKER = "<!-- mary-reading-summary:v1 -->"
 NOTION_READING_MARKER = "<!-- mary-notion-paper-reading:v1 -->"
-NOTION_ENGLISH_ORIGINAL_MARKER = "<!-- mary-notion-paper-english-original:v1 -->"
-NOTION_ENGLISH_ORIGINAL_TITLE = "English original"
+NOTION_ORIGINAL_PAPER_MARKER = "<!-- mary-notion-paper-original:v1 -->"
+NOTION_ORIGINAL_PAPER_TITLE = "Original paper"
 
 SUMMARY_SECTION_HEADINGS = (
     "一句话概括",
@@ -31,6 +31,11 @@ PLACEHOLDER_PATTERN = re.compile(r"(?:\[待补充[^\]]*\]|\[请[^\]]*\]|TODO|TBD
 HEADING_PATTERN = re.compile(r"^##[ \t]+(.+?)[ \t]*#*[ \t]*$", flags=re.MULTILINE)
 H1_PATTERN = re.compile(r"^#[ \t]+(.+?)[ \t]*#*[ \t]*$", flags=re.MULTILINE)
 CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+PARENTHETICAL_CJK_PATTERN = re.compile(
+    r"(?:\([^\n)]*[\u3400-\u4dbf\u4e00-\u9fff][^\n)]*\)|（[^\n）]*[\u3400-\u4dbf\u4e00-\u9fff][^\n）]*）)"
+)
+OPEN_QUESTION_SUMMARY = "<summary>Open question</summary>"
+READER_NOTES_SUMMARY = "<summary>Reader notes</summary>"
 
 
 class PaperReadingError(ValueError):
@@ -147,8 +152,40 @@ def validate_reading_summary(workspace: Path) -> dict[str, Any]:
     }
 
 
+def validate_reading_document(workspace: Path) -> dict[str, Any]:
+    """Reject an unchanged English draft before it is delivered as a reading aid."""
+    path = Path(workspace) / READING_FILE
+    if not path.is_file():
+        raise PaperReadingError(f"{READING_FILE} is missing.")
+    text = path.read_text(encoding="utf-8")
+    if READING_MARKER not in text:
+        raise PaperReadingError(f"{READING_FILE} must contain {READING_MARKER}.")
+    annotations = PARENTHETICAL_CJK_PATTERN.findall(text)
+    annotation_text = "".join(annotations)
+    chinese_characters = len(CJK_PATTERN.findall(annotation_text))
+    if len(annotations) < 2 or chinese_characters < 60:
+        raise PaperReadingError(
+            f"{READING_FILE} must contain at least two Chinese parenthetical annotations and 60 Chinese characters."
+        )
+    remaining_text = PARENTHETICAL_CJK_PATTERN.sub("", text)
+    if CJK_PATTERN.search(remaining_text):
+        raise PaperReadingError(
+            f"{READING_FILE} may contain Chinese only inside parenthetical annotations after the original English."
+        )
+    if OPEN_QUESTION_SUMMARY not in text or READER_NOTES_SUMMARY not in text:
+        raise PaperReadingError(
+            f"{READING_FILE} must retain empty Open question and Reader notes areas for post-reading reflection."
+        )
+    return {
+        "artifact": READING_FILE,
+        "fingerprint": sha256_file(path),
+        "annotations": len(annotations),
+        "chinese_characters": chinese_characters,
+    }
+
+
 def render_notion_reading_page(reading_markdown: str, summary_markdown: str) -> str:
-    """Build the parent Notion page body, leaving the English original to a child page."""
+    """Build the parent Notion page body, leaving the annotated paper to a child page."""
     chinese = strip_document_title(summary_markdown, READING_SUMMARY_MARKER)
     if not chinese:
         raise PaperReadingError("reading-summary.md has no body to place in Notion.")
@@ -159,9 +196,9 @@ def render_notion_reading_page(reading_markdown: str, summary_markdown: str) -> 
     )
 
 
-def render_notion_english_original_page(reading_markdown: str) -> str:
-    """Build the complete English-original child page without its local document H1."""
+def render_notion_original_paper_page(reading_markdown: str) -> str:
+    """Build the annotated original-paper child page without its local document H1."""
     english = strip_document_title(reading_markdown, READING_MARKER)
     if not english:
         raise PaperReadingError("reading.md has no body to place in Notion.")
-    return f"{NOTION_ENGLISH_ORIGINAL_MARKER}\n\n{english}\n"
+    return f"{NOTION_ORIGINAL_PAPER_MARKER}\n\n{english}\n"

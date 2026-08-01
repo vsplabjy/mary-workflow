@@ -37,13 +37,14 @@ paper reading pass; it does not change source evidence or scientific claims.
 - Add a Chinese explanation immediately after the English in parentheses when
   a term is specific to this paper, a specialist subfield prerequisite, an
   uncommon method/optimization/statistical concept, or a term whose local
-  meaning differs from its everyday meaning.
+  meaning differs from its everyday meaning. Keep the complete English original
+  before the parenthesis; never replace or rewrite it in Chinese.
 - Translate a whole sentence or clause when it compresses a causal chain,
   comparison, condition, limitation, or claimed experimental conclusion that
   would be hard to reconstruct word by word.
-- Give a detailed Chinese explanation immediately after the English passage,
-  using a separate short paragraph when it would make the parenthesis too long,
-  when the paper omits a prerequisite, describes information flow across
+- Give a detailed Chinese explanation in a longer, possibly multiline
+  parenthetical annotation immediately after the English passage when the paper
+  omits a prerequisite, describes information flow across
   modules, introduces an objective or derivation, relies on a non-obvious
   assumption, or requires interpreting a formula, figure, or table.
 - In every explanation, state the role in this paper first. For a method,

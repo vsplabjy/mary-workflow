@@ -484,14 +484,19 @@ def latex_to_markdown(source: str, entry: Path, folder: Path) -> tuple[str, dict
         "",
     ]
     document = "\n".join(header) + content.strip() + "\n"
-    document += "\n## Open Questions\n\n<details>\n<summary>Open question</summary>\n\n<!-- Add the learner's question or clarification here. -->\n\n</details>\n"
+    document += (
+        "\n## Open Questions\n\n<details>\n<summary>Open question</summary>\n\n"
+        "<!-- Add the learner's question or clarification here after reading. -->\n\n</details>\n"
+        "\n## Reader Notes\n\n<details>\n<summary>Reader notes</summary>\n\n"
+        "<!-- Record your post-reading notes, connections, and questions here. -->\n\n</details>\n"
+    )
     document = re.sub(r"\n{3,}", "\n\n", document)
     metadata = {
         "title": title,
         "authors": authors,
         "latex_entry": _relative(entry, folder),
         "source_kind": "latex",
-        "open_question_template": "<details>\n<summary>Open question</summary>\n\n<!-- Add the learner's question or clarification here. -->\n\n</details>",
+        "open_question_template": "<details>\n<summary>Open question</summary>\n\n<!-- Add the learner's question or clarification here after reading. -->\n\n</details>",
     }
     return document, metadata
 
@@ -536,7 +541,11 @@ def acquire_folder_source(folder: Path, pdf_extractor: PDF_EXTRACTOR) -> dict[st
             + normalized_source
             + "\n## Open Questions\n\n"
             "<details>\n<summary>Open question</summary>\n\n"
-            "<!-- Add the learner's question or clarification here. -->\n\n"
+            "<!-- Add the learner's question or clarification here after reading. -->\n\n"
+            "</details>\n\n"
+            "## Reader Notes\n\n"
+            "<details>\n<summary>Reader notes</summary>\n\n"
+            "<!-- Record your post-reading notes, connections, and questions here. -->\n\n"
             "</details>\n"
         )
     gate, blocking = _quality_gate(dimensions)

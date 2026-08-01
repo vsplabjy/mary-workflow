@@ -78,6 +78,7 @@ The method maps an input to an output.
             self.assertIn("### Method", reading)
             self.assertIn("$$", reading)
             self.assertIn("<summary>Open question</summary>", reading)
+            self.assertIn("<summary>Reader notes</summary>", reading)
 
             manifest = json.loads(artifact_path(workspace, SOURCE_MANIFEST_FILE).read_text(encoding="utf-8"))
             self.assertEqual(manifest["selected_pdf"], "paper.pdf")
