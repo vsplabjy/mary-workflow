@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Switch Codex between the configured VSP and DeepSeek providers.
 
-The command keeps provider sections intact, stores the original top-level model
-settings once, and writes only the fields required by DeepSeek's Codex guide.
-It intentionally never prints or stores the API key in the repository.
+The command keeps provider sections intact, records the model and reasoning
+effort that were actually in use before each switch (``last_vsp`` /
+``last_deepseek``), and restores the last-used VSP settings instead of a fixed
+model. It writes only the fields required by DeepSeek's Codex guide and
+intentionally never prints or stores the API key in the repository.
 """
 
 from __future__ import annotations
@@ -131,17 +133,38 @@ def _replace_config(
 ) -> None:
     original = path.read_text(encoding="utf-8") if path.exists() else ""
     lines = original.splitlines()
-    first_section = next((index for index, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines))
+    first_section = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if (line.strip()[1:].lstrip() if line.strip().startswith("#") else line.strip()).startswith("[")
+        ),
+        len(lines),
+    )
     leading: list[str] = []
+    previous_blank = False
     for line in lines[:first_section]:
         key = _top_level_key(line)
         if key in remove_top_level_keys:
             continue
+        if not line.strip():
+            # Collapse consecutive blank lines inside the top-level region to
+            # at most one, and skip blanks that only separated removed keys.
+            # Do not add a new separator between the managed prefix and the
+            # remaining keys: an extra separator added on every round trip
+            # (deepseek -> vsp -> ...) is what accumulated into the multiple
+            # empty lines seen between model_catalog_json and
+            # disable_response_storage.
+            if leading and not previous_blank:
+                leading.append("")
+            previous_blank = True
+            continue
+        previous_blank = False
         leading.append(line)
     while leading and not leading[-1].strip():
         leading.pop()
     prefix = [f"{key} = {value}" for key, value in assignments.items()]
-    new_lines = prefix + ([""] if prefix and leading else []) + leading
+    new_lines = prefix + leading
 
     index = first_section
     current_section: str | None = None
@@ -293,7 +316,7 @@ def _model_entry(slug: str, display_name: str, description: str, priority: int) 
         "default_reasoning_summary": "none",
         "display_name": display_name,
         "description": description,
-        "default_reasoning_level": "high",
+        "default_reasoning_level": "max",
         "supported_reasoning_levels": [
             {"effort": "low", "description": "Fast responses with lighter reasoning"},
             {"effort": "high", "description": "Extra high reasoning depth for complex problems"},
@@ -336,24 +359,59 @@ def _read_state(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _save_original_state(config: Path, state: Path) -> dict[str, Any]:
-    existing = _read_state(state)
-    lines = config.read_text(encoding="utf-8").splitlines() if config.exists() else []
-    current = _leading_assignments(lines)
-    current_provider = current.get("model_provider", "").strip().strip('"').strip("'")
-    if existing.get("original_top_level") and current_provider != "vsp_lab_api":
-        return existing
-
-    original = {
+def _managed_assignments(current: dict[str, str]) -> dict[str, str]:
+    """Keep only top-level keys this tool owns or that conflict with DeepSeek."""
+    return {
         key: value
         for key, value in current.items()
         if key in MANAGED_TOP_LEVEL_KEYS or key in DEEPSEEK_CONFLICT_KEYS
     }
+
+
+def _save_original_state(config: Path, state: Path) -> dict[str, Any]:
+    """Record the provider settings we are switching away from.
+
+    ``original_top_level`` is kept for backward compatibility, while
+    ``last_vsp`` / ``last_deepseek`` store the most recently used model and
+    reasoning effort per provider so a later switch restores exactly what was
+    in use before, instead of a fixed default model.
+    """
+    existing = _read_state(state)
+    lines = config.read_text(encoding="utf-8").splitlines() if config.exists() else []
+    current = _leading_assignments(lines)
+    current_provider = current.get("model_provider", "").strip().strip('"').strip("'")
+    if existing.get("original_top_level") and current_provider not in {"", "vsp_lab_api"}:
+        return existing
+
+    original = _managed_assignments(current)
     if not original and existing.get("original_top_level"):
         return existing
-    payload = {"version": 1, "original_top_level": original}
+    payload = dict(existing)
+    payload["version"] = 2
+    payload["original_top_level"] = original
+    snapshot = dict(original)
+    if current_provider in {"", "vsp_lab_api"}:
+        snapshot.setdefault("model_provider", '"vsp_lab_api"')
+        payload["last_vsp"] = snapshot
+    else:
+        snapshot.setdefault("model_provider", f'"{DEEPSEEK_PROVIDER}"')
+        payload["last_deepseek"] = snapshot
     _write_json_atomic(state, payload)
     return payload
+
+
+def _save_provider_snapshot(state: Path, provider: str, current: dict[str, str]) -> None:
+    """Refresh the recorded settings for one provider from the live config."""
+    payload = _read_state(state)
+    payload["version"] = 2
+    snapshot = _managed_assignments(current)
+    if provider == "vsp":
+        snapshot.setdefault("model_provider", '"vsp_lab_api"')
+        payload["last_vsp"] = snapshot
+    else:
+        snapshot.setdefault("model_provider", f'"{DEEPSEEK_PROVIDER}"')
+        payload["last_deepseek"] = snapshot
+    _write_json_atomic(state, payload)
 
 
 def _current_top_level(config: Path) -> dict[str, str]:
@@ -368,7 +426,7 @@ def _deepseek_assignments() -> dict[str, str]:
         "model_provider": _toml_string(DEEPSEEK_PROVIDER),
         "preferred_auth_method": _toml_string("apikey"),
         "forced_login_method": _toml_string("api"),
-        "model_reasoning_effort": _toml_string("high"),
+        "model_reasoning_effort": _toml_string("max"),
         "model_catalog_json": _toml_string(catalog),
     }
 
@@ -397,7 +455,14 @@ def switch_deepseek(config: Path | None = None, state: Path | None = None, catal
         raise SystemExit(
             "Codex 配置中没有 DeepSeek API key。请先运行 mw-model configure 完成一次迁移。"
         )
-    _save_original_state(target_config, target_state)
+    current = _current_top_level(target_config)
+    current_provider = current.get("model_provider", "").strip().strip('"').strip("'")
+    if current_provider != DEEPSEEK_PROVIDER:
+        # Remember the VSP model/effort that is actually in use so a later
+        # switch back restores this exact state instead of a fixed model.
+        _save_original_state(target_config, target_state)
+    else:
+        _save_provider_snapshot(target_state, DEEPSEEK_PROVIDER, current)
     write_model_catalog(target_catalog)
     _replace_config(
         target_config,
@@ -407,7 +472,7 @@ def switch_deepseek(config: Path | None = None, state: Path | None = None, catal
     )
     _set_provider_section_active(target_config, "vsp_lab_api", False)
     _set_provider_section_active(target_config, DEEPSEEK_PROVIDER, True)
-    print(f"已切换到 DeepSeek：{DEEPSEEK_MODEL}（API key 未输出）")
+    print(f"已切换到 DeepSeek：{DEEPSEEK_MODEL}（推理强度 max，API key 未输出）")
 
 
 def configure_deepseek(config: Path | None = None, state: Path | None = None, catalog: Path | None = None) -> None:
@@ -438,22 +503,25 @@ def configure_deepseek(config: Path | None = None, state: Path | None = None, ca
 def switch_vsp(config: Path | None = None, state: Path | None = None) -> None:
     target_config = config or config_path()
     target_state = state or state_path()
-    saved = _read_state(target_state)
-    original = saved.get("original_top_level", {})
     current = _current_top_level(target_config)
+    current_provider = current.get("model_provider", "").strip().strip('"').strip("'")
+    if current_provider == DEEPSEEK_PROVIDER:
+        _save_provider_snapshot(target_state, DEEPSEEK_PROVIDER, current)
+    saved = _read_state(target_state)
+    original = saved.get("last_vsp") or saved.get("original_top_level") or {}
     if not original:
-        original = {
-            "model": current.get("model", '"gpt-5.6-luna"'),
-            "model_provider": current.get("model_provider", '"vsp_lab_api"'),
-            "model_reasoning_effort": current.get("model_reasoning_effort", '"high"'),
-        }
-    assignments = {
-        key: value
-        for key, value in original.items()
-        if key in MANAGED_TOP_LEVEL_KEYS or key in DEEPSEEK_CONFLICT_KEYS
-    }
+        if current_provider in {"", "vsp_lab_api"}:
+            original = _managed_assignments(current)
+        else:
+            raise SystemExit(
+                "没有找到之前使用的 VSP 模型设置；请先运行 mw-model configure 记录一次 VSP 配置。"
+            )
+    assignments = _managed_assignments(original)
     assignments.setdefault("model_provider", '"vsp_lab_api"')
-    assignments.setdefault("model", '"gpt-5.6-luna"')
+    if "model" not in assignments:
+        raise SystemExit(
+            "状态中没有 VSP 模型记录；请先运行 mw-model configure 记录一次 VSP 配置。"
+        )
     assignments.setdefault("model_reasoning_effort", '"high"')
     _replace_config(
         target_config,
@@ -465,7 +533,7 @@ def switch_vsp(config: Path | None = None, state: Path | None = None) -> None:
     )
     _set_provider_section_active(target_config, "vsp_lab_api", True)
     _set_provider_section_active(target_config, DEEPSEEK_PROVIDER, False)
-    print(f"已切换回 VSP：{assignments['model']}")
+    print(f"已切换回 VSP：{assignments['model']}（推理强度 {assignments['model_reasoning_effort']}）")
 
 
 def status() -> None:
@@ -481,6 +549,11 @@ def status() -> None:
         "deepseek-v4-pro",
     }:
         print("警告：DeepSeek provider 与当前 model 不匹配；请运行 mw-model use deepseek。")
+    saved = _read_state(state_path())
+    last_vsp = saved.get("last_vsp") or saved.get("original_top_level") or {}
+    if last_vsp:
+        print(f"切换回 VSP 时将恢复: model={last_vsp.get('model', '(未记录)')}，"
+              f"reasoning_effort={last_vsp.get('model_reasoning_effort', '(未记录)')}")
     print(f"DeepSeek API key: {'已配置' if read_configured_deepseek_api_key(config_path()) else '未配置（请手动填写）'}")
     print(f"DeepSeek catalog: {'已安装' if models_path().exists() else '未安装'}")
 
