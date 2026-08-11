@@ -6,6 +6,7 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 
 ```text
 .mary-research/
+├── Makefile
 └── papers/
     └── <paper-id>/
         ├── state.json
@@ -42,7 +43,10 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 exports the current `slides.md` with the localized ShanghaiTech Marp theme and
 `--allow-local-files`. Its separate `hypo-template` target compiles
 `hypo-template-preview/Slide.tex` with the external Hypoxanthine-LaTeX checkout
-when available. Neither target rewrites `slides.md` or an existing export.
+when available. It also installs a root `.mary-research/Makefile` dispatcher, so
+`make slide` works from either the project research root or the paper workspace;
+use `make PAPER_ID=<paper-id> slide` when the project contains multiple papers.
+Neither target rewrites `slides.md` or an existing export.
 
 ## Identity
 

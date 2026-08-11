@@ -145,7 +145,7 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 
 论文 workspace 的源文件和生成 JSON sidecar 统一放在
 `.mary-research/papers/<paper-id>/artifacts/`；根目录只保留 `state.json`、日志、阅读稿、总结和 slide 源文件。对旧 workspace 可运行
-`mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile`，在该目录运行 `make slide` 导出当前 Marp deck，运行 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
+`mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile` 和 `.mary-research/Makefile` dispatcher；可在 paper workspace 运行 `make slide`，也可在 `.mary-research/` 根目录运行 `make slide`（多 paper 时使用 `make PAPER_ID=<paper-id> slide`），并用 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
 
 ## 常用操作
 

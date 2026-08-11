@@ -57,6 +57,7 @@ from mw_paper_slides import (
     PAPER_MAKEFILE,
     PaperSlidesError,
     PROJECT_THEME_RELATIVE,
+    RESEARCH_MAKEFILE,
     SLIDES_CONTEXT_FILE,
     SLIDES_FILE,
     run_marp_smoke,
@@ -1447,6 +1448,7 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
     print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
     print(f"figure_directory: {workspace / 'figures'}")
+    print(f"research_makefile: {Path(args.project_root).resolve() / RESEARCH_MAKEFILE}")
     print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
     print(f"hypo_preview_source: {workspace / HYPO_PREVIEW_FILE}")
     print(f"slides_target: {workspace / SLIDES_FILE}")
