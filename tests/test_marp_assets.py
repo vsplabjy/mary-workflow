@@ -55,6 +55,15 @@ class MarpAssetContractTests(unittest.TestCase):
             (REPO_ROOT / "assets/marp/themes/mary-shanghaitech-red.css").resolve(),
         )
 
+    def test_paper_grid_headings_have_bounded_vertical_clearance(self) -> None:
+        source_css = (
+            REPO_ROOT / "assets/marp/themes/mary-shanghaitech-red.source.css"
+        ).read_text(encoding="utf-8")
+        self.assertIn("--slide-heading-height: 40px;", source_css)
+        self.assertIn("--slide-heading-lift: clamp(-8px, -0.5vw, -4px);", source_css)
+        self.assertIn("block-size: var(--slide-heading-height);", source_css)
+        self.assertIn("transform: translateY(var(--slide-heading-lift));", source_css)
+
     def test_p5_reuses_the_local_theme_without_adding_vendor_metadata(self) -> None:
         paper_skill = (REPO_ROOT / "skills/paper/SKILL.md").read_text(encoding="utf-8")
         slides_contract = (REPO_ROOT / "references/slides-contract.md").read_text(encoding="utf-8")
