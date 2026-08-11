@@ -44,7 +44,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
 9. For `slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
-   - use the generated paper-local `Makefile`: `make slide` creates `build/slides.pdf` from the current `slides.md`, while `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide;
+   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` creates `build/slides.pdf` from the current `slides.md`, while `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide; pass `PAPER_ID=<paper-id>` at the research root when needed;
    - treat the emitted `workspace_theme` and `vscode_settings` as generated project support: open the target project root in VS Code so every nested paper deck resolves the offline theme;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;

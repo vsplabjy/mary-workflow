@@ -39,7 +39,9 @@ paper workspace to export `build/slides.pdf` with the exact local Marp theme,
 `--allow-local-files`, and the paper's relative figures. Run
 `make hypo-template` to compile a separate original Hypoxanthine-LaTeX style
 preview into `build/hypo-template-preview.pdf`; this is a visual comparison
-artifact and must never replace the grounded `slides.md` artifact.
+artifact and must never replace the grounded `slides.md` artifact. The same
+targets are available through the generated `.mary-research/Makefile` dispatcher
+from the project research root; pass `PAPER_ID=<paper-id>` when needed.
 
 ## Frontmatter
 

@@ -24,6 +24,8 @@ from mw_paper_slides import (  # noqa: E402
     PAPER_MAKEFILE,
     PAPER_MAKEFILE_MARKER,
     PROJECT_THEME_RELATIVE,
+    RESEARCH_MAKEFILE,
+    RESEARCH_MAKEFILE_MARKER,
     SLIDES_CONTEXT_SCHEMA,
     SLIDES_FILE,
     VSCODE_SETTINGS_RELATIVE,
@@ -131,9 +133,13 @@ class SlidesContractTests(unittest.TestCase):
         self.assertTrue((self.workspace / "figures").is_dir())
         self.assertTrue((self.workspace / PAPER_MAKEFILE).is_file())
         self.assertTrue((self.workspace / HYPO_PREVIEW_FILE).is_file())
+        self.assertTrue((self.project / RESEARCH_MAKEFILE).is_file())
         makefile_text = (self.workspace / PAPER_MAKEFILE).read_text(encoding="utf-8")
         self.assertIn(PAPER_MAKEFILE_MARKER, makefile_text)
         self.assertIn("--allow-local-files", makefile_text)
+        research_makefile_text = (self.project / RESEARCH_MAKEFILE).read_text(encoding="utf-8")
+        self.assertIn(RESEARCH_MAKEFILE_MARKER, research_makefile_text)
+        self.assertIn("PAPER_ID ?=", research_makefile_text)
         self.assertEqual(self.context["presentation"]["build"]["default_target"], "slide")
         self.assertEqual(self.context["presentation"]["build"]["hypo_preview_target"], "hypo-template")
         self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
@@ -147,6 +153,16 @@ class SlidesContractTests(unittest.TestCase):
         self.assertEqual(settings["markdown.marp.html"], "all")
         self.assertEqual(settings["markdown.marp.mathTypesetting"], "katex")
         self.assertIn(VSCODE_THEME_REFERENCE, settings["markdown.marp.themes"])
+
+        write_slides_fixture(self.workspace)
+        root_make = subprocess.run(
+            ["make", "-C", str(self.project / ".mary-research"), "-n", "slide"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn("slides.pdf", root_make.stdout)
 
         prepared = subprocess.run(
             [
@@ -328,6 +344,11 @@ class SlidesContractTests(unittest.TestCase):
         write_slides_fixture(self.workspace)
         (self.workspace / PAPER_MAKEFILE).unlink()
         self.assert_rejected("Paper Makefile is missing or stale")
+
+    def test_research_build_dispatcher_cannot_drift(self) -> None:
+        write_slides_fixture(self.workspace)
+        (self.project / RESEARCH_MAKEFILE).unlink()
+        self.assert_rejected("Project .mary-research Makefile is missing or stale")
 
     def test_lint_and_complete_slides_cli(self) -> None:
         write_slides_fixture(self.workspace)
