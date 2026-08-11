@@ -21,7 +21,8 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - `list`: list registered paper ids;
    - `status [paper-id]`: run `status`, adding `--paper-id` when supplied;
    - `create --source <locator> --fingerprint <sha256> [--paper-id <id>]`: create an independent paper state;
-   - `apply-action [paper-id]`: apply one `start_stage`, `complete_stage`, `fail_stage`, `reset_stage`, or `update_source` envelope with `--json` or `--file`.
+   - `apply-action [paper-id]`: apply one `start_stage`, `complete_stage`, `fail_stage`, `reset_stage`, or `update_source` envelope with `--json` or `--file`;
+   - `migrate-artifacts [paper-id]`: move legacy root-level `source.*` and generated `.json` files into `artifacts/`, preserving root `state.json` and refusing conflicts.
 4. For `read <source>` (the source may be a folder containing a PDF and optional LaTeX tree):
    - run `python ~/.codex/skills/mary-workflow/scripts/mw_paper.py prepare-read --source <source>`;
    - inspect `artifacts/read-context.json`, the full `artifacts/parse-quality.json`, and all of `artifacts/source.md`;
@@ -43,6 +44,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
 9. For `slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
+   - use the generated paper-local `Makefile`: `make slide` creates `build/slides.pdf` from the current `slides.md`, while `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide;
    - treat the emitted `workspace_theme` and `vscode_settings` as generated project support: open the target project root in VS Code so every nested paper deck resolves the offline theme;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;

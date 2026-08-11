@@ -74,7 +74,9 @@ class SourceLocatorContractTests(unittest.TestCase):
     def test_html_index_records_duplicate_spans_lines_and_fingerprints(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory)
-            (workspace / "source.md").write_text(
+            source = artifact_path(workspace, NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
                 "<!-- mary-normalized-source:v1 -->\n"
                 "<!-- locator: html#S1 -->\nFirst evidence block.\n"
                 "<!-- locator: html#S1 -->\nSecond evidence block.\n"
@@ -95,7 +97,8 @@ class SourceLocatorContractTests(unittest.TestCase):
 
     def test_pdf_page_locators_are_machine_resolvable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "source.md"
+            source = artifact_path(Path(directory), NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text(
                 "<!-- locator: pdf:p1 -->\nPage one evidence.\n"
                 "<!-- locator: pdf:p2 -->\nPage two evidence.\n",
@@ -107,7 +110,8 @@ class SourceLocatorContractTests(unittest.TestCase):
 
     def test_invalid_or_empty_locator_span_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "source.md"
+            source = artifact_path(Path(directory), NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text("<!-- locator: html#bad/path -->\nEvidence.\n", encoding="utf-8")
             with self.assertRaisesRegex(SourceLocatorError, "Invalid html locator"):
                 parse_source_locator_blocks(source, "html")

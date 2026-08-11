@@ -38,6 +38,18 @@ The folder bundle fingerprint covers the selected PDF, the LaTeX dependency
 closure, referenced bibliography files, and referenced figure assets. A PDF-only
 source continues to use the existing single-source path.
 
+## Legacy artifact migration
+
+The current layout is strict: `source.pdf`/`source.html`, `source.md`, and every
+generated JSON sidecar belong under `artifacts/`. The root-level `state.json` is
+the exception because it is the paper state record; `log.md` and learner-facing
+Markdown remain readable at the workspace root. `migrate-artifacts --paper-id`
+moves legacy root source/JSON files into `artifacts/`, removes identical
+duplicates, and refuses conflicting copies. `prepare-read`, `prepare-summary`,
+`prepare-slides`, `prepare-quiz`, and `complete-read` run the same migration
+before reading or writing. New runtime reads never fall back to root-level
+generated artifacts.
+
 ## Learner-facing Markdown
 
 The file must retain `<!-- mary-reading:v1 -->` and should be edited into a

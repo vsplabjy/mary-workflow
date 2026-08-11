@@ -44,9 +44,9 @@ paper reading pass; it does not change source evidence or scientific claims.
   would be hard to reconstruct word by word.
 - Give a detailed Chinese explanation in a longer, possibly multiline
   parenthetical annotation immediately after the English passage when the paper
-  omits a prerequisite, describes information flow across
-  modules, introduces an objective or derivation, relies on a non-obvious
-  assumption, or requires interpreting a formula, figure, or table.
+  omits a prerequisite, describes information flow across modules, introduces
+  an objective or derivation, relies on a non-obvious assumption, or requires
+  interpreting a formula, figure, or table.
 - In every explanation, state the role in this paper first. For a method,
   explain why it is needed, what enters it, what it transforms or constrains,
   what leaves it, and the relevant trade-off. Do not add background facts that
