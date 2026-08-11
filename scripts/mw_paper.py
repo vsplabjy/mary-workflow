@@ -53,6 +53,7 @@ from mw_paper_summary import (
     write_summary_context,
 )
 from mw_paper_slides import (
+    HYPO_PREVIEW_FILE,
     PAPER_MAKEFILE,
     PaperSlidesError,
     PROJECT_THEME_RELATIVE,
@@ -1449,6 +1450,7 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"figure_directory: {workspace / 'figures'}")
     print(f"research_makefile: {Path(args.project_root).resolve() / RESEARCH_MAKEFILE}")
     print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
+    print(f"hypo_preview_source: {workspace / HYPO_PREVIEW_FILE}")
     print(f"slides_target: {workspace / SLIDES_FILE}")
     print(
         json.dumps(

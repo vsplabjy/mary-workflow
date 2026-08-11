@@ -20,6 +20,7 @@ from mw_paper import (  # noqa: E402
     read_paper_state,
 )
 from mw_paper_slides import (  # noqa: E402
+    HYPO_PREVIEW_FILE,
     PAPER_MAKEFILE,
     PAPER_MAKEFILE_MARKER,
     PROJECT_THEME_RELATIVE,
@@ -131,6 +132,7 @@ class SlidesContractTests(unittest.TestCase):
         self.assertTrue(artifact_path(self.workspace, SLIDES_CONTEXT_FILE).is_file())
         self.assertTrue((self.workspace / "figures").is_dir())
         self.assertTrue((self.workspace / PAPER_MAKEFILE).is_file())
+        self.assertTrue((self.workspace / HYPO_PREVIEW_FILE).is_file())
         self.assertTrue((self.project / RESEARCH_MAKEFILE).is_file())
         makefile_text = (self.workspace / PAPER_MAKEFILE).read_text(encoding="utf-8")
         self.assertIn(PAPER_MAKEFILE_MARKER, makefile_text)
@@ -138,10 +140,8 @@ class SlidesContractTests(unittest.TestCase):
         research_makefile_text = (self.project / RESEARCH_MAKEFILE).read_text(encoding="utf-8")
         self.assertIn(RESEARCH_MAKEFILE_MARKER, research_makefile_text)
         self.assertIn("PAPER_ID ?=", research_makefile_text)
-        self.assertNotIn("hypo", makefile_text.lower())
-        self.assertNotIn("hypo", research_makefile_text.lower())
         self.assertEqual(self.context["presentation"]["build"]["default_target"], "slide")
-        self.assertNotIn("hypo_preview_target", self.context["presentation"]["build"])
+        self.assertEqual(self.context["presentation"]["build"]["hypo_preview_target"], "hypo-template")
         self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
         self.assertEqual(
             sha256_file(self.project / PROJECT_THEME_RELATIVE),

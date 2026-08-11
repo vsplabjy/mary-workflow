@@ -35,6 +35,8 @@ SLIDES_CONTEXT_SCHEMA = 1
 SLIDES_FILE = "slides.md"
 FIGURES_DIR = "figures"
 PAPER_MAKEFILE = "Makefile"
+HYPO_PREVIEW_DIR = "hypo-template-preview"
+HYPO_PREVIEW_FILE = f"{HYPO_PREVIEW_DIR}/Slide.tex"
 PAPER_MAKEFILE_MARKER = "# mary-paper-build:v1"
 RESEARCH_MAKEFILE = Path(".mary-research") / "Makefile"
 RESEARCH_MAKEFILE_MARKER = "# mary-research-build:v1"
@@ -86,8 +88,10 @@ SLIDES := slides.md
 BUILD_DIR ?= build
 THEME := $(PROJECT_ROOT)/.mary-research/marp/themes/mary-shanghaitech-red.css
 MARP ?= npx @marp-team/marp-cli@4.3.1
+HYPO_PATH ?= $(PROJECT_ROOT)/../Hypoxanthine-LaTeX
+HYPO_PREVIEW := hypo-template-preview/Slide.tex
 
-.PHONY: slide slides slide-html slide-pptx clean
+.PHONY: slide slides slide-html slide-pptx hypo-template clean
 
 slide slides: $(BUILD_DIR)/slides.pdf
 
@@ -107,6 +111,15 @@ $(BUILD_DIR)/slides.pptx: $(SLIDES) $(THEME)
 	@mkdir -p "$(BUILD_DIR)"
 	$(MARP) "$(SLIDES)" --theme-set "$(THEME)" --pptx --allow-local-files -o "$@"
 
+# Compile a separate, original Hypoxanthine-LaTeX preview for visual comparison.
+# This target never changes slides.md or build/slides.pdf.
+hypo-template: $(BUILD_DIR)/hypo-template-preview.pdf
+
+$(BUILD_DIR)/hypo-template-preview.pdf: $(HYPO_PREVIEW)
+	@test -f "$(HYPO_PATH)/make/Hypoxanthine.mk" || (echo "Set HYPO_PATH to the Hypoxanthine-LaTeX checkout."; exit 2)
+	$(MAKE) -f "$(HYPO_PATH)/make/Hypoxanthine.mk" HYPO_PATH="$(HYPO_PATH)" NAME=hypo-template-preview MAIN_FILE="$(CURDIR)/$(HYPO_PREVIEW)" OUT_DIR="$(CURDIR)/$(BUILD_DIR)/hypo-template-preview" SHELL_ESCAPE=1 all
+	cp "$(BUILD_DIR)/hypo-template-preview/Slide.pdf" "$@"
+
 clean:
 	rm -rf "$(BUILD_DIR)"
 '''
@@ -120,7 +133,7 @@ PAPER_IDS := $(notdir $(PAPER_DIRS))
 PAPER_ID ?= $(firstword $(PAPER_IDS))
 PAPER_DIR := $(RESEARCH_ROOT)/papers/$(PAPER_ID)
 
-.PHONY: slide slide-html slide-pptx clean check
+.PHONY: slide slide-html slide-pptx hypo-template clean check
 
 slide: check
 	$(MAKE) -C "$(PAPER_DIR)" slide
@@ -131,12 +144,58 @@ slide-html: check
 slide-pptx: check
 	$(MAKE) -C "$(PAPER_DIR)" slide-pptx
 
+hypo-template: check
+	$(MAKE) -C "$(PAPER_DIR)" hypo-template
+
 clean: check
 	$(MAKE) -C "$(PAPER_DIR)" clean
 
 check:
 	@test -n "$(PAPER_ID)" || (echo "No paper workspace found under $(RESEARCH_ROOT)/papers."; exit 2)
 	@test -d "$(PAPER_DIR)" || (echo "Unknown PAPER_ID=$(PAPER_ID); use make PAPER_ID=<paper-id> slide."; exit 2)
+'''
+
+HYPO_PREVIEW_TEMPLATE = r'''\documentclass[theme=school, aspectratio=169]{Hypo-Slide}
+
+\HypoSlideSetup{
+  title={GaussianFluent},
+  subtitle={Original Hypoxanthine-LaTeX template preview},
+  author={Bei Huang et al.},
+  institute={ShanghaiTech University},
+  date={2026}
+}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}{Method at a glance}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Representation}
+        Gaussian infilling adds internal particles so the representation can support volume-aware simulation.
+      \end{block}
+      \begin{block}{Physics}
+        Mixed-material CD-MPM transfers state between Gaussian particles and an Eulerian grid.
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{alertblock}{Key question}
+        Does the same representation remain renderable after deformation and fracture?
+      \end{alertblock}
+      \[
+        L_{total}=L_{MSE}+L_{SSIM}+\lambda\sum_i\lVert s_i\rVert_2^2
+      \]
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Original paper Figure 1}
+  \centering
+  \includegraphics[width=0.90\linewidth]{figures/figure-1-teaser.png}
+\end{frame}
+
+\end{document}
 '''
 
 ARTIFACT_MARKER = "<!-- mary-slides:v1 -->"
@@ -316,7 +375,7 @@ def install_project_marp_support(project_root: Path) -> JsonObject:
 
 
 def install_paper_build_support(workspace: Path) -> JsonObject:
-    """Install reproducible Marp Makefiles using the built-in Mary theme."""
+    """Install a reproducible Marp Makefile and isolated Hypo preview source."""
     directory = Path(workspace).resolve()
     project_root = project_root_from_workspace(directory)
     research_makefile = project_root / RESEARCH_MAKEFILE
@@ -337,12 +396,18 @@ def install_paper_build_support(workspace: Path) -> JsonObject:
     if not makefile.is_file() or makefile.read_text(encoding="utf-8") != PAPER_MAKEFILE_TEMPLATE:
         atomic_write_text(makefile, PAPER_MAKEFILE_TEMPLATE)
 
+    preview = directory / HYPO_PREVIEW_FILE
+    preview.parent.mkdir(parents=True, exist_ok=True)
+    if not preview.is_file() or preview.read_text(encoding="utf-8") != HYPO_PREVIEW_TEMPLATE:
+        atomic_write_text(preview, HYPO_PREVIEW_TEMPLATE)
     return {
         "makefile": str(makefile),
         "makefile_marker": PAPER_MAKEFILE_MARKER,
         "research_makefile": str(research_makefile),
         "research_makefile_marker": RESEARCH_MAKEFILE_MARKER,
         "default_target": "slide",
+        "hypo_preview_target": "hypo-template",
+        "hypo_preview_source": str(preview),
     }
 
 
@@ -354,14 +419,19 @@ def validate_paper_build_support(workspace: Path) -> JsonObject:
     if not research_makefile.is_file() or RESEARCH_MAKEFILE_MARKER not in research_makefile.read_text(encoding="utf-8"):
         raise PaperSlidesError("Project .mary-research Makefile is missing or stale; run prepare-slides again.")
     makefile = directory / PAPER_MAKEFILE
+    preview = directory / HYPO_PREVIEW_FILE
     if not makefile.is_file() or PAPER_MAKEFILE_MARKER not in makefile.read_text(encoding="utf-8"):
         raise PaperSlidesError("Paper Makefile is missing or stale; run prepare-slides again.")
+    if not preview.is_file() or "Hypo-Slide" not in preview.read_text(encoding="utf-8"):
+        raise PaperSlidesError("Hypo template preview source is missing or stale; run prepare-slides again.")
     return {
         "makefile": str(makefile),
         "makefile_marker": PAPER_MAKEFILE_MARKER,
         "research_makefile": str(research_makefile),
         "research_makefile_marker": RESEARCH_MAKEFILE_MARKER,
         "default_target": "slide",
+        "hypo_preview_target": "hypo-template",
+        "hypo_preview_source": str(preview),
     }
 
 
