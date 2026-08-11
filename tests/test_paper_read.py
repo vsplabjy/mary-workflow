@@ -20,6 +20,7 @@ from mw_paper import (  # noqa: E402
     read_paper_state,
 )
 from mw_paper_sources import (  # noqa: E402
+    MAX_SOURCE_BYTES,
     PaperReadError,
     QUALITY_DIMENSIONS,
     acquire_source,
@@ -125,6 +126,9 @@ def write_notes(
 
 
 class SourceAcquisitionTests(unittest.TestCase):
+    def test_source_size_limit_supports_large_papers(self) -> None:
+        self.assertEqual(MAX_SOURCE_BYTES, 256 * 1024 * 1024)
+
     def test_html_parser_emits_five_passing_dimensions_and_locators(self) -> None:
         normalized, dimensions = html_to_normalized_source(good_html())
         self.assertEqual(tuple(dimensions), QUALITY_DIMENSIONS)
