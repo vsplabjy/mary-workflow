@@ -47,7 +47,7 @@ Manage independent paper states, close reading, grounded summaries, research sli
 14. For `/mw-paper slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
    - keep acquired source files and all generated JSON sidecars under `artifacts/`; use `migrate-artifacts` for legacy workspaces and never create root-level `source.*` or generated `.json` files;
-   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` exports the current Marp deck, while `make hypo-template` creates a separate original Hypoxanthine-LaTeX visual comparison under `build/` without replacing `slides.md`; pass `PAPER_ID=<paper-id>` at the research root when needed;
+   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` exports the current Marp deck with the built-in `mary-shanghaitech-red` theme; pass `PAPER_ID=<paper-id>` at the research root when needed;
    - keep the generated project-local theme and VS Code registration intact, and open the target project root as the workspace when previewing a nested deck;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` with `mary-shanghaitech-red`, `16:9`, and `math: katex` frontmatter;

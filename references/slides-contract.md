@@ -33,14 +33,10 @@ Open the target project root as the VS Code workspace, then every paper deck bel
 without depending on the Mary plugin checkout or the Markdown file's depth. VS Code does not
 inherit `.vscode` settings from directories above an independently opened workspace.
 
-Preparation also installs `<paper-workspace>/Makefile` and the isolated
-`<paper-workspace>/hypo-template-preview/Slide.tex`. Run `make slide` from the
+Preparation also installs `<paper-workspace>/Makefile`. Run `make slide` from the
 paper workspace to export `build/slides.pdf` with the exact local Marp theme,
-`--allow-local-files`, and the paper's relative figures. Run
-`make hypo-template` to compile a separate original Hypoxanthine-LaTeX style
-preview into `build/hypo-template-preview.pdf`; this is a visual comparison
-artifact and must never replace the grounded `slides.md` artifact. The same
-targets are available through the generated `.mary-research/Makefile` dispatcher
+`--allow-local-files`, and the paper's relative figures. The same target is
+available through the generated `.mary-research/Makefile` dispatcher
 from the project research root; pass `PAPER_ID=<paper-id>` when needed.
 
 ## Frontmatter
