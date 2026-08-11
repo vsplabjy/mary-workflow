@@ -163,6 +163,14 @@ class SlidesContractTests(unittest.TestCase):
             check=True,
         )
         self.assertIn("slides.pdf", root_make.stdout)
+        root_slides = subprocess.run(
+            ["make", "-C", str(self.project / ".mary-research"), "-n", "slides"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn("slides.pdf", root_slides.stdout)
 
         prepared = subprocess.run(
             [

@@ -133,10 +133,12 @@ PAPER_IDS := $(notdir $(PAPER_DIRS))
 PAPER_ID ?= $(firstword $(PAPER_IDS))
 PAPER_DIR := $(RESEARCH_ROOT)/papers/$(PAPER_ID)
 
-.PHONY: slide slide-html slide-pptx hypo-template clean check
+.PHONY: slide slides slide-html slide-pptx hypo-template clean check
 
 slide: check
 	$(MAKE) -C "$(PAPER_DIR)" slide
+
+slides: slide
 
 slide-html: check
 	$(MAKE) -C "$(PAPER_DIR)" slide-html
