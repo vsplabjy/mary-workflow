@@ -12,10 +12,13 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mw_paper import create_paper, paper_directory, prepare_read  # noqa: E402
 from mw_paper_artifacts import (  # noqa: E402
+    ArtifactLayoutError,
     READ_CONTEXT_FILE,
     READING_CONTEXT_FILE,
     SOURCE_MANIFEST_FILE,
     artifact_path,
+    legacy_artifacts,
+    migrate_legacy_artifacts,
 )
 from mw_paper_sources import acquire_source  # noqa: E402
 
@@ -107,6 +110,40 @@ The method maps an input to an output.
             self.assertEqual(
                 json.loads(artifact_path(workspace, READING_CONTEXT_FILE).read_text(encoding="utf-8"))["source_kind"],
                 "pdf-only",
+            )
+
+    def test_legacy_root_sources_and_json_move_under_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "paper"
+            workspace.mkdir(parents=True)
+            (workspace / "state.json").write_text("{}\n", encoding="utf-8")
+            (workspace / "source.pdf").write_bytes(b"pdf")
+            (workspace / "source.md").write_text("source\n", encoding="utf-8")
+            (workspace / "parse-quality.json").write_text("{}\n", encoding="utf-8")
+
+            changes = migrate_legacy_artifacts(workspace)
+
+            self.assertEqual(legacy_artifacts(workspace), [])
+            self.assertFalse((workspace / "source.pdf").exists())
+            self.assertTrue((workspace / "artifacts" / "source.pdf").is_file())
+            self.assertTrue((workspace / "artifacts" / "parse-quality.json").is_file())
+            self.assertTrue((workspace / "state.json").is_file())
+            self.assertEqual(len(changes), 3)
+
+    def test_legacy_artifact_conflict_is_not_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "paper"
+            (workspace / "artifacts").mkdir(parents=True)
+            (workspace / "source.md").write_text("old\n", encoding="utf-8")
+            (workspace / "artifacts" / "source.md").write_text("new\n", encoding="utf-8")
+
+            with self.assertRaises(ArtifactLayoutError):
+                migrate_legacy_artifacts(workspace)
+
+            self.assertTrue((workspace / "source.md").is_file())
+            self.assertEqual(
+                (workspace / "artifacts" / "source.md").read_text(encoding="utf-8"),
+                "new\n",
             )
 
     def test_prepare_read_migrates_legacy_hash_workspace_to_parsed_title(self) -> None:

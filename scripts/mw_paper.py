@@ -14,6 +14,7 @@ from typing import Any
 import unicodedata
 
 from mw_paper_artifacts import (
+    ArtifactLayoutError,
     NORMALIZED_SOURCE_FILE,
     PARSE_QUALITY_FILE,
     READ_CONTEXT_FILE,
@@ -22,6 +23,7 @@ from mw_paper_artifacts import (
     SOURCE_MANIFEST_FILE,
     SUMMARY_CONTEXT_FILE,
     artifact_path,
+    migrate_legacy_artifacts,
     resolve_artifact_path,
 )
 from mw_paper_readings import PaperReadingError, validate_reading_document, validate_reading_summary
@@ -51,6 +53,8 @@ from mw_paper_summary import (
     write_summary_context,
 )
 from mw_paper_slides import (
+    HYPO_PREVIEW_FILE,
+    PAPER_MAKEFILE,
     PaperSlidesError,
     PROJECT_THEME_RELATIVE,
     SLIDES_CONTEXT_FILE,
@@ -893,6 +897,12 @@ def prepare_read(
             existing_state = rename_paper_workspace(root, existing_state, desired_id)
             canonical_id = desired_id
 
+    workspace = paper_directory(root, canonical_id)
+    try:
+        migrate_legacy_artifacts(workspace)
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
+
     if existing_state is None:
         state, _ = create_paper(root, locator, source_fingerprint, canonical_id)
     else:
@@ -914,9 +924,9 @@ def prepare_read(
         else:
             state = existing_state
 
-    report = persist_acquisition(paper_directory(root, canonical_id), acquisition)
+    report = persist_acquisition(workspace, acquisition)
     write_read_context(
-        paper_directory(root, canonical_id), canonical_id, state["source"]["locator"]
+        workspace, canonical_id, state["source"]["locator"]
     )
     read_status = state["stages"]["read"]["status"]
     if read_status in {"pending", "failed", "stale"}:
@@ -938,6 +948,10 @@ def prepare_read(
 def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage = state["stages"]["read"]
     if read_stage["status"] != "complete":
@@ -977,6 +991,10 @@ def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple
 def prepare_slides(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage = state["stages"]["read"]
     summary_stage = state["stages"]["summary"]
@@ -1052,6 +1070,10 @@ def quiz_lineage(state: PaperState, command: str) -> tuple[JsonObject, JsonObjec
 def prepare_quiz(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage, summary_stage, source_format = quiz_lineage(state, "prepare-quiz")
     quiz_stage = state["stages"]["quiz"]
@@ -1257,6 +1279,30 @@ def cmd_apply_action(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_artifacts(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root)
+    paper_id = resolve_paper_id(project_root, args.paper_id)
+    workspace = paper_directory(project_root, paper_id)
+    try:
+        changes = migrate_legacy_artifacts(workspace)
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
+    if changes:
+        append_paper_log(project_root, paper_id, "migrated legacy artifacts: " + "; ".join(changes))
+    print(
+        json.dumps(
+            {
+                "paper_id": paper_id,
+                "artifacts": str(workspace / "artifacts"),
+                "changes": changes,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_prepare_read(args: argparse.Namespace) -> int:
     state, report = prepare_read(
         Path(args.project_root),
@@ -1298,6 +1344,10 @@ def cmd_prepare_read(args: argparse.Namespace) -> int:
 def cmd_complete_read(args: argparse.Namespace) -> int:
     project_root = Path(args.project_root)
     paper_id = resolve_paper_id(project_root, args.paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(project_root, paper_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(project_root, paper_id)
     notes_path = paper_directory(project_root, paper_id) / "paper-notes.md"
     if not notes_path.is_file():
@@ -1397,6 +1447,8 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
     print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
     print(f"figure_directory: {workspace / 'figures'}")
+    print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
+    print(f"hypo_preview_source: {workspace / HYPO_PREVIEW_FILE}")
     print(f"slides_target: {workspace / SLIDES_FILE}")
     print(
         json.dumps(
@@ -1580,6 +1632,12 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--source", help="arXiv id/URL or local HTML/PDF/folder")
     prepare_parser.add_argument("--paper-id", help="existing or explicit canonical paper id")
     prepare_parser.set_defaults(func=cmd_prepare_read)
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-artifacts", help="move legacy root source/JSON files into artifacts/"
+    )
+    migrate_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    migrate_parser.set_defaults(func=cmd_migrate_artifacts)
 
     complete_parser = subparsers.add_parser(
         "complete-read", help="validate paper-notes.md and complete the read stage"

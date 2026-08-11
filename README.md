@@ -143,6 +143,10 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 | `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
 | `/mw-model [操作]`  | 配置或切换 VSP 与 DeepSeek Responses API                            |
 
+论文 workspace 的源文件和生成 JSON sidecar 统一放在
+`.mary-research/papers/<paper-id>/artifacts/`；根目录只保留 `state.json`、日志、阅读稿、总结和 slide 源文件。对旧 workspace 可运行
+`mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile`，在该目录运行 `make slide` 导出当前 Marp deck，运行 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
+
 ## 常用操作
 
 ### 操作 Notion

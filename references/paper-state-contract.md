@@ -16,6 +16,9 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
         ├── summary.md
         ├── slides.md
         ├── figures/
+        ├── Makefile
+        ├── hypo-template-preview/
+        │   └── Slide.tex
         ├── quiz-log.md
         └── artifacts/
             ├── source.html or source.pdf
@@ -33,7 +36,13 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
             └── notion-context.json
 ```
 
-`/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it.
+`/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it. `state.json` and `log.md` remain at the paper root; acquired sources and generated JSON sidecars must remain under `artifacts/`.
+
+`prepare-slides` also installs a paper-local `Makefile`. Its `slide` target
+exports the current `slides.md` with the localized ShanghaiTech Marp theme and
+`--allow-local-files`. Its separate `hypo-template` target compiles
+`hypo-template-preview/Slide.tex` with the external Hypoxanthine-LaTeX checkout
+when available. Neither target rewrites `slides.md` or an existing export.
 
 ## Identity
 
