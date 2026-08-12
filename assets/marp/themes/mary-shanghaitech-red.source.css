@@ -1389,6 +1389,17 @@ section .figure-placeholder__caption {
   line-height: 1.35;
 }
 
+/* Real paper figures stay inside their panel so captions remain visible. */
+section .figure-placeholder > img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: min(68%, 23rem);
+  object-fit: contain;
+  margin: 0 auto;
+}
+
 section.bq blockquote,
 section.bq-blue blockquote,
 section.bq-red blockquote,
@@ -2775,6 +2786,11 @@ section :is(.limg, .mimg, .rimg, .timg, .bimg) img {
 }
 
 section:not(.cover_e):not(.lastpage) footer {
+  display: none;
+}
+
+section.lastpage footer,
+section.lastpage::after {
   display: none;
 }
 

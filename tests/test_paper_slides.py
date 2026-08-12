@@ -265,6 +265,58 @@ class SlidesContractTests(unittest.TestCase):
         )
         self.assert_rejected("requires number and caption nodes")
 
+    def test_figure_placeholder_accepts_local_html_image_and_exact_caption(self) -> None:
+        context = json.loads(artifact_path(self.workspace, SLIDES_CONTEXT_FILE).read_text(encoding="utf-8"))
+        figure = context["figure_catalog"][0]
+        image_path = self.workspace / "figures" / "figure-1.png"
+        image_path.write_bytes(b"png-fixture")
+
+        def add_image(text: str) -> str:
+            return text.replace(
+                f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+                f'<img src="figures/figure-1.png" alt="{figure["figure_id"]}">\n'
+                f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+                1,
+            )
+
+        digest = write_slides_fixture(self.workspace, add_image)
+        report = validate_slides(
+            self.workspace,
+            paper_id=self.paper_id,
+            source_format="html",
+            source_fingerprint=fingerprint("1"),
+            read_output_fingerprint=read_paper_state(self.project, self.paper_id)["stages"]["read"]["output_fingerprint"],
+            summary_output_fingerprint=read_paper_state(self.project, self.paper_id)["stages"]["summary"]["output_fingerprint"],
+        )
+        self.assertEqual(report["metadata"]["figure_placeholder_count"], 1)
+        self.assertEqual(report["slides_fingerprint"], digest)
+
+        self.assert_rejected_message(
+            add_image,
+            "caption does not exactly match Figure 1 context",
+            lambda text: text.replace(figure["caption"], "Figure 1. Altered caption", 1),
+        )
+
+        self.assert_rejected_message(
+            add_image,
+            "image references must be local repository files",
+            lambda text: text.replace("figures/figure-1.png", "https://example.com/figure.png", 1),
+        )
+
+    def assert_rejected_message(self, base_mutate: object, message: str, extra_mutate: object) -> None:
+        def mutate(text: str) -> str:
+            return extra_mutate(base_mutate(text))
+
+        write_slides_fixture(self.workspace, mutate)
+        self.assert_rejected(message)
+
+    def test_lastpage_must_only_contain_one_closing_title(self) -> None:
+        write_slides_fixture(
+            self.workspace,
+            lambda text: text.replace("###### 谢谢", "###### 谢谢\n\n多余内容", 1),
+        )
+        self.assert_rejected("last slide may contain only its H6 closing title")
+
     def test_figure_text_without_placeholder_is_rejected(self) -> None:
         write_slides_fixture(
             self.workspace,

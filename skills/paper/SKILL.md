@@ -54,7 +54,7 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - turn the summary into a talk rather than copying paragraphs: establish the problem, teach method intuition and information flow across at least two Method pages, then show experiments and takeaways;
    - use only summary-ledger facts, attach valid hidden claim comments to factual pages, and keep claim ids invisible to the audience;
    - use at least two suitable VSP multi-panel layouts, varying columns, rows, or pin-3 according to the material;
-   - use exact context-backed Figure placeholders with visible paper Figure numbers and captions; do not fetch, crop, or fabricate figures;
+   - use exact context-backed Figure placeholders with visible paper Figure numbers and captions; when paper-local source PNGs are already available, embed them with relative HTML `<img src="figures/...">` nodes inside the matching placeholder; do not fetch, crop, or fabricate figures;
    - run `lint-slides`, repair every structure, reference, placeholder, media, or capacity error, and run `complete-slides` only after lint passes;
    - use `--smoke-compile` only as an optional temporary Marp check; do not deliver generated HTML, PDF, or PPTX.
 15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
