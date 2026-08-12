@@ -28,6 +28,8 @@ from mw_paper_slides import (  # noqa: E402
     RESEARCH_MAKEFILE_MARKER,
     SLIDES_CONTEXT_SCHEMA,
     SLIDES_FILE,
+    FIGURE_CAPTION_NODE_PATTERN,
+    FIGURE_REFERENCE_PATTERN,
     VSCODE_SETTINGS_RELATIVE,
     VSCODE_THEME_REFERENCE,
     install_project_marp_support,
@@ -323,6 +325,11 @@ class SlidesContractTests(unittest.TestCase):
             lambda text: text.replace("figure-placeholder", "figure-slot"),
         )
         self.assert_rejected("references figures without placeholders: Figure 1")
+
+    def test_figure_cross_reference_inside_caption_is_not_a_panel_reference(self) -> None:
+        page = '<div class="figure-placeholder__caption">Figure 6. Row 1 in Figure 3 demonstrates the comparison.</div>'
+        visible = FIGURE_CAPTION_NODE_PATTERN.sub("", page)
+        self.assertEqual(FIGURE_REFERENCE_PATTERN.findall(visible), [])
 
     def test_layout_and_page_capacity_are_machine_gated(self) -> None:
         def remove_layouts(text: str) -> str:

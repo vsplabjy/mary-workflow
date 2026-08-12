@@ -237,6 +237,11 @@ FIGURE_REFERENCE_PATTERN = re.compile(
     r"(?:\bfig(?:ure)?\.?|图)\s*([0-9]+(?:[a-z])?)",
     flags=re.IGNORECASE,
 )
+FIGURE_CAPTION_NODE_PATTERN = re.compile(
+    r"<[^>]*class=[\"'][^\"']*figure-placeholder__caption[^\"']*[\"'][^>]*>"
+    r".*?</[^>]+>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 JsonObject = dict[str, Any]
 
@@ -955,8 +960,13 @@ def validate_slides_document(workspace: Path, text: str, context: JsonObject) ->
             referenced_figures.add(figure_id)
             placeholder_count += 1
 
+        # A paper caption may cite another figure (for example, "Row 1 ... in
+        # Figure 3"). That cross-reference is not a visible figure panel on
+        # this page, so exclude caption nodes before checking visible mentions.
+        page_without_captions = FIGURE_CAPTION_NODE_PATTERN.sub("", page)
         page_figure_ids = {
-            normalize_figure_id(token) for token in FIGURE_REFERENCE_PATTERN.findall(page)
+            normalize_figure_id(token)
+            for token in FIGURE_REFERENCE_PATTERN.findall(page_without_captions)
         }
         unknown_figures = sorted(page_figure_ids - set(figure_catalog))
         if unknown_figures:
