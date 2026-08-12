@@ -96,20 +96,21 @@ Reference at least one claim from every family across the deck. Keep claim ids h
 
 ## Figure Placeholders
 
-When `artifacts/slides-context.json` contains figures, use at least one. Do not download, crop, invent, or embed paper images. Reserve the intended panel with this exact shape:
+When `artifacts/slides-context.json` contains figures, use at least one. Do not download, crop, or invent paper images. If the paper workspace already contains a source PNG, it may be embedded inside the matching placeholder with a relative path. Reserve the intended panel with this exact shape:
 
 ```html
 <div class="rimg figure-placeholder"
      data-figure="Figure 2"
      data-source-locator="html#S3.F2">
+  <img src="figures/figure-2.png" alt="Figure 2">
   <div class="figure-placeholder__number">Figure 2</div>
   <div class="figure-placeholder__caption">Figure 2: Caption from the context catalog.</div>
 </div>
 ```
 
-Use the exact `figure_id`, caption, and one matching locator from the context. Combine `figure-placeholder` with one VSP image-panel class: `limg`, `mimg`, `rimg`, `timg`, or `bimg`. Every visible reference to a paper Figure on a page must have its matching placeholder on that page.
+Use the exact `figure_id`, caption, and one matching locator from the context. If a local image is embedded, its path must remain inside the paper workspace and its caption must exactly match the context caption after whitespace normalization. Standard `<img>` and self-closing `<img />` syntax are accepted. Combine `figure-placeholder` with one VSP image-panel class: `limg`, `mimg`, `rimg`, `timg`, or `bimg`. Every visible reference to a paper Figure on a page must have its matching placeholder on that page.
 
-After delivery, the user may replace the placeholder body with a screenshot under `figures/` and export locally. The P5 acceptance artifact itself deliberately retains numbered placeholders.
+When no local source image is available, retain the numbered placeholder body and let the user add a local figure later. P5 never downloads, crops, or fabricates paper figures.
 
 If the context has no Figure catalog, do not invent a Figure number. Use text, equations, or tables from the grounded summary instead.
 
@@ -154,4 +155,4 @@ Add `--smoke-compile` to `lint-slides` or `complete-slides` only when `marp` or 
 
 ## Human Validation Boundary
 
-The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, and conservative page capacity. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, and final image selection.
+The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, exact placeholder captions, closing-page purity, and conservative page capacity. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, and final image selection.

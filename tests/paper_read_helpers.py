@@ -272,14 +272,6 @@ The left panel explains the information flow; the right panel reserves the paper
 <!-- _paginate: "" -->
 
 ###### 谢谢
-
-<div class="icons">
-
-- **问题**：研究缺口
-- **方法**：核心机制
-- **实验**：证据闭环
-
-</div>
 """
     if callable(mutate):
         slides = mutate(slides)

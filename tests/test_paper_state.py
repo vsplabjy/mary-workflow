@@ -389,6 +389,8 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("summary-ledger.json", skill)
         self.assertIn("references/slides-contract.md", skill)
         self.assertIn("Figure placeholders", skill)
+        self.assertIn("paper-local source PNGs", skill)
+        self.assertIn("closing-page purity", contract)
         self.assertIn("quiz` depends on `read` and `summary`, not `slides`", skill)
         self.assertIn("references/quiz-contract.md", skill)
         self.assertIn("append-only", skill)

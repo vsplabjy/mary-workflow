@@ -2,6 +2,18 @@
 
 本日志按 git 提交顺序记录 Mary Workflow 的开发过程。时间使用仓库提交时间，时区为 `+08:00`。
 
+## 2026-08-12 P5.1 paper figure embedding and closing-page hardening
+
+- P5 now accepts paper-local source images inside Figure placeholders using safe relative HTML media paths, while retaining the context-backed Figure id, locator, and exact caption.
+- The slide HTML inspector understands HTML void elements such as `<img>` and paired legacy image tags without corrupting placeholder nesting; local media remains constrained to the paper workspace.
+- The ShanghaiTech theme constrains embedded figures inside their panels and hides footer/page counters on `lastpage` so a closing slide can cleanly show only its H6 thanks title.
+- `lint-slides` now rejects caption drift and any non-comment body text on the final page; the fixture and regression suite cover local image acceptance, remote image rejection, caption mismatch, and closing-page purity.
+
+Validation:
+
+- `python -m unittest discover -s tests`: 165/165 passed.
+- `python scripts/validate_marp_assets.py` and `python scripts/build_marp_theme.py --check` passed.
+
 ## 2026-05-18 14:30:57 +08:00
 
 Commit: `cc636e8` - `Initial Mary workflow skill`

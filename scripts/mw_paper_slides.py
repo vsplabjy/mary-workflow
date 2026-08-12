@@ -213,6 +213,22 @@ COMMENT_PATTERN = re.compile(r"<!--.*?-->", flags=re.DOTALL)
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 CSS_URL_PATTERN = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", flags=re.IGNORECASE)
+HTML_VOID_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
 FIGURE_CAPTION_PATTERN = re.compile(
     r"(?:\bfig(?:ure)?\.?|图)\s*([0-9]+(?:[a-z])?)\s*[:.\-]?\s*([^\n]{0,220})",
     flags=re.IGNORECASE,
@@ -682,21 +698,37 @@ class SlideHTMLInspector(HTMLParser):
         self.placeholders: list[JsonObject] = []
         self.image_sources: list[str] = []
         self._active: JsonObject | None = None
-        self._depth = 0
+        self._stack: list[str] = []
+        self._caption_depth: int | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._handle_start(tag, attrs, self_closing=tag.casefold() in HTML_VOID_TAGS)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._handle_start(tag, attrs, self_closing=True)
+
+    def _handle_start(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+        *,
+        self_closing: bool,
+    ) -> None:
         attributes = {name: value or "" for name, value in attrs}
         classes = set(attributes.get("class", "").split())
-        if tag == "img":
+        normalized_tag = tag.casefold()
+        if normalized_tag == "img":
             self.image_sources.append(attributes.get("src", ""))
         if self._active is not None:
-            self._depth += 1
+            if not self_closing:
+                self._stack.append(normalized_tag)
             if "figure-placeholder__number" in classes:
                 self._active["has_number_node"] = True
             if "figure-placeholder__caption" in classes:
                 self._active["has_caption_node"] = True
+                self._caption_depth = len(self._stack)
             return
-        if tag == "div" and "figure-placeholder" in classes:
+        if normalized_tag == "div" and "figure-placeholder" in classes:
             self._active = {
                 "figure_id": attributes.get("data-figure", ""),
                 "source_locator": attributes.get("data-source-locator", ""),
@@ -704,26 +736,46 @@ class SlideHTMLInspector(HTMLParser):
                 "has_number_node": False,
                 "has_caption_node": False,
                 "text": [],
+                "caption_text": [],
             }
-            self._depth = 1
+            self._stack = [normalized_tag]
+            self._caption_depth = None
 
     def handle_endtag(self, tag: str) -> None:
         if self._active is None:
             return
-        self._depth -= 1
-        if self._depth == 0:
+        normalized_tag = tag.casefold()
+        if normalized_tag in HTML_VOID_TAGS:
+            return
+        if not self._stack:
+            raise PaperSlidesError("slides.md contains an unexpected HTML closing tag.")
+        if self._stack[-1] != normalized_tag:
+            raise PaperSlidesError(
+                f"slides.md contains mismatched HTML tags: expected </{self._stack[-1]}> but found </{normalized_tag}>."
+            )
+        self._stack.pop()
+        if self._caption_depth is not None and len(self._stack) < self._caption_depth:
+            self._caption_depth = None
+        if not self._stack:
             self._active["text"] = " ".join(" ".join(self._active["text"]).split())
+            self._active["caption_text"] = " ".join(
+                " ".join(self._active["caption_text"]).split()
+            )
             self.placeholders.append(self._active)
             self._active = None
 
     def handle_data(self, data: str) -> None:
         if self._active is not None:
             self._active["text"].append(data)
+            if self._caption_depth is not None and len(self._stack) >= self._caption_depth:
+                self._active["caption_text"].append(data)
 
     def close(self) -> None:
         super().close()
         if self._active is not None:
-            raise PaperSlidesError("slides.md contains an unclosed figure-placeholder div.")
+            raise PaperSlidesError(
+                "slides.md contains an unclosed HTML element or figure-placeholder div."
+            )
 
 
 def validate_media_reference(workspace: Path, reference: str, page_number: int) -> None:
@@ -815,10 +867,20 @@ def validate_slides_document(workspace: Path, text: str, context: JsonObject) ->
             if SECTION_PATTERN.search(page) or CLAIMS_PATTERN.search(page):
                 raise PaperSlidesError("slides.md cover page must not declare a content section or claims.")
         elif index == len(pages) - 1:
-            if "lastpage" not in classes or not re.search(r"(?m)^######[ \t]+\S", page):
-                raise PaperSlidesError("slides.md last slide must use lastpage with a non-empty H6 closing title.")
+            closing_titles = re.findall(r"(?m)^######[ \t]+\S.*$", page)
+            if "lastpage" not in classes or len(closing_titles) != 1:
+                raise PaperSlidesError(
+                    "slides.md last slide must use lastpage with exactly one non-empty H6 closing title."
+                )
             if SECTION_PATTERN.search(page) or CLAIMS_PATTERN.search(page):
                 raise PaperSlidesError("slides.md last page must not declare a content section or claims.")
+            closing_body = re.sub(r"(?m)^######[ \t]+\S.*$", "", page, count=1)
+            closing_body = COMMENT_PATTERN.sub("", closing_body)
+            if HTML_TAG_PATTERN.search(closing_body):
+                raise PaperSlidesError("slides.md last slide may contain only its H6 closing title.")
+            closing_body = HTML_TAG_PATTERN.sub("", closing_body)
+            if re.sub(r"\s+", "", unescape(closing_body)):
+                raise PaperSlidesError("slides.md last slide may contain only its H6 closing title.")
         else:
             section_matches = [value.casefold() for value in SECTION_PATTERN.findall(page)]
             is_structural = bool(classes & STRUCTURAL_CLASSES)
@@ -883,6 +945,11 @@ def validate_slides_document(workspace: Path, text: str, context: JsonObject) ->
             if figure_id not in placeholder["text"]:
                 raise PaperSlidesError(
                     f"slides.md page {page_number} placeholder must visibly display {figure_id}."
+                )
+            expected_caption = " ".join(str(figure_catalog[figure_id]["caption"]).split())
+            if placeholder["caption_text"] != expected_caption:
+                raise PaperSlidesError(
+                    f"slides.md page {page_number} caption does not exactly match {figure_id} context."
                 )
             page_placeholder_ids.add(figure_id)
             referenced_figures.add(figure_id)
