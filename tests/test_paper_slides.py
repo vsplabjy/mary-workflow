@@ -23,6 +23,7 @@ from mw_paper_slides import (  # noqa: E402
     HYPO_PREVIEW_FILE,
     PAPER_MAKEFILE,
     PAPER_MAKEFILE_MARKER,
+    PaperSlidesError,
     PROJECT_THEME_RELATIVE,
     RESEARCH_MAKEFILE,
     RESEARCH_MAKEFILE_MARKER,
@@ -33,9 +34,11 @@ from mw_paper_slides import (  # noqa: E402
     VSCODE_SETTINGS_RELATIVE,
     VSCODE_THEME_REFERENCE,
     install_project_marp_support,
+    materialize_figure_assets,
     validate_slides,
+    validate_slides_document,
 )
-from mw_paper_artifacts import SLIDES_CONTEXT_FILE, artifact_path  # noqa: E402
+from mw_paper_artifacts import PARSE_QUALITY_FILE, SLIDES_CONTEXT_FILE, artifact_path  # noqa: E402
 from mw_paper_sources import sha256_file  # noqa: E402
 from tests.paper_read_helpers import (  # noqa: E402
     write_read_fixture,
@@ -304,6 +307,73 @@ class SlidesContractTests(unittest.TestCase):
             "image references must be local repository files",
             lambda text: text.replace("figures/figure-1.png", "https://example.com/figure.png", 1),
         )
+
+    def test_prepare_slides_materializes_latex_figure_assets(self) -> None:
+        source_root = self.project / "paper-source"
+        (source_root / "assets").mkdir(parents=True)
+        (source_root / "assets" / "overview.png").write_bytes(b"source-png")
+        (source_root / "main.tex").write_text(
+            r"""\begin{figure}
+\includegraphics{assets/overview}
+\caption{Pipeline overview}
+\end{figure}
+""",
+            encoding="utf-8",
+        )
+        artifact_path(self.workspace, PARSE_QUALITY_FILE).write_text(
+            json.dumps(
+                {
+                    "source": {
+                        "input_kind": "folder",
+                        "locator": str(source_root),
+                        "latex_entry": "main.tex",
+                        "raw_artifact": "artifacts/source.pdf",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assets = materialize_figure_assets(
+            self.workspace,
+            [{"figure_id": "Figure 1", "source_locators": ["pdf:p1"]}],
+        )
+
+        self.assertEqual(
+            assets,
+            [
+                {
+                    "figure_id": "Figure 1",
+                    "path": "figures/figure-1-source.png",
+                    "kind": "latex-asset",
+                    "source": "assets/overview.png",
+                }
+            ],
+        )
+        self.assertEqual(
+            (self.workspace / "figures" / "figure-1-source.png").read_bytes(), b"source-png"
+        )
+
+    def test_prepared_figure_asset_must_be_embedded_in_its_placeholder(self) -> None:
+        write_slides_fixture(self.workspace)
+        figure = self.context["figure_catalog"][0]
+        (self.workspace / "figures" / "figure-1-source.png").write_bytes(b"source-png")
+        context = json.loads(json.dumps(self.context))
+        context["figure_assets"] = [
+            {"figure_id": figure["figure_id"], "path": "figures/figure-1-source.png"}
+        ]
+        slides = (self.workspace / SLIDES_FILE).read_text(encoding="utf-8")
+
+        with self.assertRaisesRegex(PaperSlidesError, "must embed its prepared source asset"):
+            validate_slides_document(self.workspace, slides, context)
+
+        embedded = slides.replace(
+            f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+            f'<img src="figures/figure-1-source.png" alt="{figure["figure_id"]}">\n'
+            f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+            1,
+        )
+        validate_slides_document(self.workspace, embedded, context)
 
     def assert_rejected_message(self, base_mutate: object, message: str, extra_mutate: object) -> None:
         def mutate(text: str) -> str:

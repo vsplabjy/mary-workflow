@@ -51,7 +51,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - lead with the research problem, make Method at least two pages and the most detailed part, then present experiments and takeaways without adding facts outside the summary claim ledger;
    - add one hidden `<!-- section: ... -->` and `<!-- claims: ... -->` declaration to each factual page, keeping `[B01]`-style ids out of visible slide text;
    - use at least two VSP-Marp multi-panel layouts such as `cols-2-64`, `cols-3`, `rows-2-*`, or `pin-3` according to content shape;
-   - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `artifacts/slides-context.json`; do not download or crop figures, because the user will place screenshots in `figures/` later;
+   - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `artifacts/slides-context.json`. `prepare-slides` automatically collects original visuals into `figures/` and records their matching paths in `figure_assets`; always embed a selected Figure's recorded local asset inside its placeholder. A LaTeX asset is preferred and the source-PDF page is the fallback. Do not fetch from the network or fabricate a replacement;
    - run `lint-slides`, fix every rejection, then run `complete-slides`; add `--smoke-compile` only when local Marp CLI is available and the user wants the optional check.
 10. For `quiz [paper-id]`:
    - run `prepare-quiz`, specifying `--paper-id` when needed, then read `artifacts/quiz-context.json` and `references/quiz-contract.md`;
