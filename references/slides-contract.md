@@ -16,11 +16,12 @@ The `slides` stage produces one final artifact: `slides.md`, a ShanghaiTech red 
 
 ## Preparation
 
-`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, creates `figures/`, and writes `artifacts/slides-context.json` with:
+`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, materializes original visuals in `figures/`, and writes `artifacts/slides-context.json` with:
 
 - exact `summary.md`, `artifacts/summary-ledger.json`, summary-bundle, source-index, and theme fingerprints;
 - the allowed summary claim catalog;
 - Figure ids, captions, and source locators parsed from the normalized paper;
+- workspace-local original figure assets, mapped to their Figure ids when available;
 - the required theme, format, math engine, and lint limits.
 
 Read all of `summary.md`, `artifacts/summary-ledger.json`, and `artifacts/slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
@@ -42,6 +43,14 @@ preview into `build/hypo-template-preview.pdf`; this is a visual comparison
 artifact and must never replace the grounded `slides.md` artifact. The same
 targets are available through the generated `.mary-research/Makefile` dispatcher
 from the project research root; pass `PAPER_ID=<paper-id>` when needed.
+
+For a folder containing LaTeX, preparation first copies the matching
+`\includegraphics` asset (rasterizing a PDF asset to PNG when needed). For every
+remaining PDF-backed Figure, it renders the original source page containing that
+Figure's caption. This fallback intentionally keeps the complete page rather
+than claiming an unverified crop. The resulting `figure_assets` records provide
+the Figure id, workspace-relative `path`, kind, and source provenance; existing
+materialized files are reused deterministically.
 
 ## Frontmatter
 
@@ -96,7 +105,11 @@ Reference at least one claim from every family across the deck. Keep claim ids h
 
 ## Figure Placeholders
 
-When `artifacts/slides-context.json` contains figures, use at least one. Do not download, crop, or invent paper images. If the paper workspace already contains a source PNG, it may be embedded inside the matching placeholder with a relative path. Reserve the intended panel with this exact shape:
+When `artifacts/slides-context.json` contains figures, use at least one. Inspect
+`figure_assets` before authoring: for every Figure selected for the talk that has
+a matching asset record, embed that local original visual in its placeholder.
+Do not download, crop, or invent a replacement image. Reserve the intended panel
+with this exact shape:
 
 ```html
 <div class="rimg figure-placeholder"
@@ -110,7 +123,8 @@ When `artifacts/slides-context.json` contains figures, use at least one. Do not 
 
 Use the exact `figure_id`, caption, and one matching locator from the context. If a local image is embedded, its path must remain inside the paper workspace and its caption must exactly match the context caption after whitespace normalization. Standard `<img>` and self-closing `<img />` syntax are accepted. Combine `figure-placeholder` with one VSP image-panel class: `limg`, `mimg`, `rimg`, `timg`, or `bimg`. Every visible reference to a paper Figure on a page must have its matching placeholder on that page.
 
-When no local source image is available, retain the numbered placeholder body and let the user add a local figure later. P5 never downloads, crops, or fabricates paper figures.
+When no `figure_assets` record is available, retain the numbered placeholder
+body. P5 never downloads or fabricates paper figures.
 
 If the context has no Figure catalog, do not invent a Figure number. Use text, equations, or tables from the grounded summary instead.
 
