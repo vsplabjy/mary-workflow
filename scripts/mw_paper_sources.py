@@ -37,7 +37,7 @@ PAPER_NOTES_SCHEMA = 1
 QUALITY_DIMENSIONS = ("text", "structure", "equations", "figures", "tables")
 QUALITY_STATUSES = {"pass", "degraded", "failed", "not_applicable"}
 SOURCE_FORMATS = {"html", "pdf"}
-MAX_SOURCE_BYTES = 64 * 1024 * 1024
+MAX_SOURCE_BYTES = 256 * 1024 * 1024
 USER_AGENT = "mary-workflow/2.2 (single-paper research pipeline)"
 
 JsonObject = dict[str, Any]
