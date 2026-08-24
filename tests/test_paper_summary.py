@@ -26,6 +26,13 @@ from mw_paper_locators import (  # noqa: E402
     evidence_resolves,
     parse_source_locator_blocks,
 )
+from mw_paper_artifacts import (  # noqa: E402
+    NORMALIZED_SOURCE_FILE,
+    SOURCE_LOCATOR_FILE,
+    SUMMARY_CONTEXT_FILE,
+    SUMMARY_LEDGER_FILE,
+    artifact_path,
+)
 from mw_paper_sources import extract_notes_ledger, sha256_file  # noqa: E402
 from mw_paper_summary import summary_bundle_fingerprint  # noqa: E402
 from tests.paper_read_helpers import write_read_fixture, write_summary_fixture  # noqa: E402
@@ -67,7 +74,9 @@ class SourceLocatorContractTests(unittest.TestCase):
     def test_html_index_records_duplicate_spans_lines_and_fingerprints(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory)
-            (workspace / "source.md").write_text(
+            source = artifact_path(workspace, NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
                 "<!-- mary-normalized-source:v1 -->\n"
                 "<!-- locator: html#S1 -->\nFirst evidence block.\n"
                 "<!-- locator: html#S1 -->\nSecond evidence block.\n"
@@ -88,7 +97,8 @@ class SourceLocatorContractTests(unittest.TestCase):
 
     def test_pdf_page_locators_are_machine_resolvable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "source.md"
+            source = artifact_path(Path(directory), NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text(
                 "<!-- locator: pdf:p1 -->\nPage one evidence.\n"
                 "<!-- locator: pdf:p2 -->\nPage two evidence.\n",
@@ -100,7 +110,8 @@ class SourceLocatorContractTests(unittest.TestCase):
 
     def test_invalid_or_empty_locator_span_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "source.md"
+            source = artifact_path(Path(directory), NORMALIZED_SOURCE_FILE)
+            source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text("<!-- locator: html#bad/path -->\nEvidence.\n", encoding="utf-8")
             with self.assertRaisesRegex(SourceLocatorError, "Invalid html locator"):
                 parse_source_locator_blocks(source, "html")
@@ -142,9 +153,9 @@ class SummaryContractTests(unittest.TestCase):
         self.assertEqual(self.state["stages"]["summary"]["status"], "in_progress")
         self.assertEqual(self.context["summary_context_schema"], 1)
         self.assertEqual(self.context["allowed_source_locators"], ["html#S1"])
-        self.assertTrue((self.workspace / "source-locators.json").is_file())
-        self.assertTrue((self.workspace / "summary-context.json").is_file())
-        index = json.loads((self.workspace / "source-locators.json").read_text(encoding="utf-8"))
+        self.assertTrue(artifact_path(self.workspace, SOURCE_LOCATOR_FILE).is_file())
+        self.assertTrue(artifact_path(self.workspace, SUMMARY_CONTEXT_FILE).is_file())
+        index = json.loads(artifact_path(self.workspace, SOURCE_LOCATOR_FILE).read_text(encoding="utf-8"))
         self.assertEqual(index["source"]["source_fingerprint"], fingerprint("1"))
         self.assertEqual(index["locators"]["html#S1"][0]["preview"], "Fixture source.")
         prepared = subprocess.run(
@@ -173,7 +184,7 @@ class SummaryContractTests(unittest.TestCase):
         self.assertEqual(summary["artifact"], "summary.md")
         self.assertEqual(summary["output_fingerprint"], digest)
         self.assertEqual(summary["metadata"]["summary_ledger_schema"], 1)
-        self.assertEqual(summary["metadata"]["summary_ledger_artifact"], "summary-ledger.json")
+        self.assertEqual(summary["metadata"]["summary_ledger_artifact"], SUMMARY_LEDGER_FILE)
         self.assertEqual(len(summary["metadata"]["summary_body_fingerprint"]), 64)
         self.assertEqual(len(summary["metadata"]["summary_ledger_fingerprint"]), 64)
         self.assertEqual(summary["metadata"]["claim_count"], 3)
@@ -235,7 +246,7 @@ class SummaryContractTests(unittest.TestCase):
             self.complete()
         self.assertIn("does not resolve in source.md", str(context.exception))
 
-        with (self.workspace / "source.md").open("a", encoding="utf-8") as handle:
+        with artifact_path(self.workspace, NORMALIZED_SOURCE_FILE).open("a", encoding="utf-8") as handle:
             handle.write("<!-- locator: html#S2 -->\nAdditional source evidence.\n")
         self.state, self.context = prepare_summary(self.project, self.paper_id)
 
@@ -282,7 +293,7 @@ class SummaryContractTests(unittest.TestCase):
         self.assertIn("summary.md + summary-ledger.json bundle", str(context.exception))
 
         original = write_summary_fixture(self.workspace)
-        ledger_path = self.workspace / "summary-ledger.json"
+        ledger_path = artifact_path(self.workspace, SUMMARY_LEDGER_FILE)
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
         ledger["claims"][0]["claim_text"] = "A different grounded claim with enough detail."
         ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
@@ -385,7 +396,7 @@ class SummaryContractTests(unittest.TestCase):
 
     def test_tampered_locator_index_is_rejected(self) -> None:
         write_summary_fixture(self.workspace)
-        index_path = self.workspace / "source-locators.json"
+        index_path = artifact_path(self.workspace, SOURCE_LOCATOR_FILE)
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         payload["locators"]["html#S1"][0]["preview"] = "tampered"
         index_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -415,7 +426,7 @@ class SummaryContractTests(unittest.TestCase):
 
     def test_complete_summary_cli_requires_the_ledger_file(self) -> None:
         write_summary_fixture(self.workspace)
-        (self.workspace / "summary-ledger.json").unlink()
+        artifact_path(self.workspace, SUMMARY_LEDGER_FILE).unlink()
         completed = subprocess.run(
             [
                 sys.executable,

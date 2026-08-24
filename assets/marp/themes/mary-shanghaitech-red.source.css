@@ -1389,6 +1389,17 @@ section .figure-placeholder__caption {
   line-height: 1.35;
 }
 
+/* Real paper figures stay inside their panel so captions remain visible. */
+section .figure-placeholder > img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: min(68%, 23rem);
+  object-fit: contain;
+  margin: 0 auto;
+}
+
 section.bq blockquote,
 section.bq-blue blockquote,
 section.bq-red blockquote,
@@ -2486,4 +2497,315 @@ section.toc_b header::after {
   margin: 14px auto 0;
   background: url("../logos/ShanghaiTech_Logo_RGBA.png") center/contain no-repeat;
   content: "";
+}
+
+/* Mary Workflow paper-deck guardrails: keep authored content above the master artwork. */
+:root {
+  --page-safe-x: 92px;
+  --page-safe-top: 104px;
+  --page-safe-bottom: 86px;
+  --slide-heading-height: 40px;
+  --slide-heading-lift: clamp(-8px, -0.5vw, -4px);
+  --panel-gap: 18px;
+  --panel-border: rgba(162, 34, 44, 0.2);
+  --panel-fill: rgba(255, 255, 255, 0.96);
+}
+
+section::after {
+  right: auto;
+  bottom: 14px;
+  left: 50%;
+  z-index: 20;
+  min-width: 58px;
+  padding: 3px 10px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(162, 34, 44, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-accent);
+  text-align: center;
+}
+
+section.lastpage::after {
+  content: "";
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) {
+  overflow: hidden;
+  padding: var(--page-safe-top) var(--page-safe-x) var(--page-safe-bottom);
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(h2, h3) {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 32px;
+  line-height: 1.15;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep single-line grid headings clear of both the master artwork and panel borders. */
+section:is(.cols-2, .cols-3, .cols-2-73, .cols-2-64, .cols-2-37, .cols-2-46, .rows-2, .rows-2-73, .rows-2-64, .rows-2-55, .rows-2-37, .rows-2-28, .pin-3) > :is(h2, h3) {
+  align-self: start;
+  block-size: var(--slide-heading-height);
+  max-block-size: var(--slide-heading-height);
+  margin: 0;
+  transform: translateY(var(--slide-heading-lift));
+}
+
+section.cols-2,
+section.cols-3,
+section.cols-2-73,
+section.cols-2-64,
+section.cols-2-37,
+section.cols-2-46,
+section.rows-2,
+section.rows-2-73,
+section.rows-2-64,
+section.rows-2-55,
+section.rows-2-37,
+section.rows-2-28,
+section.pin-3 {
+  gap: var(--panel-gap);
+  overflow: hidden;
+}
+
+section.cols-2,
+section.cols-2-73,
+section.cols-2-64,
+section.cols-2-37,
+section.cols-2-46 {
+  grid-template-rows: minmax(0, 10fr) minmax(0, 90fr);
+}
+
+section.cols-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+section.cols-2-73 {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+}
+
+section.cols-2-64 {
+  grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
+}
+
+section.cols-2-37 {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
+}
+
+section.cols-2-46 {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+}
+
+section.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 10fr) minmax(0, 90fr);
+}
+
+section.rows-2,
+section.rows-2-55 {
+  grid-template-rows: minmax(0, 7fr) minmax(0, 45fr) minmax(0, 45fr);
+}
+
+section.rows-2-73 {
+  grid-template-rows: minmax(0, 7fr) minmax(0, 63fr) minmax(0, 27fr);
+}
+
+section.rows-2-64 {
+  grid-template-rows: minmax(0, 7fr) minmax(0, 54fr) minmax(0, 36fr);
+}
+
+section.rows-2-37 {
+  grid-template-rows: minmax(0, 7fr) minmax(0, 27fr) minmax(0, 63fr);
+}
+
+section.rows-2-28 {
+  grid-template-rows: minmax(0, 7fr) minmax(0, 18fr) minmax(0, 72fr);
+}
+
+section.pin-3 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 7fr) minmax(0, 42fr) minmax(0, 48fr);
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--panel-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: 10px;
+  background: var(--panel-fill);
+  box-shadow: 0 3px 10px rgba(33, 17, 18, 0.06);
+  font-size: 21px;
+  line-height: 1.3;
+  text-align: left;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.limg, .mimg, .rimg, .timg, .bimg) {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--panel-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: 10px;
+  background: var(--panel-fill);
+  box-shadow: 0 3px 10px rgba(33, 17, 18, 0.06);
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) :is(h3, h4, h5) {
+  margin: 0 0 8px;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) :is(p, ul, ol, blockquote, table) {
+  margin-top: 7px;
+  margin-bottom: 7px;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) :is(ul, ol) {
+  padding-left: 1.25em;
+  line-height: 1.28;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) table {
+  max-width: 100%;
+  font-size: 0.78em;
+}
+
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(.ldiv, .mdiv, .rdiv, .tdiv, .bdiv) table :is(th, td) {
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+section :is(.katex-display, .math-display) {
+  max-width: 100%;
+  margin: 0.7rem 0 0.85rem;
+  overflow-x: hidden;
+  line-height: 1.12;
+  text-align: center;
+}
+
+section :is(.katex-display, .math-display) > .katex {
+  font-size: 0.96em;
+}
+
+section :is(.limg, .mimg, .rimg, .timg, .bimg) img {
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+}
+
+/* Paper-deck media and dense-method variants. */
+.paper-image {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #9d0004;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 0.7rem 0.75rem 0.6rem;
+  flex-direction: column;
+}
+
+.paper-image > img {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100% - 3rem);
+  object-fit: contain;
+  margin: 0 auto;
+}
+
+.figure-meta {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.42rem;
+  width: 96%;
+  border: 0 !important;
+  padding: 0 !important;
+  background: none !important;
+}
+
+.figure-real > img {
+  max-height: calc(100% - 3.4rem) !important;
+}
+
+.figure-meta .figure-placeholder__number {
+  color: #9d0004;
+  font-size: 0.68rem !important;
+  line-height: 1.05;
+}
+
+.paper-image .image-caption,
+.figure-placeholder__caption {
+  width: 96%;
+  margin: 0.1rem auto 0;
+  color: #64748b;
+  font-size: 0.44rem;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.formula-page > .formula-panel {
+  padding: 1rem 1.15rem !important;
+}
+
+.formula-page > .formula-figure {
+  margin-left: 0.25rem !important;
+  padding: 0.8rem !important;
+}
+
+.formula-page .katex-display {
+  margin: 0.9rem 0 1.05rem;
+  font-size: 0.84em;
+}
+
+.pipeline-page > .ldiv {
+  padding: 14px 16px !important;
+  font-size: 19px !important;
+}
+
+.pipeline-page > .ldiv h3 {
+  font-size: 22px !important;
+}
+
+.pipeline-page > .ldiv ol {
+  padding-left: 1.1em;
+  line-height: 1.18;
+}
+
+section:not(.cover_e):not(.lastpage) footer {
+  display: none;
+}
+
+section.lastpage footer,
+section.lastpage::after {
+  display: none;
+}
+
+section.lastpage > p {
+  grid-area: icons;
+  align-self: center;
+  justify-self: start;
+  width: 88%;
+  max-width: 88%;
+  margin-left: 6%;
+}
+
+/* Keep Chinese slide headings from inheriting body justification. */
+section:not(.trans, .cover_a, .cover_b, .cover_c, .cover_d, .cover_e, .lastpage) > :is(h1, h2, h3, h4, h5, h6) {
+  text-align: left !important;
+  text-align-last: left !important;
+  text-justify: auto;
 }

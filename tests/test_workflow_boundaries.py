@@ -811,7 +811,7 @@ class WorkflowBoundaryTests(unittest.TestCase):
         target = self.root / "prompts/mw-plan.md"
         target.write_text("stale prompt\n", encoding="utf-8")
         refreshed = seed_core_prompts(self.root, overwrite=True)
-        self.assertEqual(refreshed, 7)
+        self.assertEqual(refreshed, 10)
         self.assertIn("Non-Negotiable Boundary", target.read_text(encoding="utf-8"))
         self.assertTrue((self.root / "prompts/mw-resume.md").exists())
         self.assertEqual((self.root / "state.yaml").read_bytes(), state_before)
@@ -893,12 +893,78 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertNotIn("scratch/debug.json", state["project_inventory"])
         config = read_config(workflow)
         self.assertIn("output/**", config["init_ignore"])
-        self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 7)
+        self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
+        self.assertTrue((workflow / "prompts/slide-learning.md").is_file())
+        self.assertFalse((workflow / "prompts/mw-slide.md").exists())
         self.assertTrue((workflow / "analysis").is_dir())
+        reading_profile = fresh / ".mary-research/reading-profile.md"
+        self.assertTrue(reading_profile.is_file())
+        self.assertIn("<!-- mary-reading-profile:v1 -->", reading_profile.read_text(encoding="utf-8"))
         self.assertIn("继续 /mw-init 理解流程", result.stdout)
         init_context = render_prompt(fresh, "mw-init")
         self.assertIn("# Mary Init Understanding Phase", init_context)
         self.assertIn("file_104.txt", init_context)
+        self.assertIn(
+            "Local Delivery Contract",
+            (workflow / "prompts/mw-learn.md").read_text(encoding="utf-8"),
+        )
+        self.assertNotIn(
+            "notion",
+            (workflow / "prompts/mw-exam.md").read_text(encoding="utf-8").lower(),
+        )
+
+    def test_course_profiles_render_as_shared_mary_context(self) -> None:
+        for alias, prompt_name, marker in (
+            ("mw-learn", "mw-learn.md", "Course Learning Profile"),
+            ("mw-exam", "mw-exam.md", "ExamPass Profile"),
+            ("mw-review", "mw-exam.md", "ExamPass Profile"),
+            ("slide-learning", "slide-learning.md", "Slide Learning Profile"),
+        ):
+            phase, prompt = prompt_path_for(self.project, alias)
+            self.assertEqual(phase, "PLANNING")
+            self.assertEqual(prompt.name, prompt_name)
+            rendered = render_prompt(self.project, alias)
+            self.assertIn(f"Alias: /{alias}", rendered)
+            self.assertIn(marker, rendered)
+            self.assertIn("Mary Workflow v2.1 Context", rendered)
+
+    def test_course_profiles_have_local_delivery_and_shared_phase_boundaries(self) -> None:
+        profile_files = {
+            "mw-learn": [
+                REPO_ROOT / ".mary-workflow/prompts/mw-learn.md",
+                REPO_ROOT / "commands/mw-learn.md",
+                REPO_ROOT / "skills/lecture-learning/SKILL.md",
+                REPO_ROOT / "skills/slide-to-lecture/SKILL.md",
+            ],
+            "mw-exam": [
+                REPO_ROOT / ".mary-workflow/prompts/mw-exam.md",
+                REPO_ROOT / "commands/mw-exam.md",
+                REPO_ROOT / "skills/exam-review/SKILL.md",
+            ],
+        }
+        for alias, paths in profile_files.items():
+            combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+            lowered = combined.lower()
+            self.assertIn("local delivery contract", lowered)
+            self.assertIn(".mary-workflow/", combined)
+            for phase in ("PLANNING", "PLANNED", "EXECUTING", "REVIEWING", "DEBUGGING", "FINISHED"):
+                self.assertIn(f"`{phase}`", combined)
+            for action in ("mark_task_done", "record_error", "set_phase", "update_state"):
+                self.assertIn(action, combined)
+            self.assertNotIn("notion", lowered, msg=f"{alias} must not default to an external note system")
+            self.assertIn("relative local", lowered)
+            self.assertIn("do not silently", lowered)
+
+    def test_course_profiles_remain_available_after_finished_cycle(self) -> None:
+        self.start_execution()
+        apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
+        apply_action(
+            self.root,
+            {"action": "set_phase", "data": {"phase": "FINISHED", "decision": "accepted"}},
+        )
+        rendered = render_prompt(self.project, "mw-exam")
+        self.assertIn("Resolved phase: FINISHED", rendered)
+        self.assertIn("ExamPass Profile", rendered)
 
 
 if __name__ == "__main__":

@@ -18,18 +18,18 @@ summary artifacts. Its final artifact is `quiz-log.md`; it does not depend on `s
 ## Preparation
 
 `prepare-quiz` requires completed, current `read` and `summary` stages. It revalidates
-`paper-notes.md`, the summary bundle, and `source-locators.json`, then starts the `quiz` attempt and
+`paper-notes.md`, the summary bundle, and `artifacts/source-locators.json`, then starts the `quiz` attempt and
 creates:
 
 | File | Purpose |
 | --- | --- |
-| `quiz-context.json` | Internal input fingerprints, pedagogical anchors, source-quality notes, and attempt id |
+| `artifacts/quiz-context.json` | Internal input fingerprints, pedagogical anchors, source-quality notes, and attempt id |
 | `quiz-log.md` | The only delivered artifact: canonical append-only readable Q&A sessions |
-| `quiz-head.json` | Accepted session count, chain head, and exact log fingerprint |
+| `artifacts/quiz-head.json` | Accepted session count, chain head, and exact log fingerprint |
 
 Do not hand-edit any of these files. A reset starts a new attempt but retains all prior sessions in
 `quiz-log.md`; old sessions remain audit history and cannot satisfy the new attempt's coverage gate.
-`quiz-context.json` and `quiz-head.json` are internal validation sidecars. Every question actually
+`artifacts/quiz-context.json` and `artifacts/quiz-head.json` are internal validation sidecars. Every question actually
 asked, user answer, four-value judgment, correct answer, judgment rationale, and source citation is
 archived together in the single `quiz-log.md` file.
 
@@ -38,9 +38,9 @@ archived together in the single `quiz-log.md` file.
 The quiz exists to deepen the user's understanding of the paper; parser, PDF, and workflow
 meta-questions are outside its scope.
 
-`quiz-context.json` separates pedagogical anchors from source-processing audit notes:
+`artifacts/quiz-context.json` separates pedagogical anchors from source-processing audit notes:
 
-- `Mxx` anchors are the direct Method claims accepted from P3.5 `summary-ledger.json`. They retain
+- `Mxx` anchors are the direct Method claims accepted from P3.5 `artifacts/summary-ledger.json`. They retain
   claim text, exact evidence, and source locators. These are the primary question source.
 - conditional `Uxx` anchors come only from scientific-content uncertainties whose
   `quality_dimensions` array is empty. They retain the research question, unresolved reason,
@@ -63,7 +63,7 @@ parse-quality-only papers therefore use method-only completion.
 
 ## Interactive Flow
 
-1. Run `prepare-quiz` and read all of `quiz-context.json` plus the relevant `source.md` spans.
+1. Run `prepare-quiz` and read all of `artifacts/quiz-context.json` plus the relevant `artifacts/source.md` spans.
 2. Run `next-quiz-question`, use the selected Mxx claim plus `summary.md` Method prose to ask exactly
    one paper-understanding question in the user's language. Never ask about parser reliability,
    PDF column order, extraction quality, or artifact contracts.
@@ -126,7 +126,7 @@ Every judgment and correct answer share at least one citation with exactly `sour
 `evidence`:
 
 - the locator must belong to at least one selected `Mxx` or scientific `Uxx` anchor;
-- the locator must resolve in the current `source.md` index;
+- the locator must resolve in the current `artifacts/source.md` index;
 - evidence must be an exact normalized 8-500 character excerpt within that locator's span;
 - duplicate locator/excerpt pairs are rejected.
 
@@ -136,7 +136,7 @@ semantic interpretation is correct.
 ## Append-Only History
 
 Each accepted session hashes all of its immutable fields and points to the previous session hash.
-`quiz-head.json` records the accepted chain head, count, and whole-log fingerprint. Before every
+`artifacts/quiz-head.json` records the accepted chain head, count, and whole-log fingerprint. Before every
 append, lint, or completion, the runtime reconstructs the canonical log and verifies both the hash
 chain and head checkpoint.
 
@@ -157,8 +157,8 @@ mixed schema 1 → schema 2 history remains one uninterrupted hash chain.
 
 `lint-quiz` and `complete-quiz` require:
 
-1. current read/summary lineage and an exact `quiz-context.json`;
-2. canonical `quiz-log.md` and a matching `quiz-head.json` checkpoint;
+1. current read/summary lineage and an exact `artifacts/quiz-context.json`;
+2. canonical `quiz-log.md` and a matching `artifacts/quiz-head.json` checkpoint;
 3. a valid unbroken session hash chain;
 4. at least one session from the current attempt;
 5. current-attempt coverage of at least one Method anchor, plus one scientific Uxx when

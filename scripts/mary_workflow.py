@@ -32,6 +32,8 @@ from mw_runtime import (
     parse_json_payload as parse_runtime_json_payload,
     require_json_object,
 )
+from mw_model import install_shell_integration
+from mw_reading_profile import ensure_reading_profile
 
 
 WORKFLOW_DIR = ".mary-workflow"
@@ -1896,7 +1898,8 @@ def seed_core_prompts(root: Path, overwrite: bool = False) -> int:
     if not source_dir.exists():
         return 0
     count = 0
-    for source in sorted(source_dir.glob("mw-*.md"), key=prompt_sort_key):
+    core_prompts = [*source_dir.glob("mw-*.md"), source_dir / "slide-learning.md"]
+    for source in sorted((path for path in core_prompts if path.is_file()), key=prompt_sort_key):
         target = target_dir / source.name
         if target.exists() and not overwrite:
             continue
@@ -2372,6 +2375,7 @@ def write_project_brief(root: Path, state: State) -> None:
 
 def cmd_init(args: argparse.Namespace) -> int:
     root = workflow_root(Path.cwd())
+    reading_profile, profile_created = ensure_reading_profile(Path.cwd())
     if args.reset and root.exists():
         remove_tree(root)
     elif (root / "state.yaml").exists():
@@ -2412,8 +2416,11 @@ def cmd_init(args: argparse.Namespace) -> int:
             suffix = "已按当前 init.ignore 与 .maryignore 刷新机器探测。"
         else:
             suffix = "state 保持不变。"
+        shell_setup = install_shell_integration()
         print(f"Mary Workflow 已初始化，已刷新 {refreshed} 个核心 prompt；{suffix}")
         print_status(state, read_config(root).get("language", "zh"))
+        print(shell_setup)
+        print(f"论文阅读配置：{reading_profile}" + ("（已创建，可编辑）" if profile_created else ""))
         print("下一步：渲染 /mw-init 理解上下文；简报 complete 后才能运行 /mw-plan。")
         return 0
 
@@ -2438,11 +2445,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     write_state(root, state)
     write_project_brief(root, state)
     append_log(root, "initialized workflow v2.1")
+    shell_setup = install_shell_integration()
 
     print(f"已初始化 {WORKFLOW_DIR} v2.1，写入 {len(prompts)} 个 prompt。")
     print(f"项目理解简报：{root / BRIEF_FILE}")
     print("机器探测骨架已生成；接下来必须完成三遍全量理解并提交 submit_brief。")
     print("后续 plan/run 默认使用中文。若希望改为 auto 或 en，请告诉我，我会写入 config.yaml 的 output.language。")
+    print(shell_setup)
+    print(f"论文阅读配置：{reading_profile}（已创建，可编辑）")
     print("下一步：继续 /mw-init 理解流程；简报 complete 后再运行 /mw-plan。")
     if seeded:
         print(f"Seeded {seeded} core prompt(s).")
