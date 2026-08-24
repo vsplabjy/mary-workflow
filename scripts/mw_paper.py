@@ -11,7 +11,22 @@ from pathlib import Path, PurePosixPath
 import re
 import sys
 from typing import Any
+import unicodedata
 
+from mw_paper_artifacts import (
+    ArtifactLayoutError,
+    NORMALIZED_SOURCE_FILE,
+    PARSE_QUALITY_FILE,
+    READ_CONTEXT_FILE,
+    READING_CONTEXT_FILE,
+    SOURCE_LOCATOR_FILE,
+    SOURCE_MANIFEST_FILE,
+    SUMMARY_CONTEXT_FILE,
+    artifact_path,
+    migrate_legacy_artifacts,
+    resolve_artifact_path,
+)
+from mw_paper_readings import PaperReadingError, validate_reading_document, validate_reading_summary
 from mw_runtime import (
     EnvelopeError,
     action_envelope_parts,
@@ -28,6 +43,7 @@ from mw_paper_sources import (
     validate_paper_notes,
     write_read_context,
 )
+from mw_reading_profile import ensure_reading_profile
 from mw_paper_summary import (
     PaperSummaryError,
     SUMMARY_FILE,
@@ -37,8 +53,11 @@ from mw_paper_summary import (
     write_summary_context,
 )
 from mw_paper_slides import (
+    HYPO_PREVIEW_FILE,
+    PAPER_MAKEFILE,
     PaperSlidesError,
     PROJECT_THEME_RELATIVE,
+    RESEARCH_MAKEFILE,
     SLIDES_CONTEXT_FILE,
     SLIDES_FILE,
     run_marp_smoke,
@@ -140,6 +159,80 @@ def derive_paper_id(source_locator: object, source_fingerprint: object) -> str:
         return normalize_paper_id(arxiv_id)
     fingerprint = normalize_fingerprint(source_fingerprint, "source fingerprint")
     return f"local-{fingerprint[:16]}"
+
+
+def acquisition_title(acquisition: JsonObject) -> str:
+    """Return the source-declared title when it is suitable for a workspace name."""
+    metadata = acquisition.get("reading_metadata")
+    title = metadata.get("title") if isinstance(metadata, dict) else ""
+    if not str(title or "").strip():
+        normalized = str(acquisition.get("normalized_source") or "")
+        match = re.search(r"^#[ \t]+(.+?)[ \t]*#*[ \t]*$", normalized, flags=re.MULTILINE)
+        title = match.group(1) if match else ""
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip()
+    if cleaned.lower() in {"", "untitled paper", "paper reading draft"}:
+        return ""
+    return cleaned
+
+
+def title_paper_id(title: object) -> str | None:
+    """Make a stable, readable ASCII id from a parsed paper title."""
+    normalized = unicodedata.normalize("NFKD", str(title or ""))
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.replace("&", " and ")
+    normalized = re.sub(r"[^A-Za-z0-9]+", "-", normalized).strip("-").lower()
+    if len(normalized) < 3:
+        return None
+    return normalized[:128].rstrip("-.") or None
+
+
+def source_matching_paper_id(project_root: Path, locator: str, fingerprint: str) -> str | None:
+    """Find an existing workspace for precisely the acquired source revision."""
+    for candidate in list_paper_ids(project_root):
+        state = read_paper_state(project_root, candidate)
+        source = state["source"]
+        if source["locator"] == locator and source["fingerprint"] == fingerprint:
+            return state["paper_id"]
+    return None
+
+
+def available_title_paper_id(project_root: Path, title: str, fingerprint: str) -> str | None:
+    base = title_paper_id(title)
+    if base is None:
+        return None
+    candidate = base
+    target = paper_directory(project_root, candidate)
+    if not target.exists():
+        return candidate
+    suffix = f"-{fingerprint[:8]}"
+    candidate = f"{base[:128 - len(suffix)].rstrip('-._')}{suffix}"
+    if not paper_directory(project_root, candidate).exists():
+        return candidate
+    return None
+
+
+def rename_paper_workspace(project_root: Path, state: PaperState, target_id: str) -> PaperState:
+    """Migrate an automatically created legacy workspace to its parsed title."""
+    root = Path(project_root).resolve()
+    old_id = state["paper_id"]
+    canonical_target = normalize_paper_id(target_id)
+    if old_id == canonical_target:
+        return state
+    source = paper_directory(root, old_id)
+    target = paper_directory(root, canonical_target)
+    if source.is_symlink() or target.is_symlink():
+        raise PaperError("Paper workspaces must not be symlinks during a title migration.")
+    if not source.is_dir():
+        raise PaperError(f"Paper workspace is missing during title migration: {source}")
+    if target.exists():
+        raise PaperError(f"Cannot rename paper workspace because target already exists: {target}")
+    source.rename(target)
+    migrated = copy.deepcopy(state)
+    migrated["paper_id"] = canonical_target
+    migrated["updated_at"] = now_iso()
+    write_paper_state(root, migrated)
+    append_paper_log(root, canonical_target, f"renamed workspace from {old_id} using parsed paper title")
+    return migrated
 
 
 def require_source_identity(paper_id: str, source_locator: str) -> None:
@@ -490,11 +583,31 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
         if output_fingerprint != validation["notes_fingerprint"]:
             raise PaperError("complete_stage read output_fingerprint does not match paper-notes.md.")
         metadata = validation["quality"]
+        workspace = paper_directory(project_root, state["paper_id"])
+        report_path = resolve_artifact_path(workspace, PARSE_QUALITY_FILE)
+        try:
+            report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PaperError(f"Could not inspect parse-quality.json for reading artifacts: {exc}") from exc
+        source_payload = report_payload.get("source") if isinstance(report_payload, dict) else {}
+        if isinstance(source_payload, dict) and source_payload.get("input_kind") == "folder":
+            try:
+                reading_document = validate_reading_document(workspace)
+                reading_summary = validate_reading_summary(workspace)
+            except PaperReadingError as exc:
+                raise PaperError(str(exc)) from exc
+            metadata["reading_artifact"] = "reading.md"
+            metadata["reading_fingerprint"] = reading_document["fingerprint"]
+            metadata["reading_annotations"] = reading_document["annotations"]
+            metadata["reading_chinese_characters"] = reading_document["chinese_characters"]
+            metadata["reading_summary_artifact"] = reading_summary["artifact"]
+            metadata["reading_summary_fingerprint"] = reading_summary["fingerprint"]
+            metadata["source_manifest"] = SOURCE_MANIFEST_FILE
         override_record = validation["override_record"]
         if override_record is not None:
             override_record["recorded_at"] = now_iso()
-            override_artifact = f"quality-override-{item['attempts']}.json"
-            override_path = paper_directory(project_root, state["paper_id"]) / override_artifact
+            override_artifact = f"artifacts/quality-override-{item['attempts']}.json"
+            override_path = artifact_path(workspace, override_artifact, create_parent=True)
             atomic_write_text(override_path, json.dumps(override_record, ensure_ascii=False, indent=2) + "\n")
             metadata["override_artifact"] = override_artifact
             metadata["override_fingerprint"] = sha256_file(override_path)
@@ -730,6 +843,7 @@ def prepare_read(
     pdf_extractor: object = None,
 ) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
+    ensure_reading_profile(root)
     existing_state: PaperState | None = None
     if source_locator is None:
         canonical_id = resolve_paper_id(root, paper_id)
@@ -748,15 +862,47 @@ def prepare_read(
     except PaperReadError as exc:
         raise PaperError(str(exc)) from exc
     source_fingerprint = acquisition["report"]["source"]["fingerprint"]
+    parsed_title = acquisition_title(acquisition)
+    automatic_title_id = (
+        source_locator is not None and paper_id is None and extract_arxiv_id(locator) is None
+    )
+    if existing_state is None and automatic_title_id:
+        matching_id = source_matching_paper_id(root, locator, source_fingerprint)
+        if matching_id is not None:
+            existing_state = read_paper_state(root, matching_id)
     canonical_id = (
         existing_state["paper_id"]
         if existing_state is not None
         else normalize_paper_id(paper_id)
         if paper_id is not None
+        else (
+            available_title_paper_id(root, parsed_title, source_fingerprint)
+            or derive_paper_id(locator, source_fingerprint)
+        )
+        if automatic_title_id
         else derive_paper_id(locator, source_fingerprint)
     )
     if existing_state is None and paper_state_path(root, canonical_id).is_file():
         existing_state = read_paper_state(root, canonical_id)
+
+    # Older automatic folder imports used a hash-only id. Upgrade that workspace
+    # in place once the LaTeX/HTML title has been parsed, while preserving lineage.
+    if (
+        automatic_title_id
+        and existing_state is not None
+        and existing_state["paper_id"].startswith("local-")
+        and parsed_title
+    ):
+        desired_id = available_title_paper_id(root, parsed_title, source_fingerprint)
+        if desired_id is not None and desired_id != existing_state["paper_id"]:
+            existing_state = rename_paper_workspace(root, existing_state, desired_id)
+            canonical_id = desired_id
+
+    workspace = paper_directory(root, canonical_id)
+    try:
+        migrate_legacy_artifacts(workspace)
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
 
     if existing_state is None:
         state, _ = create_paper(root, locator, source_fingerprint, canonical_id)
@@ -779,9 +925,9 @@ def prepare_read(
         else:
             state = existing_state
 
-    report = persist_acquisition(paper_directory(root, canonical_id), acquisition)
+    report = persist_acquisition(workspace, acquisition)
     write_read_context(
-        paper_directory(root, canonical_id), canonical_id, state["source"]["locator"]
+        workspace, canonical_id, state["source"]["locator"]
     )
     read_status = state["stages"]["read"]["status"]
     if read_status in {"pending", "failed", "stale"}:
@@ -803,6 +949,10 @@ def prepare_read(
 def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage = state["stages"]["read"]
     if read_stage["status"] != "complete":
@@ -842,6 +992,10 @@ def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple
 def prepare_slides(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage = state["stages"]["read"]
     summary_stage = state["stages"]["summary"]
@@ -917,6 +1071,10 @@ def quiz_lineage(state: PaperState, command: str) -> tuple[JsonObject, JsonObjec
 def prepare_quiz(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(root, canonical_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(root, canonical_id)
     read_stage, summary_stage, source_format = quiz_lineage(state, "prepare-quiz")
     quiz_stage = state["stages"]["quiz"]
@@ -1122,6 +1280,30 @@ def cmd_apply_action(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_artifacts(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root)
+    paper_id = resolve_paper_id(project_root, args.paper_id)
+    workspace = paper_directory(project_root, paper_id)
+    try:
+        changes = migrate_legacy_artifacts(workspace)
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
+    if changes:
+        append_paper_log(project_root, paper_id, "migrated legacy artifacts: " + "; ".join(changes))
+    print(
+        json.dumps(
+            {
+                "paper_id": paper_id,
+                "artifacts": str(workspace / "artifacts"),
+                "changes": changes,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_prepare_read(args: argparse.Namespace) -> int:
     state, report = prepare_read(
         Path(args.project_root),
@@ -1130,9 +1312,16 @@ def cmd_prepare_read(args: argparse.Namespace) -> int:
     )
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     print(f"paper_workspace: {workspace}")
-    print(f"normalized_source: {workspace / 'source.md'}")
-    print(f"parse_quality: {workspace / 'parse-quality.json'}")
-    print(f"read_context: {workspace / 'read-context.json'}")
+    print(f"artifacts: {workspace / 'artifacts'}")
+    print(f"normalized_source: {workspace / NORMALIZED_SOURCE_FILE}")
+    print(f"parse_quality: {workspace / PARSE_QUALITY_FILE}")
+    print(f"read_context: {workspace / READ_CONTEXT_FILE}")
+    if report["source"].get("input_kind") == "folder":
+        print(f"reading_draft: {workspace / 'reading.md'}")
+        print(f"reading_summary_target: {workspace / 'reading-summary.md'}")
+        print(f"reading_context: {workspace / READING_CONTEXT_FILE}")
+        print(f"source_manifest: {workspace / SOURCE_MANIFEST_FILE}")
+        print(f"reading_profile: {Path(args.project_root).resolve() / '.mary-research' / 'reading-profile.md'}")
     print(f"paper_notes_target: {workspace / 'paper-notes.md'}")
     print(
         json.dumps(
@@ -1156,6 +1345,10 @@ def cmd_prepare_read(args: argparse.Namespace) -> int:
 def cmd_complete_read(args: argparse.Namespace) -> int:
     project_root = Path(args.project_root)
     paper_id = resolve_paper_id(project_root, args.paper_id)
+    try:
+        migrate_legacy_artifacts(paper_directory(project_root, paper_id))
+    except ArtifactLayoutError as exc:
+        raise PaperError(str(exc)) from exc
     state = read_paper_state(project_root, paper_id)
     notes_path = paper_directory(project_root, paper_id) / "paper-notes.md"
     if not notes_path.is_file():
@@ -1195,8 +1388,8 @@ def cmd_prepare_summary(args: argparse.Namespace) -> int:
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     print(f"paper_workspace: {workspace}")
     print(f"paper_notes: {workspace / 'paper-notes.md'}")
-    print(f"source_locators: {workspace / 'source-locators.json'}")
-    print(f"summary_context: {workspace / 'summary-context.json'}")
+    print(f"source_locators: {workspace / SOURCE_LOCATOR_FILE}")
+    print(f"summary_context: {workspace / SUMMARY_CONTEXT_FILE}")
     print(f"summary_target: {workspace / SUMMARY_FILE}")
     print(f"summary_ledger_target: {workspace / SUMMARY_LEDGER_FILE}")
     print(
@@ -1255,6 +1448,9 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
     print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
     print(f"figure_directory: {workspace / 'figures'}")
+    print(f"research_makefile: {Path(args.project_root).resolve() / RESEARCH_MAKEFILE}")
+    print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
+    print(f"hypo_preview_source: {workspace / HYPO_PREVIEW_FILE}")
     print(f"slides_target: {workspace / SLIDES_FILE}")
     print(
         json.dumps(
@@ -1433,11 +1629,17 @@ def build_parser() -> argparse.ArgumentParser:
     action_parser.set_defaults(func=cmd_apply_action)
 
     prepare_parser = subparsers.add_parser(
-        "prepare-read", help="acquire and normalize one paper source, preferring arXiv HTML"
+        "prepare-read", help="acquire and normalize a paper URL, file, or folder"
     )
-    prepare_parser.add_argument("--source", help="arXiv id/URL or local/remote HTML/PDF")
+    prepare_parser.add_argument("--source", help="arXiv id/URL or local HTML/PDF/folder")
     prepare_parser.add_argument("--paper-id", help="existing or explicit canonical paper id")
     prepare_parser.set_defaults(func=cmd_prepare_read)
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-artifacts", help="move legacy root source/JSON files into artifacts/"
+    )
+    migrate_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    migrate_parser.set_defaults(func=cmd_migrate_artifacts)
 
     complete_parser = subparsers.add_parser(
         "complete-read", help="validate paper-notes.md and complete the read stage"

@@ -6,28 +6,47 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 
 ```text
 .mary-research/
+├── Makefile
 └── papers/
     └── <paper-id>/
         ├── state.json
         ├── log.md
-        ├── source.html or source.pdf
-        ├── source.md
-        ├── parse-quality.json
-        ├── read-context.json
+        ├── reading.md
+        ├── reading-summary.md
         ├── paper-notes.md
-        ├── source-locators.json
-        ├── summary-context.json
         ├── summary.md
-        ├── summary-ledger.json
-        ├── slides-context.json
         ├── slides.md
         ├── figures/
-        ├── quiz-context.json
+        ├── Makefile
+        ├── hypo-template-preview/
+        │   └── Slide.tex
         ├── quiz-log.md
-        └── quiz-head.json
+        └── artifacts/
+            ├── source.html or source.pdf
+            ├── source.md
+            ├── parse-quality.json
+            ├── read-context.json
+            ├── source-manifest.json (folder input)
+            ├── reading-context.json (folder input)
+            ├── source-locators.json
+            ├── summary-context.json
+            ├── summary-ledger.json
+            ├── slides-context.json
+            ├── quiz-context.json
+            ├── quiz-head.json
+            └── notion-context.json
 ```
 
-`/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it.
+`/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it. `state.json` and `log.md` remain at the paper root; acquired sources and generated JSON sidecars must remain under `artifacts/`.
+
+`prepare-slides` also installs a paper-local `Makefile`. Its `slide` target
+exports the current `slides.md` with the localized ShanghaiTech Marp theme and
+`--allow-local-files`. Its separate `hypo-template` target compiles
+`hypo-template-preview/Slide.tex` with the external Hypoxanthine-LaTeX checkout
+when available. It also installs a root `.mary-research/Makefile` dispatcher, so
+`make slide` works from either the project research root or the paper workspace;
+use `make PAPER_ID=<paper-id> slide` when the project contains multiple papers.
+Neither target rewrites `slides.md` or an existing export.
 
 ## Identity
 
@@ -35,7 +54,10 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 - `paper_id` is a canonical, path-safe lowercase id with at most 128 characters.
 - arXiv locators normalize to `arxiv-<identifier>`, retaining an explicit `vN` revision when present.
 - Changing an arXiv locator to a different identifier or `vN` revision requires a separate paper workspace.
-- non-arXiv inputs default to `local-<first-16-source-sha256>`.
+- local folder/HTML/PDF inputs with a parsed paper title default to a readable
+  lowercase title slug; the SHA-256 fallback is used only when no usable title
+  is available. Existing automatic `local-<first-16-source-sha256>` workspaces
+  are migrated to that title slug on the next `prepare-read` for the same source.
 - path separators, `..`, and non-canonical ids are rejected.
 
 ## Fingerprints
@@ -88,13 +110,13 @@ in_progress|complete|failed|stale --reset_stage--> pending
 
 A complete stage must be reset before rerun. Dependencies must be complete before a stage starts.
 
-The `read` stage has an additional P2 completion gate: `artifact` must be `paper-notes.md`, its byte fingerprint must match `output_fingerprint`, and the ledger must pass `references/paper-notes-contract.md`. A successful read stores parse-quality decision metadata.
+The `read` stage has an additional P2 completion gate: `artifact` must be `paper-notes.md`, its byte fingerprint must match `output_fingerprint`, and the ledger must pass `references/paper-notes-contract.md`. For folder-backed sources, `reading.md` must have meaningful Chinese parenthetical annotations plus empty Open question / Reader notes blocks, and the complete `reading-summary.md` must also pass `references/paper-reading-contract.md`. A successful read stores parse-quality and reading-artifact metadata.
 
-The `summary` stage has a P3.5 completion gate: `artifact` remains `summary.md`, while the stage output fingerprint covers both `summary.md` and `summary-ledger.json`. The article must pass the three-section and bidirectional-anchor rules; every direct ledger claim must pass `references/summary-contract.md`, and its evidence and locators must resolve against the current source index.
+The `summary` stage has a P3.5 completion gate: `artifact` remains `summary.md`, while the stage output fingerprint covers both `summary.md` and `artifacts/summary-ledger.json`. The article must pass the three-section and bidirectional-anchor rules; every direct ledger claim must pass `references/summary-contract.md`, and its evidence and locators must resolve against the current source index.
 
-The `slides` stage has a P5 completion gate: `artifact` must be `slides.md`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `slides-context.json` must pass `references/slides-contract.md`. The lint enforces the ShanghaiTech Marp/KaTeX frontmatter, research-talk structure, summary-claim references, resolvable Figure placeholders, local media, multi-panel usage, and conservative per-page capacity. Marp compilation is optional and creates no persistent export artifact.
+The `slides` stage has a P5 completion gate: `artifact` must be `slides.md`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `artifacts/slides-context.json` must pass `references/slides-contract.md`. The lint enforces the ShanghaiTech Marp/KaTeX frontmatter, research-talk structure, summary-claim references, resolvable Figure placeholders, optional paper-local image media, exact context captions, closing-page purity, multi-panel usage, and conservative per-page capacity. Marp compilation is optional and creates no persistent export artifact.
 
-The `quiz` stage has a P6 completion gate: `artifact` must be `quiz-log.md`, its byte fingerprint must match `output_fingerprint`, and the current read/summary lineage plus `quiz-context.json` must pass `references/quiz-contract.md`. Current-attempt sessions must cover at least one P3.5 Method claim and, when content uncertainties exist, at least one scientific-content Uxx; parse-quality-only papers degrade to method-only completion. Every new session uses a four-value judgment, includes a source-grounded correct answer, and cites exact resolvable source excerpts. Parse-quality uncertainties remain non-selectable audit notes. `quiz-log.md` is the sole delivered Q&A archive and is append-only across attempts; its session hash chain and `quiz-head.json` checkpoint reject deletion, answer/correct-answer edits, and rejudgment while preserving legacy schema 1 records.
+The `quiz` stage has a P6 completion gate: `artifact` must be `quiz-log.md`, its byte fingerprint must match `output_fingerprint`, and the current read/summary lineage plus `artifacts/quiz-context.json` must pass `references/quiz-contract.md`. Current-attempt sessions must cover at least one P3.5 Method claim and, when content uncertainties exist, at least one scientific-content Uxx; parse-quality-only papers degrade to method-only completion. Every new session uses a four-value judgment, includes a source-grounded correct answer, and cites exact resolvable source excerpts. Parse-quality uncertainties remain non-selectable audit notes. `quiz-log.md` is the sole delivered Q&A archive and is append-only across attempts; its session hash chain and `artifacts/quiz-head.json` checkpoint reject deletion, answer/correct-answer edits, and rejudgment while preserving legacy schema 1 records.
 
 ## Stale Propagation
 
@@ -126,7 +148,7 @@ Complete a stage:
 }
 ```
 
-For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality gate. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact. Use `prepare-quiz`, `next-quiz-question`, `append-quiz-session`, `lint-quiz`, and `complete-quiz` for P6; never hand-edit or replace its append-only files.
+For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality and folder reading-guide gates. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `artifacts/quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact. Use `prepare-quiz`, `next-quiz-question`, `append-quiz-session`, `lint-quiz`, and `complete-quiz` for P6; never hand-edit or replace its append-only files.
 
 Fail or reset a stage:
 

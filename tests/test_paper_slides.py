@@ -20,14 +20,25 @@ from mw_paper import (  # noqa: E402
     read_paper_state,
 )
 from mw_paper_slides import (  # noqa: E402
+    HYPO_PREVIEW_FILE,
+    PAPER_MAKEFILE,
+    PAPER_MAKEFILE_MARKER,
+    PaperSlidesError,
     PROJECT_THEME_RELATIVE,
+    RESEARCH_MAKEFILE,
+    RESEARCH_MAKEFILE_MARKER,
     SLIDES_CONTEXT_SCHEMA,
     SLIDES_FILE,
+    FIGURE_CAPTION_NODE_PATTERN,
+    FIGURE_REFERENCE_PATTERN,
     VSCODE_SETTINGS_RELATIVE,
     VSCODE_THEME_REFERENCE,
     install_project_marp_support,
+    materialize_figure_assets,
     validate_slides,
+    validate_slides_document,
 )
+from mw_paper_artifacts import PARSE_QUALITY_FILE, SLIDES_CONTEXT_FILE, artifact_path  # noqa: E402
 from mw_paper_sources import sha256_file  # noqa: E402
 from tests.paper_read_helpers import (  # noqa: E402
     write_read_fixture,
@@ -123,8 +134,19 @@ class SlidesContractTests(unittest.TestCase):
         self.assertEqual(
             self.context["figure_catalog"][0]["source_locators"], ["html#S1.F1"]
         )
-        self.assertTrue((self.workspace / "slides-context.json").is_file())
+        self.assertTrue(artifact_path(self.workspace, SLIDES_CONTEXT_FILE).is_file())
         self.assertTrue((self.workspace / "figures").is_dir())
+        self.assertTrue((self.workspace / PAPER_MAKEFILE).is_file())
+        self.assertTrue((self.workspace / HYPO_PREVIEW_FILE).is_file())
+        self.assertTrue((self.project / RESEARCH_MAKEFILE).is_file())
+        makefile_text = (self.workspace / PAPER_MAKEFILE).read_text(encoding="utf-8")
+        self.assertIn(PAPER_MAKEFILE_MARKER, makefile_text)
+        self.assertIn("--allow-local-files", makefile_text)
+        research_makefile_text = (self.project / RESEARCH_MAKEFILE).read_text(encoding="utf-8")
+        self.assertIn(RESEARCH_MAKEFILE_MARKER, research_makefile_text)
+        self.assertIn("PAPER_ID ?=", research_makefile_text)
+        self.assertEqual(self.context["presentation"]["build"]["default_target"], "slide")
+        self.assertEqual(self.context["presentation"]["build"]["hypo_preview_target"], "hypo-template")
         self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
         self.assertEqual(
             sha256_file(self.project / PROJECT_THEME_RELATIVE),
@@ -136,6 +158,24 @@ class SlidesContractTests(unittest.TestCase):
         self.assertEqual(settings["markdown.marp.html"], "all")
         self.assertEqual(settings["markdown.marp.mathTypesetting"], "katex")
         self.assertIn(VSCODE_THEME_REFERENCE, settings["markdown.marp.themes"])
+
+        write_slides_fixture(self.workspace)
+        root_make = subprocess.run(
+            ["make", "-C", str(self.project / ".mary-research"), "-n", "slide"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn("slides.pdf", root_make.stdout)
+        root_slides = subprocess.run(
+            ["make", "-C", str(self.project / ".mary-research"), "-n", "slides"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn("slides.pdf", root_slides.stdout)
 
         prepared = subprocess.run(
             [
@@ -230,12 +270,136 @@ class SlidesContractTests(unittest.TestCase):
         )
         self.assert_rejected("requires number and caption nodes")
 
+    def test_figure_placeholder_accepts_local_html_image_and_exact_caption(self) -> None:
+        context = json.loads(artifact_path(self.workspace, SLIDES_CONTEXT_FILE).read_text(encoding="utf-8"))
+        figure = context["figure_catalog"][0]
+        image_path = self.workspace / "figures" / "figure-1.png"
+        image_path.write_bytes(b"png-fixture")
+
+        def add_image(text: str) -> str:
+            return text.replace(
+                f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+                f'<img src="figures/figure-1.png" alt="{figure["figure_id"]}">\n'
+                f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+                1,
+            )
+
+        digest = write_slides_fixture(self.workspace, add_image)
+        report = validate_slides(
+            self.workspace,
+            paper_id=self.paper_id,
+            source_format="html",
+            source_fingerprint=fingerprint("1"),
+            read_output_fingerprint=read_paper_state(self.project, self.paper_id)["stages"]["read"]["output_fingerprint"],
+            summary_output_fingerprint=read_paper_state(self.project, self.paper_id)["stages"]["summary"]["output_fingerprint"],
+        )
+        self.assertEqual(report["metadata"]["figure_placeholder_count"], 1)
+        self.assertEqual(report["slides_fingerprint"], digest)
+
+        self.assert_rejected_message(
+            add_image,
+            "caption does not exactly match Figure 1 context",
+            lambda text: text.replace(figure["caption"], "Figure 1. Altered caption", 1),
+        )
+
+        self.assert_rejected_message(
+            add_image,
+            "image references must be local repository files",
+            lambda text: text.replace("figures/figure-1.png", "https://example.com/figure.png", 1),
+        )
+
+    def test_prepare_slides_materializes_latex_figure_assets(self) -> None:
+        source_root = self.project / "paper-source"
+        (source_root / "assets").mkdir(parents=True)
+        (source_root / "assets" / "overview.png").write_bytes(b"source-png")
+        (source_root / "main.tex").write_text(
+            r"""\begin{figure}
+\includegraphics{assets/overview}
+\caption{Pipeline overview}
+\end{figure}
+""",
+            encoding="utf-8",
+        )
+        artifact_path(self.workspace, PARSE_QUALITY_FILE).write_text(
+            json.dumps(
+                {
+                    "source": {
+                        "input_kind": "folder",
+                        "locator": str(source_root),
+                        "latex_entry": "main.tex",
+                        "raw_artifact": "artifacts/source.pdf",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assets = materialize_figure_assets(
+            self.workspace,
+            [{"figure_id": "Figure 1", "source_locators": ["pdf:p1"]}],
+        )
+
+        self.assertEqual(
+            assets,
+            [
+                {
+                    "figure_id": "Figure 1",
+                    "path": "figures/figure-1-source.png",
+                    "kind": "latex-asset",
+                    "source": "assets/overview.png",
+                }
+            ],
+        )
+        self.assertEqual(
+            (self.workspace / "figures" / "figure-1-source.png").read_bytes(), b"source-png"
+        )
+
+    def test_prepared_figure_asset_must_be_embedded_in_its_placeholder(self) -> None:
+        write_slides_fixture(self.workspace)
+        figure = self.context["figure_catalog"][0]
+        (self.workspace / "figures" / "figure-1-source.png").write_bytes(b"source-png")
+        context = json.loads(json.dumps(self.context))
+        context["figure_assets"] = [
+            {"figure_id": figure["figure_id"], "path": "figures/figure-1-source.png"}
+        ]
+        slides = (self.workspace / SLIDES_FILE).read_text(encoding="utf-8")
+
+        with self.assertRaisesRegex(PaperSlidesError, "must embed its prepared source asset"):
+            validate_slides_document(self.workspace, slides, context)
+
+        embedded = slides.replace(
+            f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+            f'<img src="figures/figure-1-source.png" alt="{figure["figure_id"]}">\n'
+            f'<div class="figure-placeholder__number">{figure["figure_id"]}</div>',
+            1,
+        )
+        validate_slides_document(self.workspace, embedded, context)
+
+    def assert_rejected_message(self, base_mutate: object, message: str, extra_mutate: object) -> None:
+        def mutate(text: str) -> str:
+            return extra_mutate(base_mutate(text))
+
+        write_slides_fixture(self.workspace, mutate)
+        self.assert_rejected(message)
+
+    def test_lastpage_must_only_contain_one_closing_title(self) -> None:
+        write_slides_fixture(
+            self.workspace,
+            lambda text: text.replace("###### 谢谢", "###### 谢谢\n\n多余内容", 1),
+        )
+        self.assert_rejected("last slide may contain only its H6 closing title")
+
     def test_figure_text_without_placeholder_is_rejected(self) -> None:
         write_slides_fixture(
             self.workspace,
             lambda text: text.replace("figure-placeholder", "figure-slot"),
         )
         self.assert_rejected("references figures without placeholders: Figure 1")
+
+    def test_figure_cross_reference_inside_caption_is_not_a_panel_reference(self) -> None:
+        page = '<div class="figure-placeholder__caption">Figure 6. Row 1 in Figure 3 demonstrates the comparison.</div>'
+        visible = FIGURE_CAPTION_NODE_PATTERN.sub("", page)
+        self.assertEqual(FIGURE_REFERENCE_PATTERN.findall(visible), [])
 
     def test_layout_and_page_capacity_are_machine_gated(self) -> None:
         def remove_layouts(text: str) -> str:
@@ -289,7 +453,7 @@ class SlidesContractTests(unittest.TestCase):
 
     def test_context_summary_and_declared_fingerprint_cannot_drift(self) -> None:
         write_slides_fixture(self.workspace)
-        context_path = self.workspace / "slides-context.json"
+        context_path = artifact_path(self.workspace, SLIDES_CONTEXT_FILE)
         context = json.loads(context_path.read_text(encoding="utf-8"))
         context["presentation"]["math"] = "mathjax"
         context_path.write_text(json.dumps(context), encoding="utf-8")
@@ -312,6 +476,16 @@ class SlidesContractTests(unittest.TestCase):
         prepare_slides(self.project, self.paper_id)
         repaired = json.loads(settings_path.read_text(encoding="utf-8"))
         self.assertIn(VSCODE_THEME_REFERENCE, repaired["markdown.marp.themes"])
+
+    def test_paper_build_support_cannot_drift(self) -> None:
+        write_slides_fixture(self.workspace)
+        (self.workspace / PAPER_MAKEFILE).unlink()
+        self.assert_rejected("Paper Makefile is missing or stale")
+
+    def test_research_build_dispatcher_cannot_drift(self) -> None:
+        write_slides_fixture(self.workspace)
+        (self.project / RESEARCH_MAKEFILE).unlink()
+        self.assert_rejected("Project .mary-research Makefile is missing or stale")
 
     def test_lint_and_complete_slides_cli(self) -> None:
         write_slides_fixture(self.workspace)

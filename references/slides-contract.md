@@ -16,14 +16,15 @@ The `slides` stage produces one final artifact: `slides.md`, a ShanghaiTech red 
 
 ## Preparation
 
-`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, creates `figures/`, and writes `slides-context.json` with:
+`prepare-slides` requires a completed, still-valid summary stage. It validates the summary bundle again, starts `slides`, materializes original visuals in `figures/`, and writes `artifacts/slides-context.json` with:
 
-- exact `summary.md`, `summary-ledger.json`, summary-bundle, source-index, and theme fingerprints;
+- exact `summary.md`, `artifacts/summary-ledger.json`, summary-bundle, source-index, and theme fingerprints;
 - the allowed summary claim catalog;
 - Figure ids, captions, and source locators parsed from the normalized paper;
+- workspace-local original figure assets, mapped to their Figure ids when available;
 - the required theme, format, math engine, and lint limits.
 
-Read all of `summary.md`, `summary-ledger.json`, and `slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
+Read all of `summary.md`, `artifacts/summary-ledger.json`, and `artifacts/slides-context.json` before writing. Use the article for explanation and the claim ledger for factual statements. Do not hand-edit generated context or state files.
 
 Preparation also copies the self-contained offline theme to
 `<project>/.mary-research/marp/themes/mary-shanghaitech-red.css` and merges its registration into
@@ -32,6 +33,24 @@ Mary sets Marp HTML to `all`, math typesetting to `katex`, and registers its pro
 Open the target project root as the VS Code workspace, then every paper deck below it previews
 without depending on the Mary plugin checkout or the Markdown file's depth. VS Code does not
 inherit `.vscode` settings from directories above an independently opened workspace.
+
+Preparation also installs `<paper-workspace>/Makefile` and the isolated
+`<paper-workspace>/hypo-template-preview/Slide.tex`. Run `make slide` from the
+paper workspace to export `build/slides.pdf` with the exact local Marp theme,
+`--allow-local-files`, and the paper's relative figures. Run
+`make hypo-template` to compile a separate original Hypoxanthine-LaTeX style
+preview into `build/hypo-template-preview.pdf`; this is a visual comparison
+artifact and must never replace the grounded `slides.md` artifact. The same
+targets are available through the generated `.mary-research/Makefile` dispatcher
+from the project research root; pass `PAPER_ID=<paper-id>` when needed.
+
+For a folder containing LaTeX, preparation first copies the matching
+`\includegraphics` asset (rasterizing a PDF asset to PNG when needed). For every
+remaining PDF-backed Figure, it renders the original source page containing that
+Figure's caption. This fallback intentionally keeps the complete page rather
+than claiming an unverified crop. The resulting `figure_assets` records provide
+the Figure id, workspace-relative `path`, kind, and source provenance; existing
+materialized files are reused deterministically.
 
 ## Frontmatter
 
@@ -75,31 +94,37 @@ Allowed sections are `background`, `method`, `experiments`, and `takeaways`. Str
 
 ## Claim References
 
-Each factual content page requires one `<!-- claims: ... -->` comment. Claim ids must exist in `slides-context.json`:
+Each factual content page requires one `<!-- claims: ... -->` comment. Claim ids must exist in `artifacts/slides-context.json`:
 
 - Background pages use only `Bxx` claims.
 - Method pages use only `Mxx` claims.
 - Experiments pages use only `Exx` claims.
 - Takeaways may combine all three families.
 
-Reference at least one claim from every family across the deck. Keep claim ids hidden in comments; do not display P3 markers such as `[M01]` to the audience. Claim comments prove lineage, not semantic truth. Do not add facts that exist only in `source.md` or general knowledge.
+Reference at least one claim from every family across the deck. Keep claim ids hidden in comments; do not display P3 markers such as `[M01]` to the audience. Claim comments prove lineage, not semantic truth. Do not add facts that exist only in `artifacts/source.md` or general knowledge.
 
 ## Figure Placeholders
 
-When `slides-context.json` contains figures, use at least one. Do not download, crop, invent, or embed paper images. Reserve the intended panel with this exact shape:
+When `artifacts/slides-context.json` contains figures, use at least one. Inspect
+`figure_assets` before authoring: for every Figure selected for the talk that has
+a matching asset record, embed that local original visual in its placeholder.
+Do not download, crop, or invent a replacement image. Reserve the intended panel
+with this exact shape:
 
 ```html
 <div class="rimg figure-placeholder"
      data-figure="Figure 2"
      data-source-locator="html#S3.F2">
+  <img src="figures/figure-2.png" alt="Figure 2">
   <div class="figure-placeholder__number">Figure 2</div>
   <div class="figure-placeholder__caption">Figure 2: Caption from the context catalog.</div>
 </div>
 ```
 
-Use the exact `figure_id`, caption, and one matching locator from the context. Combine `figure-placeholder` with one VSP image-panel class: `limg`, `mimg`, `rimg`, `timg`, or `bimg`. Every visible reference to a paper Figure on a page must have its matching placeholder on that page.
+Use the exact `figure_id`, caption, and one matching locator from the context. If a local image is embedded, its path must remain inside the paper workspace and its caption must exactly match the context caption after whitespace normalization. Standard `<img>` and self-closing `<img />` syntax are accepted. Combine `figure-placeholder` with one VSP image-panel class: `limg`, `mimg`, `rimg`, `timg`, or `bimg`. Every visible reference to a paper Figure on a page must have its matching placeholder on that page.
 
-After delivery, the user may replace the placeholder body with a screenshot under `figures/` and export locally. The P5 acceptance artifact itself deliberately retains numbered placeholders.
+When no `figure_assets` record is available, retain the numbered placeholder
+body. P5 never downloads or fabricates paper figures.
 
 If the context has no Figure catalog, do not invent a Figure number. Use text, equations, or tables from the grounded summary instead.
 
@@ -144,4 +169,4 @@ Add `--smoke-compile` to `lint-slides` or `complete-slides` only when `marp` or 
 
 ## Human Validation Boundary
 
-The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, and conservative page capacity. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, and final image selection.
+The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, exact placeholder captions, closing-page purity, and conservative page capacity. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, and final image selection.

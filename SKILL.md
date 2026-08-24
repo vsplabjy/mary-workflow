@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/` and v2.2 research-paper pipeline from `.mary-research/`, including contract-validated close reading, readable source-grounded summaries, linted ShanghaiTech Marp slides, and append-only expert Q&A. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-paper`, asks to run Mary workflow, manage paper state, read or summarize a research paper, build group-meeting slides, or run a source-grounded paper quiz.
+description: Run Mary Workflow's v2.1 milestone engine from `.mary-workflow/`, course Lecture learning and ExamPass review profiles, the v2.2 research-paper pipeline from `.mary-research/`, and schema-aware Notion MCP operations. Use when the user invokes `/mw-init`, `/mw-plan`, `/mw-run`, `/mw-status`, `/mw-stop`, `/mw-debug`, `/mw-cycle`, `/mw-learn`, `/mw-exam`, `/mw-review`, `/slide-learning`, `/mw-paper`, or `/mw-notion`; asks to run Mary Workflow; or needs course learning, exam review, paper reading, grounded summaries, group-meeting slides, source-grounded paper Q&A, or polished Notion page/database work.
 ---
 
 # Mary Workflow
@@ -19,7 +19,13 @@ User-facing command surface:
 - `/mw-stop`: pause while preserving state, logs, reports, and cycle.
 - `/mw-debug`: manually load debug phase when the workflow is in `DEBUGGING`.
 - `/mw-cycle`: archive the current cycle to `.mary-workflow/cycles/<cycle>/`, reset active short-term state, and point back to `/mw-plan`.
+- `/mw-learn`: run the Course Lecture learning profile based on `skills/lecture-learning/`.
+- `/mw-exam`: run the ExamPass review profile based on `skills/exam-review/`.
+- `/mw-review`: compatibility alias for `/mw-exam`.
+- `/slide-learning`: run the direct Slide to Lecture preparation profile.
 - `/mw-paper`: manage independent paper states, produce validated notes/summaries/slides, and run append-only expert Q&A without plan/run authorization.
+- `/mw-notion`: execute a natural-language Notion MCP request with fetch-before-write safety, page-craft rules, and read-back verification.
+- `/mw-model`: configure or switch Codex between the existing VSP provider and DeepSeek Responses API.
 
 ## Runtime Rules
 
@@ -39,8 +45,11 @@ User-facing command surface:
 8. Only a `/mw-run` render contains the plaintext one-time token. `start_execution` atomically confirms the plan and acquires the lease; stop/resume uses a separate single-use grant.
 9. `log.md` stays English for grep and audit stability. User-facing explanations follow `.mary-workflow/config.yaml` `output.language`.
 10. `/mw-paper` uses `scripts/mw_paper.py` and `paper_state_schema: 1`; it does not read or mutate `.mary-workflow/` milestone state. Parse-quality and source-locator gates are machine enforced.
-11. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion.
-12. P6 prioritizes paper-understanding questions grounded in P3.5 Method claims, permits only scientific-content P2 uncertainties as conditional follow-ups, requires one such Uxx only when that catalog is non-empty, excludes parse-quality uncertainties from the question pool, and archives Question, User answer, four-value Judgment, source-grounded Correct answer, and Paper sources in one append-only `quiz-log.md` under a verified hash chain.
+11. Folder-backed `/mw-paper read` keeps PDF locators in `artifacts/source.md`, expands an available LaTeX source into annotated English-first `reading.md`, requires meaningful Chinese help selected from `.mary-research/reading-profile.md` plus a source-grounded Chinese `reading-summary.md` with a detailed Method explanation, keeps generated source/JSON sidecars in `artifacts/`, and completes the Notion create/update plus read-back pass described in `references/paper-reading-contract.md` (the `Original paper` child page first, then the Chinese guide on the paper page by default under `本科学习` -> `科研 / 项目` -> `读论文`). Legacy root source/JSON files are migrated by `migrate-artifacts` or the next preparation command; `state.json` remains the root state exception.
+12. P5 consumes the localized `mary-shanghaitech-red` assets under `assets/marp/`, deploys a self-contained copy plus Marp VS Code registration into the target project during `prepare-slides`, writes a paper-local `Makefile` and isolated Hypoxanthine-LaTeX preview source, and requires `slides.md` to pass the summary-claim, Figure-placeholder, layout, media, and page-capacity gate before completion. `make slide` exports the Marp deck; `make hypo-template` produces a separate original-template comparison.
+13. P6 prioritizes paper-understanding questions grounded in P3.5 Method claims, permits only scientific-content P2 uncertainties as conditional follow-ups, requires one such Uxx only when that catalog is non-empty, excludes parse-quality uncertainties from the question pool, and archives Question, User answer, four-value Judgment, source-grounded Correct answer, and Paper sources in one append-only `quiz-log.md` under a verified hash chain.
+14. `/mw-notion` uses the standard Mary command/skill/reference layout but remains independent of milestone and paper state. It requires an authorized Notion MCP connection, inspects live tool schemas, fetches existing targets before writes, applies the Notion references, and verifies mutations by fetching the result again.
+15. The first `/mw-init` detects the current terminal shell and installs the `mw-model` command integration idempotently for Fish, Bash, or Zsh.
 
 ## Memory Model
 
@@ -60,10 +69,16 @@ Autocomplete is surfaced through command-specific sub-skills under `skills/`:
 - `skills/stop/SKILL.md` -> `/mw-stop`
 - `skills/debug/SKILL.md` -> `/mw-debug`
 - `skills/cycle/SKILL.md` -> `/mw-cycle`
+- `skills/lecture-learning/SKILL.md` -> `/mw-learn`
+- `skills/exam-review/SKILL.md` -> `/mw-exam`
+- `skills/slide-to-lecture/SKILL.md` -> `/slide-learning` and the Lecture learning Stage 1
+- `skills/roundtrip-screenshot/SKILL.md` -> image/PDF crop verification when needed
 - `skills/paper/SKILL.md` -> `/mw-paper`
+- `skills/notion/SKILL.md` -> `/mw-notion`
+- `skills/model/SKILL.md` -> `/mw-model`
 
 Command Markdown files also live under `commands/` for clients that support file-based command loading.
 
 ## File Contract
 
-See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring, `references/quiz-contract.md` for P6 expert Q&A, and `references/marp-assets-contract.md` for the offline presentation supply.
+See `references/state-contract.md` for v2.1 milestone state, `references/paper-state-contract.md` for paper state schema 1, `references/paper-notes-contract.md` for close reading, `references/summary-contract.md` for grounded summaries, `references/slides-contract.md` for P5 slide authoring, `references/quiz-contract.md` for P6 expert Q&A, `references/marp-assets-contract.md` for the offline presentation supply, and `references/notion-*.md` for Notion MCP and page-craft contracts.

@@ -2,7 +2,7 @@
 
 Mary Workflow 是一套面向 Codex 的项目工作流。它会先完整理解项目，再通过需求访谈拆分里程碑，并按计划自动完成编码、检查和问题修复。
 
-它适合需要让 Codex 持续处理一个完整任务，而不只是修改一两个文件的场景。
+它适合需要让 Codex 持续处理一个完整任务，而不只是修改一两个文件的场景，也适合把课程 Lecture 学习和考试复习纳入同一套可暂停、可审计的流程。
 
 ## 主要能力
 
@@ -12,6 +12,10 @@ Mary Workflow 是一套面向 Codex 的项目工作流。它会先完整理解�
 - **中断后继续**：随时暂停，之后可以从原来的阶段和里程碑继续执行。
 - **错误恢复**：执行失败时保留错误现场，并创建聚焦于当前问题的修复任务。
 - **多轮迭代**：完成一轮工作后归档本轮记录，再基于已有项目理解开始下一轮需求。
+- **课程自学**：ai辅助课程学习，完成Slide → Lecture，并处理课堂录音转写和课堂增量融合。
+- **考试复习**： 结合课程自学中的资料生成章节/总复习、错题本和模拟卷交付物。
+- **论文研读**：独立管理论文阅读状态，生成可追溯笔记、总结、Marp 汇报和来源约束问答。
+- **Notion 操作**：通过 `/mw-notion` 搜索、读取、新建、修改、移动和整理页面/数据库，并按统一规范排版和回读校验。
 
 ## 适用场景
 
@@ -33,6 +37,7 @@ Mary Workflow 可以用于：
 - 已安装并可正常使用 [Codex CLI](https://developers.openai.com/codex/cli/)
 - Git
 - Python 3.10 或更高版本
+- 使用 `/mw-notion` 时，需要在 Codex 中配置并授权 Notion MCP 连接
 
 Mary Workflow 不需要安装额外的 Python 依赖。
 
@@ -120,24 +125,65 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 
 ## 命令说明
 
-| 命令 | 用途 |
-| --- | --- |
-| `/mw-init` | 初始化当前项目，读取项目并生成项目说明 |
-| `/mw-init --reset` | 清除当前 Mary Workflow 数据并重新初始化 |
-| `/mw-plan [需求]` | 通过需求访谈生成并确认里程碑计划 |
-| `/mw-run` | 开始执行已确认的计划，或继续已暂停的任务 |
-| `/mw-status` | 查看当前阶段、里程碑和执行状态，不修改任何内容 |
-| `/mw-stop` | 暂停执行并保留当前进度 |
-| `/mw-debug` | 在工作流进入调试阶段后，创建聚焦的修复任务 |
-| `/mw-cycle` | 归档已完成的一轮工作，并准备下一轮需求 |
+| 命令                 | 用途                                                                |
+| -------------------- | ------------------------------------------------------------------- |
+| `/mw-init`         | 初始化当前项目，读取项目并生成项目说明                              |
+| `/mw-init --reset` | 清除当前 Mary Workflow 数据并重新初始化                             |
+| `/mw-plan [需求]`  | 通过需求访谈生成并确认里程碑计划                                    |
+| `/mw-run`          | 开始执行已确认的计划，或继续已暂停的任务                            |
+| `/mw-status`       | 查看当前阶段、里程碑和执行状态，不修改任何内容                      |
+| `/mw-stop`         | 暂停执行并保留当前进度                                              |
+| `/mw-debug`        | 在工作流进入调试阶段后，创建聚焦的修复任务                          |
+| `/mw-cycle`        | 归档已完成的一轮工作，并准备下一轮需求                              |
+| `/mw-learn`        | 启动或继续 Lecture 学习：Course Hub、slides、录音转写和课堂增量融合 |
+| `/mw-exam`         | 启动或继续考试复习：范围、模式、复习页、错题本和模拟卷              |
+| `/mw-review`       | `/mw-exam` 的兼容别名                                             |
+| `/slide-learning`  | 只执行 Slide → Lecture 基础整理                                    |
+| `/mw-paper`        | 研读论文、生成总结/幻灯片并运行来源约束问答                         |
+| `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
+| `/mw-model [操作]`  | 配置或切换 VSP 与 DeepSeek Responses API                            |
+
+论文 workspace 的源文件和生成 JSON sidecar 统一放在
+`.mary-research/papers/<paper-id>/artifacts/`；根目录只保留 `state.json`、日志、阅读稿、总结和 slide 源文件。对旧 workspace 可运行
+`mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile` 和 `.mary-research/Makefile` dispatcher；可在 paper workspace 运行 `make slide`，也可在 `.mary-research/` 根目录运行 `make slide`（多 paper 时使用 `make PAPER_ID=<paper-id> slide`），并用 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
 
 ## 常用操作
+
+### 操作 Notion
+
+```text
+/mw-notion 把本周项目复盘整理到“项目记录”页面，保留现有子页面，并补充下一步待办
+```
+
+`/mw-notion` 使用和其他 Mary Workflow 命令相同的命名与加载方式，但不依赖 `/mw-init`。它会先确认当前 Notion MCP 工具和参数、搜索并读取目标，再执行最小范围修改；数据库写入前会读取真实 schema，修改后会回读页面或数据行确认结果。
 
 ### 查看进度
 
 ```text
 /mw-status
 ```
+
+### 切换 Codex 模型
+
+首次使用先执行：
+
+```text
+/mw-model configure
+```
+
+这会创建完整 DeepSeek provider 结构并保持 VSP 为默认模型，不会自动填写 key。请手动在 DeepSeek 段加入 `# experimental_bearer_token = "sk-..."`；之后 Python 切换器会注释不用的 provider 段、解除目标段注释。
+
+```text
+/mw-model use deepseek
+/mw-model use vsp
+/mw-model status
+```
+
+DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可。
+
+`$mary-workflow:mw-model` 是 Codex 技能调用，不是热切换接口。正在运行的 Codex 会话不会改变模型；请退出当前会话，在 Fish 中切换后重新启动 Codex。
+
+Mary Workflow 第一次执行 `/mw-init` 时会检测 `$SHELL`，自动配置 `mw-model` 和补全：Fish 写入 `~/.config/fish/`，Bash 写入 `~/.bashrc`，Zsh 写入 `~/.zshrc`。后续 `/mw-init` 会幂等修复缺失配置。
 
 ### 暂停和继续
 
@@ -208,3 +254,7 @@ Mary Workflow 会检查项目变化并更新项目理解，同时尽可能保留
 ### 可以在同一个项目里多次使用吗？
 
 可以。每完成一轮工作后使用 `/mw-cycle`，下一轮可以复用已有的项目理解，不必每次从头开始。
+
+### 课程学习和代码开发会共用状态吗？
+
+会。课程命令使用同一个 `.mary-workflow/state.yaml` 和 cycle 生命周期，但学习内容默认写入项目本地课程/笔记目录；本地资料路径、错题本和本地日程记录都可以作为交付物。一个 Lecture、一个考试章节或一套模拟卷应保持为边界清晰的 milestone；不要把学习内容伪装成本地代码改动。

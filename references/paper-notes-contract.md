@@ -4,16 +4,26 @@
 
 ## Preparation Artifacts
 
-`prepare-read` creates these files in `.mary-research/papers/<paper-id>/`:
+`prepare-read` keeps human-readable Markdown in
+`.mary-research/papers/<paper-id>/` and creates these generated files under its
+`artifacts/` directory:
 
 | File | Purpose |
 | --- | --- |
-| `source.html` or `source.pdf` | Immutable bytes selected for this read attempt |
-| `source.md` | Locatable normalized text used by the agent |
-| `parse-quality.json` | Deterministic five-dimensional parse assessment |
-| `read-context.json` | Exact identity and quality fields to copy into the ledger |
+| `artifacts/source.html` or `artifacts/source.pdf` | Immutable bytes selected for this read attempt |
+| `artifacts/source.md` | Locatable normalized text used by the agent |
+| `artifacts/parse-quality.json` | Deterministic five-dimensional parse assessment |
+| `artifacts/read-context.json` | Exact identity and quality fields to copy into the ledger |
 
-The source fingerprint hashes the selected raw HTML or PDF bytes. `read-context.json` is derived from the other three artifacts and must not be edited.
+For a folder source, it also creates `artifacts/source-manifest.json`,
+`reading.md`, `reading-summary.md`, and `artifacts/reading-context.json`. Read
+`references/paper-reading-contract.md` for the learner-facing and Notion
+delivery contract. `paper-notes.md` remains the machine-validated evidence
+ledger; the learner-facing Markdown is an additional read-stage artifact.
+
+The source fingerprint hashes the selected raw HTML or PDF bytes.
+`artifacts/read-context.json` is derived from the other three artifacts and
+must not be edited.
 
 ## Ledger Shape
 
@@ -29,7 +39,7 @@ Start `paper-notes.md` with the schema marker and one fenced JSON object:
     "locator": "https://arxiv.org/abs/2401.12345v2",
     "fingerprint": "<source-sha256>",
     "format": "html",
-    "artifact": "source.md"
+    "artifact": "artifacts/source.md"
   },
   "bibliography": {
     "title": "Paper title",
@@ -56,7 +66,7 @@ Start `paper-notes.md` with the schema marker and one fenced JSON object:
     }
   ],
   "parse_quality": {
-    "report": "parse-quality.json",
+    "report": "artifacts/parse-quality.json",
     "report_fingerprint": "<parse-quality-sha256>",
     "gate": "pass",
     "dimensions": {
@@ -98,10 +108,10 @@ For a theoretical paper without empirical experiments, `experiments.text` must d
 
 ## Locators
 
-- HTML ledger locators use `html#<anchor>` from `source.md` comments.
-- PDF ledger locators use `pdf:p<N>` page markers from `source.md`.
+- HTML ledger locators use `html#<anchor>` from `artifacts/source.md` comments.
+- PDF ledger locators use `pdf:p<N>` page markers from `artifacts/source.md`.
 - Every claim, section entry, and uncertainty must have at least one locator.
-- Do not invent an anchor or page that is absent from `source.md`.
+- Do not invent an anchor or page that is absent from `artifacts/source.md`.
 
 ## Five-Dimensional Parse Quality
 
@@ -115,14 +125,16 @@ The exact dimensions are:
 | `figures` | figure discovery, captions, and visual availability |
 | `tables` | table discovery, captions, and alignment retention |
 
-Each dimension has one status in `parse-quality.json`:
+Each dimension has one status in `artifacts/parse-quality.json`:
 
 - `pass`: usable without a parse-specific warning;
 - `degraded`: usable with a mandatory matching uncertainty;
 - `failed`: unreliable and blocks read completion by default;
 - `not_applicable`: no evidence that the paper uses the dimension.
 
-The ledger's `parse_quality` object must exactly copy `read-context.json`. Any `degraded` or `failed` dimension must appear in at least one uncertainty's `quality_dimensions`.
+The ledger's `parse_quality` object must exactly copy
+`artifacts/read-context.json`. Any `degraded` or `failed` dimension must appear
+in at least one uncertainty's `quality_dimensions`.
 
 ## Block And Override
 
@@ -144,7 +156,7 @@ The CLI requires a non-trivial reason, records `confirmed_by: user`, writes `qua
 - a required bibliography, research, section, or uncertainty field is empty;
 - `uncertainties` is empty;
 - a locator has the wrong HTML/PDF form;
-- quality report path, fingerprint, gate, dimension set, or statuses differ from `parse-quality.json`;
+- quality report path, fingerprint, gate, dimension set, or statuses differ from `artifacts/parse-quality.json`;
 - a degraded or failed dimension has no uncertainty;
 - the quality gate is blocked without explicit override;
 - the declared output fingerprint differs from the actual `paper-notes.md` bytes.
