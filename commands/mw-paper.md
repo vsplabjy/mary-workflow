@@ -44,7 +44,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
 9. For `slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
-   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` creates `build/slides.pdf` from the current `slides.md`, while `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide; pass `PAPER_ID=<paper-id>` at the research root when needed;
+   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: run `make audit-slides` before export to execute static lint plus the real image-overflow audit (`make audit` is an alias), then `make slide` creates `build/slides.pdf` from the current `slides.md`; `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide; pass `PAPER_ID=<paper-id>` at the research root when needed;
    - treat the emitted `workspace_theme` and `vscode_settings` as generated project support: open the target project root in VS Code so every nested paper deck resolves the offline theme;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
    - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;
@@ -52,7 +52,7 @@ Manage project-local paper workspaces without entering the milestone workflow au
    - add one hidden `<!-- section: ... -->` and `<!-- claims: ... -->` declaration to each factual page, keeping `[B01]`-style ids out of visible slide text;
    - use at least two VSP-Marp multi-panel layouts such as `cols-2-64`, `cols-3`, `rows-2-*`, or `pin-3` according to content shape;
    - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `artifacts/slides-context.json`. `prepare-slides` automatically collects original visuals into `figures/` and records their matching paths in `figure_assets`; always embed a selected Figure's recorded local asset inside its placeholder. A LaTeX asset is preferred and the source-PDF page is the fallback. Do not fetch from the network or fabricate a replacement;
-   - run `lint-slides`, fix every rejection, then run `complete-slides`; add `--smoke-compile` only when local Marp CLI is available and the user wants the optional check.
+   - after inserting or changing images, run `lint-slides --audit-overflow`; fix every rejection and inspect 10-50 px review measurements, then run `complete-slides`, which automatically repeats the four-edge Chromium audit for image-bearing decks; add `--smoke-compile` only when the user wants the separate optional compile check.
 10. For `quiz [paper-id]`:
    - run `prepare-quiz`, specifying `--paper-id` when needed, then read `artifacts/quiz-context.json` and `references/quiz-contract.md`;
    - run `next-quiz-question`, then use its Mxx anchor and the Method prose in `summary.md` to ask exactly one localized question that teaches the paper's intuition, mechanism, information flow, design rationale, or consequences;

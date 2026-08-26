@@ -61,6 +61,7 @@ from mw_paper_slides import (
     SLIDES_CONTEXT_FILE,
     SLIDES_FILE,
     run_marp_smoke,
+    run_slide_image_overflow_audit,
     validate_slides,
     write_slides_context,
 )
@@ -656,6 +657,31 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
         if output_fingerprint != validation["slides_fingerprint"]:
             raise PaperError("complete_stage slides output_fingerprint does not match slides.md.")
         metadata = validation["metadata"]
+        overflow_audit = data.get("image_overflow_audit")
+        if metadata.get("image_reference_count", 0) > 0 and overflow_audit is None:
+            raise PaperError("complete_stage slides with images requires an image overflow audit.")
+        if overflow_audit is not None:
+            if not isinstance(overflow_audit, dict):
+                raise PaperError("complete_stage slides image_overflow_audit must be an object.")
+            if overflow_audit.get("status") != "passed" or overflow_audit.get("failed_images"):
+                raise PaperError("complete_stage slides requires a passing image overflow audit.")
+            if overflow_audit.get("slides_fingerprint") != output_fingerprint:
+                raise PaperError("complete_stage slides image overflow audit is stale.")
+            per_image = overflow_audit.get("per_image")
+            expected_images = int(metadata.get("image_reference_count", 0))
+            if (
+                overflow_audit.get("total_images") != expected_images
+                or not isinstance(per_image, list)
+                or len(per_image) != expected_images
+                or any(
+                    not isinstance(record, dict)
+                    or not record.get("loaded")
+                    or record.get("status") not in {"ok", "review"}
+                    for record in per_image
+                )
+            ):
+                raise PaperError("complete_stage slides image overflow audit is incomplete.")
+            metadata["image_overflow_audit"] = overflow_audit
     elif stage == "quiz":
         if artifact != QUIZ_LOG_FILE:
             raise PaperError(f"complete_stage quiz requires artifact {QUIZ_LOG_FILE}.")
@@ -1474,6 +1500,8 @@ def cmd_lint_slides(args: argparse.Namespace) -> int:
     result: JsonObject = {"lint": "passed", **validation}
     if args.smoke_compile:
         result["smoke_compile"] = run_marp_smoke(workspace)
+    if args.audit_overflow:
+        result["image_overflow_audit"] = run_slide_image_overflow_audit(workspace)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -1486,6 +1514,10 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
     if not slides_path.is_file():
         raise PaperError(f"{SLIDES_FILE} is missing: {slides_path}")
     smoke_result: JsonObject | None = None
+    try:
+        overflow_audit = run_slide_image_overflow_audit(workspace)
+    except PaperSlidesError as exc:
+        raise PaperError(str(exc)) from exc
     if args.smoke_compile:
         try:
             smoke_result = run_marp_smoke(workspace)
@@ -1500,6 +1532,7 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
                 "stage": "slides",
                 "artifact": SLIDES_FILE,
                 "output_fingerprint": sha256_file(slides_path),
+                "image_overflow_audit": overflow_audit,
             },
         },
     )
@@ -1509,6 +1542,7 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
         f"completed slides pages={state['stages']['slides']['metadata']['page_count']}",
     )
     output = status_payload(state)
+    output["image_overflow_audit"] = overflow_audit
     if smoke_result is not None:
         output["smoke_compile"] = smoke_result
     print(json.dumps(output, ensure_ascii=False, indent=2))
@@ -1677,6 +1711,11 @@ def build_parser() -> argparse.ArgumentParser:
     slides_lint_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     slides_lint_parser.add_argument(
         "--smoke-compile", action="store_true", help="also compile temporary HTML with local Marp CLI"
+    )
+    slides_lint_parser.add_argument(
+        "--audit-overflow",
+        action="store_true",
+        help="render with Marp and audit every image against its slide bounds",
     )
     slides_lint_parser.set_defaults(func=cmd_lint_slides)
 
