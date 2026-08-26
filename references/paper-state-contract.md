@@ -148,7 +148,7 @@ Complete a stage:
 }
 ```
 
-For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality and folder reading-guide gates. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `artifacts/quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact. Use `prepare-quiz`, `next-quiz-question`, `append-quiz-session`, `lint-quiz`, and `complete-quiz` for P6; never hand-edit or replace its append-only files.
+For `read`, use `complete-read` rather than constructing this envelope manually. The command computes the notes fingerprint and enforces the parse-quality and folder reading-guide gates. A blocked report requires explicit user confirmation and a reason; the accepted override is recorded in `artifacts/quality-override-<attempt>.json`, stage metadata, and `log.md`. Use `prepare-slides`, `lint-slides`, and `complete-slides` for the P5 artifact. A slide artifact containing images cannot complete without a passing, current-fingerprint image overflow audit; `complete-slides` runs it automatically and records it in stage metadata. Use `prepare-quiz`, `next-quiz-question`, `append-quiz-session`, `lint-quiz`, and `complete-quiz` for P6; never hand-edit or replace its append-only files.
 
 Fail or reset a stage:
 

@@ -55,7 +55,8 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - use only summary-ledger facts, attach valid hidden claim comments to factual pages, and keep claim ids invisible to the audience;
    - use at least two suitable VSP multi-panel layouts, varying columns, rows, or pin-3 according to the material;
    - inspect `figure_assets` in `artifacts/slides-context.json`. `prepare-slides` automatically materializes usable original visuals under `figures/`: it prefers the matching LaTeX asset and otherwise renders the original PDF page containing the figure caption. For every selected Figure with a `figure_assets` entry, automatically insert its relative HTML `<img src="figures/...">` node inside the matching exact Figure placeholder. Never replace it with a fabricated diagram or a network-fetched image; retain a numbered placeholder only when that Figure has no materialized asset;
-   - run `lint-slides`, repair every structure, reference, placeholder, media, or capacity error, and run `complete-slides` only after lint passes;
+   - after inserting or changing an image, run `lint-slides --audit-overflow`; repair every structure, reference, placeholder, media, capacity, unloaded-image, or image-overflow failure, and inspect every 10-50 px `review` result;
+   - run `complete-slides` only after lint passes; it automatically repeats the Chromium four-edge image audit for image-bearing decks and records the fingerprint-bound result;
    - use `--smoke-compile` only as an optional temporary Marp check; do not deliver generated HTML, PDF, or PPTX.
 15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
 16. For `/mw-paper quiz [paper-id]`:

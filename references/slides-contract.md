@@ -38,11 +38,21 @@ Preparation also installs `<paper-workspace>/Makefile` and the isolated
 `<paper-workspace>/hypo-template-preview/Slide.tex`. Run `make slide` from the
 paper workspace to export `build/slides.pdf` with the exact local Marp theme,
 `--allow-local-files`, and the paper's relative figures. Run
+`make audit-slides` before exporting to execute static lint plus the real
+Chromium image-overflow audit; `make audit` is an alias. The target calls the
+Mary runtime through `MW_PAPER_SCRIPT` (default:
+`$HOME/.codex/skills/mary-workflow/scripts/mw_paper.py`), so installations in a
+different location can set that variable explicitly. Run
 `make hypo-template` to compile a separate original Hypoxanthine-LaTeX style
 preview into `build/hypo-template-preview.pdf`; this is a visual comparison
 artifact and must never replace the grounded `slides.md` artifact. The same
 targets are available through the generated `.mary-research/Makefile` dispatcher
 from the project research root; pass `PAPER_ID=<paper-id>` when needed.
+From the research root, the audit command is:
+
+```bash
+make -C .mary-research PAPER_ID=<paper-id> audit-slides
+```
 
 For a folder containing LaTeX, preparation first copies the matching
 `\includegraphics` asset (rasterizing a PDF asset to PNG when needed). For every
@@ -151,13 +161,16 @@ Use `ldiv`/`mdiv`/`rdiv` for text panels and `limg`/`mimg`/`rimg` for Figure pan
 - visible P3 claim ids;
 - unknown Figure ids, invalid Figure locators, malformed placeholders, or Figure mentions without placeholders;
 - HTTP(S), data URI, absolute, escaping, or nonexistent image paths;
+- an unloaded or zero-size rendered image, or an image that crosses any slide edge by more than 50 px;
 - more than 900 visible non-whitespace characters, 36 visible lines, 8 list items, or 14 code lines on one page;
 - more than 24 total pages;
 - a `slides.md` fingerprint that differs from the declared completion fingerprint.
 
-These are conservative static limits. Passing them does not prove pixel-perfect layout.
+The media-path and capacity checks are static. For decks with images, `complete-slides` additionally renders a temporary bare Marp HTML document at 1280x720 and measures every `<img>` against the bounding rectangle of its own `section` in Chromium. The audit checks left, right, top, and bottom overflow independently. Overflow up to 10 px is `ok`, more than 10 px through 50 px is `review`, and more than 50 px is `fail`. Unloaded and zero-size images are always `fail`. `review` is retained in stage metadata for human inspection; `fail` blocks completion.
 
-## Optional Compile Smoke
+This audit adapts VSP-Marp C17 from `Heaticy/vsp-marp` commit `8f42f099b963d753f8aee7094e2426a915abcda8`. Mary scopes each query to the current slide and extends the original bottom-only measurement to all four image edges. Runtime code is bundled under `scripts/`; it never imports the ignored `vsp-marp/` checkout.
+
+## Render and Overflow Checks
 
 Run deterministic lint without changing state:
 
@@ -165,8 +178,20 @@ Run deterministic lint without changing state:
 python scripts/mw_paper.py lint-slides --paper-id <paper-id>
 ```
 
-Add `--smoke-compile` to `lint-slides` or `complete-slides` only when `marp` or a cached `npx @marp-team/marp-cli@4.3.1` is available. The smoke test writes temporary HTML and deletes it. HTML, PDF, and PPTX are not P5 delivery artifacts; the user exports locally.
+After inserting or changing images, run the real overflow audit without changing state:
+
+```bash
+python scripts/mw_paper.py lint-slides --paper-id <paper-id> --audit-overflow
+```
+
+`complete-slides` runs the same audit automatically whenever `slides.md` contains an image and stores the fingerprint-bound result in slide-stage metadata. It requires Node.js, Chromium/Google Chrome, and either `marp` or the cached offline `npx @marp-team/marp-cli@4.3.1`; a missing dependency or browser timeout is an explicit rejection, never a silent skip. Image-free decks return a deterministic no-image pass without those browser dependencies.
+
+The generated Makefiles expose the same `audit-slides` target (and `audit`
+alias), so the review step is reproducible from either the paper directory or
+the research root.
+
+Add `--smoke-compile` only for the separate optional Marp compile check. Both checks write temporary HTML and delete it. HTML, PDF, and PPTX are not P5 delivery artifacts; the user exports locally.
 
 ## Human Validation Boundary
 
-The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, exact placeholder captions, closing-page purity, and conservative page capacity. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, and final image selection.
+The machine proves current inputs, exact artifact identity, required structure, allowed claims, Figure-reference integrity, local media existence, exact placeholder captions, closing-page purity, conservative page capacity, image loading, and image containment within the rendered slide. It cannot prove that the selected claims tell the best story, that prose is semantically faithful, or that every page is visually balanced. Human review remains responsible for scientific accuracy, emphasis, pacing, final image selection, and all `review` measurements.

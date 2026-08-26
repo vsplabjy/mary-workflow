@@ -35,6 +35,7 @@ from mw_paper_slides import (  # noqa: E402
     VSCODE_THEME_REFERENCE,
     install_project_marp_support,
     materialize_figure_assets,
+    build_image_overflow_report,
     validate_slides,
     validate_slides_document,
 )
@@ -142,9 +143,13 @@ class SlidesContractTests(unittest.TestCase):
         makefile_text = (self.workspace / PAPER_MAKEFILE).read_text(encoding="utf-8")
         self.assertIn(PAPER_MAKEFILE_MARKER, makefile_text)
         self.assertIn("--allow-local-files", makefile_text)
+        self.assertIn("audit-slides audit:", makefile_text)
+        self.assertIn("--audit-overflow", makefile_text)
         research_makefile_text = (self.project / RESEARCH_MAKEFILE).read_text(encoding="utf-8")
         self.assertIn(RESEARCH_MAKEFILE_MARKER, research_makefile_text)
         self.assertIn("PAPER_ID ?=", research_makefile_text)
+        self.assertIn("audit-slides audit:", research_makefile_text)
+        self.assertIn("--audit-overflow", research_makefile_text)
         self.assertEqual(self.context["presentation"]["build"]["default_target"], "slide")
         self.assertEqual(self.context["presentation"]["build"]["hypo_preview_target"], "hypo-template")
         self.assertTrue((self.project / PROJECT_THEME_RELATIVE).is_file())
@@ -176,6 +181,14 @@ class SlidesContractTests(unittest.TestCase):
             check=True,
         )
         self.assertIn("slides.pdf", root_slides.stdout)
+        root_audit = subprocess.run(
+            ["make", "-C", str(self.project / ".mary-research"), "-n", "audit-slides"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn("--audit-overflow", root_audit.stdout)
 
         prepared = subprocess.run(
             [
@@ -294,7 +307,10 @@ class SlidesContractTests(unittest.TestCase):
             summary_output_fingerprint=read_paper_state(self.project, self.paper_id)["stages"]["summary"]["output_fingerprint"],
         )
         self.assertEqual(report["metadata"]["figure_placeholder_count"], 1)
+        self.assertEqual(report["metadata"]["image_reference_count"], 1)
         self.assertEqual(report["slides_fingerprint"], digest)
+        with self.assertRaisesRegex(SystemExit, "requires an image overflow audit"):
+            self.complete()
 
         self.assert_rejected_message(
             add_image,
@@ -523,6 +539,60 @@ class SlidesContractTests(unittest.TestCase):
         )
         output = json.loads(completed.stdout)
         self.assertEqual(output["paper"]["stages"]["slides"]["status"], "complete")
+        self.assertEqual(output["image_overflow_audit"]["status"], "passed")
+
+    def test_image_overflow_report_checks_all_four_edges(self) -> None:
+        payload = {
+            "total_slides": 3,
+            "records": [
+                {
+                    "page": 2,
+                    "src": "figures/plot.png",
+                    "loaded": True,
+                    "slide_rect": {"left": 0, "right": 1280, "top": 0, "bottom": 720},
+                    "image_rect": {"left": -52, "right": 1290, "top": -3, "bottom": 730, "width": 1342, "height": 733},
+                },
+                {
+                    "page": 3,
+                    "src": "figures/review.png",
+                    "loaded": True,
+                    "slide_rect": {"left": 0, "right": 1280, "top": 0, "bottom": 720},
+                    "image_rect": {"left": 0, "right": 1295, "top": 0, "bottom": 720, "width": 1295, "height": 720},
+                },
+            ],
+        }
+        report = build_image_overflow_report(
+            payload,
+            slides_fingerprint=fingerprint("a"),
+            marp_runner="npx",
+            browser_runner="chromium",
+        )
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(
+            report["failed_images"][0]["overflow"],
+            {"left": 52.0, "right": 10.0, "top": 3.0, "bottom": 10.0},
+        )
+        self.assertEqual(report["review_images"][0]["status"], "review")
+
+    def test_image_overflow_report_rejects_unloaded_images(self) -> None:
+        payload = {
+            "total_slides": 1,
+            "records": [{
+                "page": 1,
+                "src": "figures/missing.png",
+                "loaded": False,
+                "slide_rect": {"left": 0, "right": 1280, "top": 0, "bottom": 720},
+                "image_rect": {"left": 0, "right": 0, "top": 0, "bottom": 0, "width": 0, "height": 0},
+            }],
+        }
+        report = build_image_overflow_report(
+            payload,
+            slides_fingerprint=fingerprint("b"),
+            marp_runner="npx",
+            browser_runner="chromium",
+        )
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(report["failed_images"][0]["loaded"])
 
     def test_direct_validator_reports_current_slides_fingerprint(self) -> None:
         digest = write_slides_fixture(self.workspace)
