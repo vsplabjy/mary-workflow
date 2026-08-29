@@ -1,0 +1,32 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+\usepackage[UTF8,fontset=none]{ctex}
+\usetheme{mary-shanghaitech-red}
+
+\title[Mary Workflow]{Mary Workflow Beamer}
+\subtitle{离线 XeLaTeX 预览}
+\VSPsetspeaker[汇报人]{Mary Research}{ShanghaiTech University}
+\date{}
+
+\begin{document}
+\VSPtitleframe
+
+\begin{frame}{Formula and typography}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{.48\textwidth}
+      \begin{itemize}
+        \item 中文使用 Noto CJK SC
+        \item Western text uses Latin Modern
+        \item Editable equations remain native TeX
+      \end{itemize}
+    \end{column}
+    \begin{column}{.48\textwidth}
+      \[
+        y=f_{\theta}(x),\qquad
+        \mathcal{L}=\mathcal{L}_{\mathrm{task}}+\lambda\lVert\theta\rVert_2^2.
+      \]
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\VSPendframe{科研组会}
+\end{document}

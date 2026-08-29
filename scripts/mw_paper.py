@@ -60,8 +60,7 @@ from mw_paper_slides import (
     RESEARCH_MAKEFILE,
     SLIDES_CONTEXT_FILE,
     SLIDES_FILE,
-    run_marp_smoke,
-    run_slide_image_overflow_audit,
+    run_beamer_pdf_audit,
     validate_slides,
     write_slides_context,
 )
@@ -655,33 +654,22 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
         except PaperSlidesError as exc:
             raise PaperError(str(exc)) from exc
         if output_fingerprint != validation["slides_fingerprint"]:
-            raise PaperError("complete_stage slides output_fingerprint does not match slides.md.")
+            raise PaperError(f"complete_stage slides output_fingerprint does not match {SLIDES_FILE}.")
         metadata = validation["metadata"]
-        overflow_audit = data.get("image_overflow_audit")
-        if metadata.get("image_reference_count", 0) > 0 and overflow_audit is None:
-            raise PaperError("complete_stage slides with images requires an image overflow audit.")
-        if overflow_audit is not None:
-            if not isinstance(overflow_audit, dict):
-                raise PaperError("complete_stage slides image_overflow_audit must be an object.")
-            if overflow_audit.get("status") != "passed" or overflow_audit.get("failed_images"):
-                raise PaperError("complete_stage slides requires a passing image overflow audit.")
-            if overflow_audit.get("slides_fingerprint") != output_fingerprint:
-                raise PaperError("complete_stage slides image overflow audit is stale.")
-            per_image = overflow_audit.get("per_image")
-            expected_images = int(metadata.get("image_reference_count", 0))
-            if (
-                overflow_audit.get("total_images") != expected_images
-                or not isinstance(per_image, list)
-                or len(per_image) != expected_images
-                or any(
-                    not isinstance(record, dict)
-                    or not record.get("loaded")
-                    or record.get("status") not in {"ok", "review"}
-                    for record in per_image
-                )
-            ):
-                raise PaperError("complete_stage slides image overflow audit is incomplete.")
-            metadata["image_overflow_audit"] = overflow_audit
+        pdf_audit = data.get("pdf_audit")
+        if not isinstance(pdf_audit, dict):
+            raise PaperError("complete_stage slides requires a Beamer PDF audit object.")
+        if pdf_audit.get("status") != "passed":
+            raise PaperError("complete_stage slides requires a passing Beamer PDF audit.")
+        if pdf_audit.get("slides_fingerprint") != output_fingerprint:
+            raise PaperError("complete_stage slides Beamer PDF audit is stale.")
+        if pdf_audit.get("page_count") != metadata.get("page_count"):
+            raise PaperError("complete_stage slides Beamer PDF audit page count is incomplete.")
+        if pdf_audit.get("pdf_path") != "build/slides.pdf" or not FINGERPRINT_PATTERN.fullmatch(
+            str(pdf_audit.get("pdf_fingerprint") or "")
+        ):
+            raise PaperError("complete_stage slides Beamer PDF audit artifact is invalid.")
+        metadata["pdf_audit"] = pdf_audit
     elif stage == "quiz":
         if artifact != QUIZ_LOG_FILE:
             raise PaperError(f"complete_stage quiz requires artifact {QUIZ_LOG_FILE}.")
@@ -1472,7 +1460,7 @@ def cmd_prepare_slides(args: argparse.Namespace) -> int:
     print(f"summary_ledger: {workspace / SUMMARY_LEDGER_FILE}")
     print(f"slides_context: {workspace / SLIDES_CONTEXT_FILE}")
     print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
-    print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
+    print(f"beamer_runtime: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE.parent.parent}")
     print(f"figure_directory: {workspace / 'figures'}")
     print(f"research_makefile: {Path(args.project_root).resolve() / RESEARCH_MAKEFILE}")
     print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
@@ -1498,10 +1486,10 @@ def cmd_lint_slides(args: argparse.Namespace) -> int:
     state, validation = validate_prepared_slides(Path(args.project_root), args.paper_id)
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     result: JsonObject = {"lint": "passed", **validation}
-    if args.smoke_compile:
-        result["smoke_compile"] = run_marp_smoke(workspace)
-    if args.audit_overflow:
-        result["image_overflow_audit"] = run_slide_image_overflow_audit(workspace)
+    if args.audit_pdf:
+        result["pdf_audit"] = run_beamer_pdf_audit(
+            workspace, expected_page_count=validation["metadata"]["page_count"]
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -1513,16 +1501,13 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
     slides_path = workspace / SLIDES_FILE
     if not slides_path.is_file():
         raise PaperError(f"{SLIDES_FILE} is missing: {slides_path}")
-    smoke_result: JsonObject | None = None
     try:
-        overflow_audit = run_slide_image_overflow_audit(workspace)
+        _, validation = validate_prepared_slides(project_root, paper_id)
+        pdf_audit = run_beamer_pdf_audit(
+            workspace, expected_page_count=validation["metadata"]["page_count"]
+        )
     except PaperSlidesError as exc:
         raise PaperError(str(exc)) from exc
-    if args.smoke_compile:
-        try:
-            smoke_result = run_marp_smoke(workspace)
-        except PaperSlidesError as exc:
-            raise PaperError(str(exc)) from exc
     state = apply_paper_action(
         project_root,
         paper_id,
@@ -1532,7 +1517,7 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
                 "stage": "slides",
                 "artifact": SLIDES_FILE,
                 "output_fingerprint": sha256_file(slides_path),
-                "image_overflow_audit": overflow_audit,
+                "pdf_audit": pdf_audit,
             },
         },
     )
@@ -1542,9 +1527,7 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
         f"completed slides pages={state['stages']['slides']['metadata']['page_count']}",
     )
     output = status_payload(state)
-    output["image_overflow_audit"] = overflow_audit
-    if smoke_result is not None:
-        output["smoke_compile"] = smoke_result
+    output["pdf_audit"] = pdf_audit
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
@@ -1700,32 +1683,26 @@ def build_parser() -> argparse.ArgumentParser:
     summary_complete_parser.set_defaults(func=cmd_complete_summary)
 
     slides_prepare_parser = subparsers.add_parser(
-        "prepare-slides", help="prepare grounded Marp claims, figures, and lint context"
+        "prepare-slides", help="prepare grounded Beamer claims, figures, and lint context"
     )
     slides_prepare_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     slides_prepare_parser.set_defaults(func=cmd_prepare_slides)
 
     slides_lint_parser = subparsers.add_parser(
-        "lint-slides", help="validate slides.md without changing paper state"
+        "lint-slides", help=f"validate {SLIDES_FILE} without changing paper state"
     )
     slides_lint_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     slides_lint_parser.add_argument(
-        "--smoke-compile", action="store_true", help="also compile temporary HTML with local Marp CLI"
-    )
-    slides_lint_parser.add_argument(
-        "--audit-overflow",
+        "--audit-pdf",
         action="store_true",
-        help="render with Marp and audit every image against its slide bounds",
+        help="compile with XeLaTeX and audit the generated PDF",
     )
     slides_lint_parser.set_defaults(func=cmd_lint_slides)
 
     slides_complete_parser = subparsers.add_parser(
-        "complete-slides", help="lint slides.md and complete the slides stage"
+        "complete-slides", help=f"lint {SLIDES_FILE}, compile/audit PDF, and complete slides"
     )
     slides_complete_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
-    slides_complete_parser.add_argument(
-        "--smoke-compile", action="store_true", help="also require a temporary Marp HTML compile"
-    )
     slides_complete_parser.set_defaults(func=cmd_complete_slides)
 
     quiz_prepare_parser = subparsers.add_parser(

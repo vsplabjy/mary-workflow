@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from html import escape
 from pathlib import Path
 import sys
 
@@ -166,112 +165,106 @@ def write_summary_fixture(workspace: Path, mutate: object = None) -> str:
 def write_slides_fixture(workspace: Path, mutate: object = None) -> str:
     context = json.loads(artifact_path(workspace, SLIDES_CONTEXT_FILE).read_text(encoding="utf-8"))
     figure = context["figure_catalog"][0]
-    figure_id = escape(figure["figure_id"], quote=True)
-    figure_locator = escape(figure["source_locators"][0], quote=True)
-    figure_caption = escape(figure["caption"])
-    slides = f"""---
-marp: true
-theme: mary-shanghaitech-red
-size: 16:9
-math: katex
-paginate: true
-footer: Mary Workflow · 科研组会
----
+    figure_id = figure["figure_id"]
+    figure_locator = figure["source_locators"][0]
 
-<!-- mary-slides:v1 -->
-<!-- _class: cover_e -->
-<!-- _footer: "" -->
-<!-- _paginate: "" -->
+    def tex_escape(value: str) -> str:
+        escaped = value
+        for source, target in (
+            ("\\", r"\textbackslash{}"),
+            ("&", r"\&"),
+            ("%", r"\%"),
+            ("$", r"\$"),
+            ("#", r"\#"),
+            ("_", r"\_"),
+            ("{", r"\{"),
+            ("}", r"\}"),
+        ):
+            escaped = escaped.replace(source, target)
+        return escaped
 
-# Fixture Paper
-###### A grounded research presentation
+    figure_caption = tex_escape(figure["caption"])
+    figure_metadata = json.dumps(
+        {"figure_id": figure_id, "source_locator": figure_locator},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    slides = rf"""\documentclass[aspectratio=169,10pt]{{beamer}}
+\usepackage[UTF8,fontset=none]{{ctex}}
+\usetheme{{mary-shanghaitech-red}}
 
-<div class="speaker-meta"><span>汇报人</span> Mary Research</div>
+% mary-slides:v2
+\title[Fixture Paper]{{Fixture Paper}}
+\subtitle{{A grounded research presentation}}
+\VSPsetspeaker[汇报人]{{Mary Research}}{{ShanghaiTech University}}
+\date{{}}
 
----
+\begin{{document}}
+\VSPtitleframe
 
-<!-- section: background -->
-<!-- claims: B01 -->
-<!-- _class: fixedtitleA -->
-
-## Background and problem
-
+\section{{Background}}
+\begin{{frame}}{{Background and problem}}
+% mary-section: background
+% mary-claims: B01
 The paper starts from a concrete research problem and motivates why the missing capability matters.
+\begin{{itemize}}
+  \item Existing approaches leave an important gap.
+  \item The paper targets that gap directly.
+\end{{itemize}}
+\end{{frame}}
 
-- Existing approaches leave an important gap.
-- The paper targets that gap directly.
+\section{{Method}}
+\begin{{frame}}{{Method intuition}}
+% mary-section: method
+% mary-claims: M01
+\begin{{columns}}[T,onlytextwidth]
+  \begin{{column}}{{.43\textwidth}}
+    The central mechanism maps an input $x$ to an output $y$:
+    \[y=f_\theta(x).\]
+    The information flow explains why each stage matters.
+  \end{{column}}
+  \begin{{column}}{{.53\textwidth}}
+    % mary-figure: {figure_metadata}
+    \MaryFigure{{}}{{{tex_escape(figure_id)}}}{{{figure_caption}}}
+  \end{{column}}
+\end{{columns}}
+\end{{frame}}
 
----
+\begin{{frame}}{{Method information flow}}
+% mary-section: method
+% mary-claims: M01
+\begin{{columns}}[T,onlytextwidth]
+  \begin{{column}}{{.32\textwidth}}\textbf{{Input}}\\Represent the observation.\end{{column}}
+  \begin{{column}}{{.32\textwidth}}\textbf{{Mechanism}}\\Apply the grounded transformation.\end{{column}}
+  \begin{{column}}{{.32\textwidth}}\textbf{{Output}}\\Produce the task prediction.\end{{column}}
+\end{{columns}}
+\end{{frame}}
 
-<!-- section: method -->
-<!-- claims: M01 -->
-<!-- _class: cols-2-64 -->
+\section{{Experiments}}
+\begin{{frame}}{{Experimental evidence}}
+% mary-section: experiments
+% mary-claims: E01
+The evaluation tests whether the proposed mechanism addresses the stated problem.
+\begin{{itemize}}
+  \item Report the main comparison before secondary ablations.
+  \item Separate measured facts from interpretation.
+  \item Keep the audience focused on one conclusion per page.
+\end{{itemize}}
+\end{{frame}}
 
-## Method intuition
+\section{{Takeaways}}
+\begin{{frame}}{{Takeaways}}
+% mary-section: takeaways
+% mary-claims: B01 M01 E01
+\begin{{columns}}[T,onlytextwidth]
+  \begin{{column}}{{.32\textwidth}}\textbf{{Problem}}\\A concrete gap motivates the work.\end{{column}}
+  \begin{{column}}{{.32\textwidth}}\textbf{{Method}}\\The mechanism targets that gap.\end{{column}}
+  \begin{{column}}{{.32\textwidth}}\textbf{{Evidence}}\\Experiments test the central claim.\end{{column}}
+\end{{columns}}
+\end{{frame}}
 
-<div class="ldiv">
-
-The central mechanism maps an input $x$ to an output $y$:
-
-$$y=f_\\theta(x).$$
-
-The left panel explains the information flow; the right panel reserves the paper's visual evidence.
-
-</div>
-
-<div class="rimg figure-placeholder" data-figure="{figure_id}" data-source-locator="{figure_locator}">
-  <div class="figure-placeholder__number">{figure_id}</div>
-  <div class="figure-placeholder__caption">{figure_caption}</div>
-</div>
-
----
-
-<!-- section: method -->
-<!-- claims: M01 -->
-<!-- _class: cols-3 -->
-
-## Method information flow
-
-<div class="ldiv"><strong>Input</strong><br>Represent the observation.</div>
-<div class="mdiv"><strong>Mechanism</strong><br>Apply the grounded transformation.</div>
-<div class="rdiv"><strong>Output</strong><br>Produce the task prediction.</div>
-
----
-
-<!-- section: experiments -->
-<!-- claims: E01 -->
-<!-- _class: rows-2-37 -->
-
-## Experimental evidence
-
-<div class="tdiv">The evaluation tests whether the proposed mechanism addresses the stated problem.</div>
-<div class="bdiv">
-
-- Report the main comparison before secondary ablations.
-- Separate measured facts from interpretation.
-- Keep the audience focused on one conclusion per page.
-
-</div>
-
----
-
-<!-- section: takeaways -->
-<!-- claims: B01 M01 E01 -->
-<!-- _class: cols-3 -->
-
-## Takeaways
-
-<div class="ldiv"><strong>Problem</strong><br>A concrete gap motivates the work.</div>
-<div class="mdiv"><strong>Method</strong><br>The mechanism directly targets that gap.</div>
-<div class="rdiv"><strong>Evidence</strong><br>The experiments test the central claim.</div>
-
----
-
-<!-- _class: lastpage -->
-<!-- _footer: "" -->
-<!-- _paginate: "" -->
-
-###### 谢谢
+\VSPendframe{{谢谢}}
+\end{{document}}
 """
     if callable(mutate):
         slides = mutate(slides)
