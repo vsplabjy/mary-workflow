@@ -1,0 +1,446 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemeVSP}[2026/08/20 v0.2.0 VSP Beamer theme]
+
+\RequirePackage{iftex}
+\ifXeTeX\else
+  \PackageError{beamerthemeVSP}{VSP requires XeLaTeX}{Compile with xelatex or latexmk -xelatex.}
+\fi
+
+\RequirePackage{xeCJK}
+\RequirePackage{lmodern}
+\RequirePackage{tikz}
+\RequirePackage{etoolbox}
+\RequirePackage{listings}
+\RequirePackage{ragged2e}
+\RequirePackage{tabularx}
+\RequirePackage{tcolorbox}
+
+% Runtime assets are resolved through Kpathsea, so the same source works both
+% inside this repository and after installation into TEXMFHOME.
+\newcommand{\VSPasset}[1]{#1}
+
+\IfFontExistsTF{Noto Serif CJK SC}{}{%
+  \PackageError{beamerthemeVSP}{Noto CJK system fonts were not found}
+    {Install the Noto CJK font package (for example, fonts-noto-cjk on Debian/Ubuntu).}%
+}
+\setCJKmainfont[AutoFakeSlant=0.18]{Noto Serif CJK SC}
+\setCJKsansfont[AutoFakeSlant=0.18]{Noto Sans CJK SC}
+\setCJKmonofont[AutoFakeSlant=0.18]{Noto Sans Mono CJK SC}
+
+\newif\ifvsp@purple
+\newif\ifvsp@nailong
+\newif\ifvsp@shtu
+\newif\ifvsp@report
+\newif\ifvsp@sectionpages
+\vsp@sectionpagestrue
+
+\DeclareOptionBeamer{red}{\vsp@purplefalse\vsp@nailongfalse}
+\DeclareOptionBeamer{purple}{\vsp@purpletrue\vsp@nailongfalse}
+\DeclareOptionBeamer{nailong}{\vsp@nailongtrue\vsp@purplefalse}
+\DeclareOptionBeamer{shtu}{\vsp@shtutrue}
+\DeclareOptionBeamer{tutorial}{\vsp@reportfalse}
+\DeclareOptionBeamer{report}{\vsp@reporttrue}
+\DeclareOptionBeamer{sectionpages}{\vsp@sectionpagestrue}
+\DeclareOptionBeamer{nosectionpages}{\vsp@sectionpagesfalse}
+\ExecuteOptionsBeamer{red,tutorial,sectionpages}
+\ProcessOptionsBeamer
+
+\definecolor{VSPRed}{HTML}{AE3A44}
+\definecolor{VSPRedAccent}{HTML}{A2222C}
+\definecolor{VSPRedSoft}{HTML}{EDDDDE}
+\definecolor{VSPPurple}{HTML}{A060E8}
+\definecolor{VSPPurpleSoft}{HTML}{EADCFB}
+\definecolor{VSPAmber}{HTML}{F6CF3D}
+\definecolor{VSPAmberAccent}{HTML}{E7AD16}
+\definecolor{VSPAmberSoft}{HTML}{FFF2BE}
+\definecolor{VSPAmberInk}{HTML}{071317}
+\definecolor{VSPInk}{HTML}{211112}
+\definecolor{VSPPurpleInk}{HTML}{0D2528}
+\definecolor{VSPMuted}{HTML}{8C8C8C}
+\definecolor{VSPTeal}{HTML}{53A7A0}
+\definecolor{VSPCodeRed}{HTML}{F6EEEF}
+\definecolor{VSPCodePurple}{HTML}{F5EFFD}
+\definecolor{VSPGreen}{HTML}{6F8F42}
+\definecolor{VSPOrange}{HTML}{C5681F}
+\definecolor{VSPCalloutBlue}{HTML}{81A1C1}
+\definecolor{VSPCalloutRed}{HTML}{BF616A}
+\definecolor{VSPCalloutGreen}{HTML}{ACCE8D}
+\definecolor{VSPCalloutPurple}{HTML}{B48EAD}
+\definecolor{VSPCalloutBlack}{HTML}{434C5E}
+\definecolor{VSPCalloutYellow}{HTML}{ECC20B}
+\definecolor{VSPCalloutBodyRed}{HTML}{E4EAF6}
+\definecolor{VSPCalloutBodyPurple}{HTML}{EEE6FA}
+\definecolor{VSPCalloutBodyNailong}{HTML}{FFF8E6}
+
+\ifvsp@nailong
+  \colorlet{VSPPrimary}{VSPAmber}
+  \colorlet{VSPAccent}{VSPAmberAccent}
+  \colorlet{VSPSoft}{VSPAmberSoft}
+  \colorlet{VSPText}{VSPAmberInk}
+  \colorlet{VSPCodeBackground}{VSPAmberSoft!55!white}
+  \colorlet{VSPCalloutBody}{VSPCalloutBodyNailong}
+\else\ifvsp@purple
+  \colorlet{VSPPrimary}{VSPPurple}
+  \colorlet{VSPAccent}{VSPPurple}
+  \colorlet{VSPSoft}{VSPPurpleSoft}
+  \colorlet{VSPText}{VSPPurpleInk}
+  \colorlet{VSPCodeBackground}{VSPCodePurple}
+  \colorlet{VSPCalloutBody}{VSPCalloutBodyPurple}
+\else
+  \colorlet{VSPPrimary}{VSPRed}
+  \colorlet{VSPAccent}{VSPRedAccent}
+  \colorlet{VSPSoft}{VSPRedSoft}
+  \colorlet{VSPText}{VSPInk}
+  \colorlet{VSPCodeBackground}{VSPCodeRed}
+  \colorlet{VSPCalloutBody}{VSPCalloutBodyRed}
+\fi\fi
+
+\ifvsp@nailong
+  \colorlet{VSPCalloutDefault}{VSPPrimary}
+\else\ifvsp@report
+  \colorlet{VSPCalloutDefault}{VSPPrimary}
+\else
+  \colorlet{VSPCalloutDefault}{VSPCalloutRed}
+\fi\fi
+
+\mode<presentation>
+\usefonttheme{professionalfonts}
+\useinnertheme{rectangles}
+\setbeamertemplate{navigation symbols}{}
+\setbeamersize{text margin left=0.72cm,text margin right=0.72cm}
+
+\ifvsp@shtu
+  \setbeamertemplate{background}{%
+    \includegraphics[width=\paperwidth,height=\paperheight]{\VSPasset{shanghaitech-master.png}}%
+  }
+  \setbeamercolor{normal text}{fg=VSPText}
+  \setbeamercolor{frametitle}{fg=VSPAccent}
+\else
+  \setbeamercolor{normal text}{fg=VSPText,bg=white}
+  \setbeamercolor{frametitle}{fg=VSPAccent,bg=white}
+\fi
+
+\setbeamercolor{structure}{fg=VSPAccent}
+\setbeamercolor{alerted text}{fg=VSPAccent}
+\setbeamercolor{title}{fg=VSPAccent}
+\setbeamercolor{subtitle}{fg=VSPAccent}
+\setbeamercolor{section page}{fg=white,bg=VSPPrimary}
+\setbeamercolor{block title}{fg=white,bg=VSPPrimary}
+\setbeamercolor{block body}{fg=VSPText,bg=VSPSoft!58!white}
+\setbeamercolor{block title alerted}{fg=white,bg=VSPAccent}
+\setbeamercolor{block body alerted}{fg=VSPText,bg=VSPCodeBackground}
+\setbeamercolor{block title example}{fg=white,bg=VSPTeal}
+\setbeamercolor{block body example}{fg=VSPText,bg=VSPTeal!10!white}
+\setbeamercolor{itemize item}{fg=VSPAccent}
+\setbeamercolor{itemize subitem}{fg=VSPTeal}
+\setbeamercolor{enumerate item}{fg=white,bg=VSPPrimary}
+\setbeamercolor{caption name}{fg=VSPAccent}
+
+% Preset typography translated from the VSP-Marp 1280x720 canvas.
+% A 1280px Marp page exports to the 453.543pt Beamer page width.
+\newcommand{\vspbodyfont}{\fontsize{8.86}{12.85}\selectfont}
+\newcommand{\vspdisplayfont}{\fontsize{19.49}{23.38}\selectfont}
+\newcommand{\vspsubtitlefont}{\fontsize{14.88}{17.85}\selectfont}
+\newcommand{\vspheadingfont}{\fontsize{13.47}{16.16}\selectfont}
+\newcommand{\vspsubheadingfont}{\fontsize{10.63}{12.76}\selectfont}
+\newcommand{\vspsectionfont}{\fontsize{22.68}{27.22}\selectfont}
+\newcommand{\vspfooterfont}{\fontsize{7.80}{9.45}\selectfont}
+\newcommand{\vsppagefont}{\fontsize{4.25}{5.10}\selectfont}
+\newcommand{\vspcodefont}{\fontsize{7.09}{8.51}\selectfont}
+\newcommand{\vspmetafont}{\fontsize{9.92}{13.69}\selectfont}
+
+\setbeamerfont{normal text}{family=\rmfamily,size=\vspbodyfont}
+\setbeamerfont{title}{family=\sffamily,series=\bfseries,size=\vspdisplayfont}
+\setbeamerfont{subtitle}{family=\sffamily,series=\bfseries,size=\vspsubtitlefont}
+\setbeamerfont{author}{family=\sffamily,size=\vspbodyfont}
+\setbeamerfont{institute}{family=\sffamily,size=\vspsubheadingfont}
+\setbeamerfont{date}{family=\sffamily,size=\vspsubheadingfont}
+\setbeamerfont{frametitle}{family=\sffamily,series=\bfseries,size=\vspheadingfont}
+\setbeamerfont{section title}{family=\sffamily,series=\bfseries,size=\vspsectionfont}
+\setbeamerfont{section subtitle}{family=\sffamily,size=\vspbodyfont}
+\setbeamerfont{end title}{family=\sffamily,series=\bfseries,size=\vspdisplayfont}
+\setbeamerfont{end subtitle}{family=\sffamily,size=\vspbodyfont}
+\setbeamerfont{block title}{family=\sffamily,series=\bfseries,size=\vspbodyfont}
+\setbeamerfont{footline}{family=\sffamily,size=\vspfooterfont}
+\setbeamerfont{page number}{family=\sffamily,size=\vsppagefont}
+
+\setbeamertemplate{itemize item}{\raise0.15ex\hbox{\color{VSPAccent}\rule{0.62ex}{0.62ex}}}
+\setbeamertemplate{itemize subitem}{\raise0.15ex\hbox{\color{VSPTeal}\scriptsize$\blacktriangleright$}}
+\setbeamertemplate{enumerate item}{%
+  \tikz[baseline=(n.base)]\node[fill=VSPPrimary,text=white,font=\sffamily\scriptsize\bfseries,
+  minimum size=1.65em,inner sep=0pt,rounded corners=0.8pt] (n) {\insertenumlabel};}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+\setbeamertemplate{frametitle}{%
+  \nointerlineskip
+  \begin{beamercolorbox}[wd=\paperwidth,ht=0.92cm,dp=0.20cm,leftskip=0.72cm,rightskip=0.72cm]{frametitle}
+    \usebeamerfont{frametitle}\insertframetitle
+  \end{beamercolorbox}%
+  \begin{tikzpicture}[remember picture,overlay]
+    \ifvsp@shtu
+      \draw[VSPTeal,line width=0.55pt] ([xshift=0.72cm,yshift=-1.11cm]current page.north west)
+        -- ([xshift=.70\paperwidth,yshift=-1.11cm]current page.north west);
+    \else
+      \draw[VSPTeal,line width=0.55pt] ([xshift=0.72cm,yshift=-1.11cm]current page.north west)
+        -- ([xshift=-0.72cm,yshift=-1.11cm]current page.north east);
+    \fi
+  \end{tikzpicture}%
+}
+
+\setbeamertemplate{footline}{%
+  \leavevmode
+  \ifvsp@shtu
+    \hbox{%
+      \begin{beamercolorbox}[wd=\paperwidth,ht=0.31cm,dp=0.10cm,center]{footline}%
+        \tikz[baseline=(p.base)]\node[draw=VSPTeal,text=VSPMuted,rounded corners=1.3pt,
+        inner xsep=4pt,inner ysep=1.5pt,font=\usebeamerfont{page number}] (p)
+        {\insertframenumber\,/\,\inserttotalframenumber};
+      \end{beamercolorbox}%
+    }
+  \else
+    \hbox{%
+      \begin{beamercolorbox}[wd=.72\paperwidth,ht=0.31cm,dp=0.10cm,leftskip=.72cm]{footline}%
+        \color{VSPMuted}\usebeamerfont{footline}\insertshorttitle
+        \ifx\insertsectionhead\@empty\else\hspace{0.8em}{\color{VSPTeal}/}\hspace{0.8em}\insertsectionhead\fi
+      \end{beamercolorbox}%
+      \begin{beamercolorbox}[wd=.28\paperwidth,ht=0.31cm,dp=0.10cm,rightskip=.38cm plus1fil]{footline}%
+        \hfill\tikz[baseline=(p.base)]\node[draw=VSPTeal,text=VSPMuted,rounded corners=1.3pt,
+        inner xsep=4pt,inner ysep=1.5pt,font=\usebeamerfont{page number}] (p)
+        {\insertframenumber\,/\,\inserttotalframenumber};
+      \end{beamercolorbox}%
+    }
+  \fi
+}
+
+\setbeamertemplate{title page}{%
+  \ifvsp@shtu
+    \begin{tikzpicture}[remember picture,overlay]
+      % Marp cover_e: white left field with a diagonal primary-color right field.
+      \fill[white] (current page.south west) rectangle (current page.north east);
+      \fill[VSPPrimary] ([xshift=.83\paperwidth]current page.north west) --
+        (current page.north east) -- (current page.south east) --
+        ([xshift=.645\paperwidth]current page.south west) -- cycle;
+      \node[anchor=north west,fill=VSPPrimary,minimum width=1.25cm,minimum height=1.25cm,inner sep=.06cm]
+        at ([xshift=1.00cm]current page.north west)
+        {\includegraphics[width=1.125cm]{\VSPasset{ShanghaiTech_Logo_RGBA.png}}};
+      \node[anchor=north west,text width=.66\paperwidth,align=left,text=VSPAccent,inner sep=0pt]
+        at ([xshift=.875cm,yshift=-1.725cm]current page.north west)
+        {\usebeamerfont{title}\inserttitle};
+      \node[anchor=north west,text width=.66\paperwidth,align=left,text=VSPAccent,inner sep=0pt]
+        at ([xshift=.875cm,yshift=-2.65cm]current page.north west)
+        {\usebeamerfont{subtitle}\insertsubtitle};
+      \node[anchor=south west,inner sep=0pt]
+        at ([xshift=.875cm,yshift=.70cm]current page.south west) {\VSPspeakerblock};
+      \node[anchor=south east,inner sep=0pt] at ([xshift=-.30cm]current page.south east)
+        {\includegraphics[width=4.50cm,height=1.50cm,keepaspectratio]{\VSPasset{ShanghaiTech_Name_RGBA.png}}};
+    \end{tikzpicture}%
+  \else\ifvsp@report
+    \begin{tikzpicture}[remember picture,overlay]
+      \fill[white] (current page.south west) rectangle (current page.north east);
+      \node[fill=VSPPrimary,text=white,rounded corners=5pt,text width=.82\paperwidth,
+        minimum height=.29\paperheight,align=center,inner sep=12pt]
+        at ([yshift=.75cm]current page.center) {\usebeamerfont{title}\inserttitle\\[4pt]
+        {\usebeamerfont{subtitle}\insertsubtitle}};
+      \node[align=left,text=VSPText] at ([yshift=-1.45cm]current page.center)
+        {\VSPspeakerblock};
+      \node[text=VSPMuted] at ([yshift=.42cm]current page.south)
+        {\usebeamerfont{date}\insertdate};
+    \end{tikzpicture}%
+  \else
+    \begin{tikzpicture}[remember picture,overlay]
+      \fill[white] (current page.south west) rectangle (current page.north east);
+      \fill[VSPPrimary] ([xshift=-.29\paperwidth]current page.north east) --
+        (current page.north east) -- (current page.south east) --
+        ([xshift=-.18\paperwidth]current page.south east) -- cycle;
+      \node[anchor=west,text width=.63\paperwidth,align=left,text=VSPAccent]
+        at ([xshift=.82cm,yshift=.72cm]current page.west)
+        {\usebeamerfont{title}\inserttitle\\[7pt]{\usebeamerfont{subtitle}\insertsubtitle}};
+      \node[anchor=south west,align=left,text=VSPText,inner sep=0pt]
+        at ([xshift=.84cm,yshift=.60cm]current page.south west)
+        {\VSPspeakerblock};
+      \ifvsp@shtu
+        \node[anchor=north west,inner sep=0pt] at ([xshift=.78cm,yshift=-.25cm]current page.north west)
+          {\includegraphics[height=.72cm]{\VSPasset{ShanghaiTech_Logo_RGBA.png}}};
+        \node[anchor=south east,inner sep=0pt] at ([xshift=-.35cm,yshift=.22cm]current page.south east)
+          {\includegraphics[width=.24\paperwidth]{\VSPasset{ShanghaiTech_Name_RGBA.png}}};
+      \fi
+      \ifvsp@nailong
+        \node[anchor=south east,inner sep=0pt] at ([xshift=-.28cm,yshift=.2cm]current page.south east)
+          {\includegraphics[height=.43\paperheight]{\VSPasset{nailong-wave.png}}};
+      \fi
+    \end{tikzpicture}%
+  \fi\fi
+}
+
+\setbeamertemplate{section page}{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \ifvsp@nailong
+      \fill[white] (current page.south west) rectangle (current page.north east);
+      \node[opacity=.45,inner sep=0pt] at (current page.center)
+        {\includegraphics[width=\paperwidth,height=\paperheight]{\VSPasset{nailong-bg.png}}};
+      \node[text=VSPAmberInk,opacity=.60,align=center,text width=.86\paperwidth]
+        at ([xshift=.025cm,yshift=-.045cm]current page.center)
+        {\usebeamerfont{section title}\insertsection};
+      \node[text=white,align=center,text width=.86\paperwidth] at (current page.center)
+        {\usebeamerfont{section title}\insertsection};
+    \else
+      \fill[VSPPrimary] (current page.south west) rectangle (current page.north east);
+      \node[text=white,align=center,text width=.86\paperwidth] at (current page.center)
+        {\usebeamerfont{section title}\insertsection};
+    \fi
+  \end{tikzpicture}%
+}
+
+\ifvsp@sectionpages
+  \AtBeginSection[]{\begin{frame}[plain,noframenumbering]\sectionpage\end{frame}}
+\fi
+
+\newcommand{\VSPtitleframe}{%
+  \begin{frame}[plain,noframenumbering]\titlepage\end{frame}}
+
+\newcommand{\VSPsectionframe}[2]{%
+  \begin{frame}[plain,noframenumbering]
+    \begin{tikzpicture}[remember picture,overlay]
+      \ifvsp@nailong
+        \fill[white] (current page.south west) rectangle (current page.north east);
+        \node[opacity=.45,inner sep=0pt] at (current page.center)
+          {\includegraphics[width=\paperwidth,height=\paperheight]{\VSPasset{nailong-bg.png}}};
+        \node[text=VSPAmberInk,opacity=.60,align=center,text width=.86\paperwidth]
+          at ([xshift=.025cm,yshift=.135cm]current page.center)
+          {\usebeamerfont{section title}#1\\[8.5pt]{\usebeamerfont{section subtitle}#2}};
+        \node[text=white,align=center,text width=.86\paperwidth] at ([yshift=.18cm]current page.center)
+          {\usebeamerfont{section title}#1\\[8.5pt]{\usebeamerfont{section subtitle}#2}};
+      \else
+        \fill[VSPPrimary] (current page.south west) rectangle (current page.north east);
+        \node[text=white,align=center,text width=.86\paperwidth] at ([yshift=.18cm]current page.center)
+          {\usebeamerfont{section title}#1\\[8.5pt]{\usebeamerfont{section subtitle}#2}};
+      \fi
+    \end{tikzpicture}
+  \end{frame}}
+
+\newcommand{\VSPendframe}[1]{%
+  \begin{frame}[plain,noframenumbering]
+    \begin{tikzpicture}[remember picture,overlay]
+      \ifvsp@shtu
+        % Marp lastpage: a centered primary band with white display title.
+        \fill[white] (current page.south west) rectangle (current page.north east);
+        \fill[VSPPrimary] ([yshift=-.20\paperheight]current page.north west) --
+          ([yshift=-.20\paperheight]current page.north east) --
+          ([yshift=-.60\paperheight]current page.north east) --
+          ([yshift=-.60\paperheight]current page.north west) -- cycle;
+        \node[text=white,align=center] at ([yshift=.10\paperheight]current page.center)
+          {\usebeamerfont{end title}Thank You};
+        \node[text=VSPText,align=center,text width=.88\paperwidth] at ([yshift=.10\paperheight]current page.south)
+          {\usebeamerfont{end subtitle}#1};
+      \else
+        \fill[VSPPrimary] (current page.south west) rectangle (current page.north east);
+        \node[text=white] at ([yshift=.25cm]current page.center)
+          {\usebeamerfont{end title}Thank You};
+        \node[text=white!82] at ([yshift=-.52cm]current page.center)
+          {\usebeamerfont{end subtitle}#1};
+      \fi
+    \end{tikzpicture}
+  \end{frame}}
+
+\newcommand{\VSPsetupLogo}[1]{\def\vsp@logo{#1}}
+\newcommand{\VSPsetupNameLogo}[1]{\def\vsp@namelogo{#1}}
+\def\vsp@logo{}
+\def\vsp@namelogo{}
+
+\newcommand{\VSPbrandmark}{%
+  \ifx\vsp@logo\@empty\else
+    \begin{tikzpicture}[remember picture,overlay]
+      \node[anchor=north west,inner sep=0pt] at ([xshift=.72cm,yshift=-.18cm]current page.north west)
+        {\includegraphics[height=.62cm]{\vsp@logo}};
+    \end{tikzpicture}%
+  \fi}
+
+\newcommand{\VSPsetspeaker}[3][Speaker]{%
+  \def\vsp@speakerlabel{#1}%
+  \def\vsp@speakername{#2}%
+  \def\vsp@speakerdetail{#3}%
+  \author{#2}%
+  \institute{#3}}
+\def\vsp@speakerlabel{Speaker}
+\def\vsp@speakername{\insertauthor}
+\def\vsp@speakerdetail{\insertinstitute}
+
+\newcommand{\VSPspeakerblock}{%
+  \begin{minipage}{.60\paperwidth}
+    \raggedright\sffamily\vspmetafont
+    \tcbox[on line,size=minimal,width=1.30cm,tcbox width=forced center,halign=center,boxrule=0pt,arc=1.5pt,outer arc=1.5pt,
+      colback=VSPAccent!16!white,coltext=VSPAccent,
+      left=.10cm,right=.10cm,top=.03cm,bottom=.03cm,
+      fontupper=\sffamily\bfseries\fontsize{6.15}{7.4}\selectfont]
+      {\vsp@speakerlabel}\hspace{.18cm}\vsp@speakername\\[.05cm]
+    \hspace*{1.48cm}{\color{VSPMuted}\fontsize{8.50}{11.7}\selectfont\vsp@speakerdetail}
+  \end{minipage}}
+
+\newtcolorbox{vspcallout}[2][VSPPrimary]{%
+  size=minimal,
+  width=\dimexpr\linewidth-.31cm\relax,
+  center,
+  colback=VSPCalloutBody,
+  colframe=#1,
+  colbacktitle=#1,
+  coltitle=white,
+  title={#2},
+  fonttitle=\sffamily\vspbodyfont,
+  fontupper=\rmfamily\vspbodyfont,
+  boxrule=0pt,
+  titlerule=0pt,
+  arc=.10cm,
+  outer arc=.10cm,
+  lefttitle=.214cm,righttitle=.07cm,toptitle=.205cm,bottomtitle=.205cm,
+  left=.285cm,right=.285cm,top=.195cm,bottom=.195cm,
+  boxsep=0pt,
+  before skip=.04cm,after skip=.16cm
+}
+
+\newenvironment{vspquote}[1]
+  {\begin{vspcallout}[VSPCalloutDefault]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquoteblue}[1]
+  {\begin{vspcallout}[VSPCalloutBlue]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquotered}[1]
+  {\begin{vspcallout}[VSPCalloutRed]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquotegreen}[1]
+  {\begin{vspcallout}[VSPCalloutGreen]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquotepurple}[1]
+  {\begin{vspcallout}[VSPCalloutPurple]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquoteblack}[1]
+  {\begin{vspcallout}[VSPCalloutBlack]{#1}}
+  {\end{vspcallout}}
+\newenvironment{vspquoteyellow}[1]
+  {\begin{vspcallout}[VSPCalloutYellow]{#1}}
+  {\end{vspcallout}}
+
+\newcommand{\vspaccent}[1]{{\color{VSPAccent}\bfseries #1}}
+\newcommand{\vspmuted}[1]{{\color{VSPMuted}#1}}
+
+\lstdefinestyle{vsp}{
+  basicstyle=\ttfamily\vspcodefont,
+  backgroundcolor=\color{VSPCodeBackground},
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{VSPGreen},
+  stringstyle=\color{VSPOrange},
+  numberstyle=\fontsize{4.5}{5.5}\selectfont\color{VSPMuted},
+  numbers=left,
+  numbersep=7pt,
+  frame=single,
+  rulecolor=\color{VSPTeal},
+  framerule=.4pt,
+  framesep=6pt,
+  showstringspaces=false,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true
+}
+\lstset{style=vsp}
+
+\AtBeginEnvironment{frame}{\justifying}
+\mode<all>

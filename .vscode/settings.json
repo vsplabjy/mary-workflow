@@ -1,7 +1,0 @@
-{
-  "markdown.marp.html": "all",
-  "markdown.marp.mathTypesetting": "katex",
-  "markdown.marp.themes": [
-    "./assets/marp/themes/mary-shanghaitech-red.css"
-  ]
-}

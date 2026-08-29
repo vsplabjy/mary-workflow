@@ -1,5 +1,5 @@
 ---
-description: Manage paper state, close-read and summarize papers, build Marp slides, or run grounded expert Q&A.
+description: Manage paper state, close-read and summarize papers, build VSP-Beamer slides, or run grounded expert Q&A.
 argument-hint: [read|summarize|slides|quiz|create|list|status|apply-action] [source/options]
 ---
 
@@ -44,15 +44,15 @@ Manage project-local paper workspaces without entering the milestone workflow au
 8. Do not invoke `/mw-plan`, `/mw-run`, grants, or execution leases for paper actions.
 9. For `slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
-   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: run `make audit-slides` before export to execute static lint plus the real image-overflow audit (`make audit` is an alias), then `make slide` creates `build/slides.pdf` from the current `slides.md`; `make hypo-template` creates `build/hypo-template-preview.pdf` from the isolated original Hypoxanthine-LaTeX preview without replacing the main slide; pass `PAPER_ID=<paper-id>` at the research root when needed;
-   - treat the emitted `workspace_theme` and `vscode_settings` as generated project support: open the target project root in VS Code so every nested paper deck resolves the offline theme;
+   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: run `make audit-slides` before export to execute static lint, XeLaTeX compilation, and PDF audit (`make audit` is an alias), then `make slide` creates `build/slides.pdf` from the current `slides.tex`; `make hypo-template` creates a separate `build/hypo-template-preview.pdf`; pass `PAPER_ID=<paper-id>` at the research root when needed;
+   - treat the emitted `beamer_runtime` as generated project support and keep `.mary-research/beamer/` intact;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
-   - write `slides.md` as a clear research-group talk using the ShanghaiTech red `mary-shanghaitech-red` theme, `16:9`, and `math: katex`;
+   - write `slides.tex` as a clear research-group talk using Beamer `aspectratio=169`, CTeX `fontset=none`, and `\usetheme{mary-shanghaitech-red}`;
    - lead with the research problem, make Method at least two pages and the most detailed part, then present experiments and takeaways without adding facts outside the summary claim ledger;
-   - add one hidden `<!-- section: ... -->` and `<!-- claims: ... -->` declaration to each factual page, keeping `[B01]`-style ids out of visible slide text;
-   - use at least two VSP-Marp multi-panel layouts such as `cols-2-64`, `cols-3`, `rows-2-*`, or `pin-3` according to content shape;
-   - reserve paper visuals with the exact numbered Figure placeholder contract and caption/locator from `artifacts/slides-context.json`. `prepare-slides` automatically collects original visuals into `figures/` and records their matching paths in `figure_assets`; always embed a selected Figure's recorded local asset inside its placeholder. A LaTeX asset is preferred and the source-PDF page is the fallback. Do not fetch from the network or fabricate a replacement;
-   - after inserting or changing images, run `lint-slides --audit-overflow`; fix every rejection and inspect 10-50 px review measurements, then run `complete-slides`, which automatically repeats the four-edge Chromium audit for image-bearing decks; add `--smoke-compile` only when the user wants the separate optional compile check.
+   - add one hidden `% mary-section: ...` and `% mary-claims: ...` declaration to each factual frame, keeping `[B01]`-style ids out of visible slide text;
+   - use Beamer `columns` or equivalent paired minipages on at least two pages, sizing panels from content shape;
+   - reserve paper visuals with the exact `% mary-figure: {...}` plus `\MaryFigure{path}{id}{caption}` contract from `artifacts/slides-context.json`. Always use a selected Figure's recorded local asset when available; use an empty path for the explicit placeholder only when no asset exists. Do not fetch or fabricate replacements;
+   - run `lint-slides --audit-pdf`, fix every static, XeLaTeX log, PDF geometry, overlap, or blank-page rejection, then run `complete-slides`, which always recompiles and records source/PDF fingerprints and page count.
 10. For `quiz [paper-id]`:
    - run `prepare-quiz`, specifying `--paper-id` when needed, then read `artifacts/quiz-context.json` and `references/quiz-contract.md`;
    - run `next-quiz-question`, then use its Mxx anchor and the Method prose in `summary.md` to ask exactly one localized question that teaches the paper's intuition, mechanism, information flow, design rationale, or consequences;

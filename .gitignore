@@ -3,8 +3,15 @@ __pycache__/
 /test/
 .venv/
 /vsp-marp/
-/assets/marp/templates/offline-preview.html
-/assets/marp/templates/offline-preview.*.png
+/assets/beamer/templates/offline-preview.pdf
+/assets/beamer/templates/offline-preview.aux
+/assets/beamer/templates/offline-preview.fdb_latexmk
+/assets/beamer/templates/offline-preview.fls
+/assets/beamer/templates/offline-preview.log
+/assets/beamer/templates/offline-preview.nav
+/assets/beamer/templates/offline-preview.out
+/assets/beamer/templates/offline-preview.snm
+/assets/beamer/templates/offline-preview.toc
 /.pipeline/
 /.plan-state/
 /古明地雷小玛丽_蒋烨_小玛丽workflow.md

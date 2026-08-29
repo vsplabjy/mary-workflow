@@ -7,6 +7,9 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 ```text
 .mary-research/
 ├── Makefile
+├── beamer/
+│   ├── themes/
+│   └── assets/
 └── papers/
     └── <paper-id>/
         ├── state.json
@@ -15,7 +18,9 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
         ├── reading-summary.md
         ├── paper-notes.md
         ├── summary.md
-        ├── slides.md
+        ├── slides.tex
+        ├── build/
+        │   └── slides.pdf
         ├── figures/
         ├── Makefile
         ├── hypo-template-preview/
@@ -40,13 +45,13 @@ The paper pipeline is independent from the v2.1 milestone state machine. It reus
 `/mw-paper` may create this directory before `/mw-init`. The main workflow remains authoritative only through `.mary-workflow/state.yaml`; each paper is authoritative through its own `state.json`. `/mw-init --reset` and `/mw-cycle` do not delete `.mary-research/`, and the v2.1 project scanner excludes it. `state.json` and `log.md` remain at the paper root; acquired sources and generated JSON sidecars must remain under `artifacts/`.
 
 `prepare-slides` also installs a paper-local `Makefile`. Its `slide` target
-exports the current `slides.md` with the localized ShanghaiTech Marp theme and
-`--allow-local-files`. Its separate `hypo-template` target compiles
+compiles the current `slides.tex` with the pinned ShanghaiTech VSP-Beamer theme,
+`latexmk`, and XeLaTeX. Its separate `hypo-template` target compiles
 `hypo-template-preview/Slide.tex` with the external Hypoxanthine-LaTeX checkout
 when available. It also installs a root `.mary-research/Makefile` dispatcher, so
 `make slide` works from either the project research root or the paper workspace;
 use `make PAPER_ID=<paper-id> slide` when the project contains multiple papers.
-Neither target rewrites `slides.md` or an existing export.
+Neither target rewrites `slides.tex`.
 
 ## Identity
 
@@ -114,7 +119,7 @@ The `read` stage has an additional P2 completion gate: `artifact` must be `paper
 
 The `summary` stage has a P3.5 completion gate: `artifact` remains `summary.md`, while the stage output fingerprint covers both `summary.md` and `artifacts/summary-ledger.json`. The article must pass the three-section and bidirectional-anchor rules; every direct ledger claim must pass `references/summary-contract.md`, and its evidence and locators must resolve against the current source index.
 
-The `slides` stage has a P5 completion gate: `artifact` must be `slides.md`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `artifacts/slides-context.json` must pass `references/slides-contract.md`. The lint enforces the ShanghaiTech Marp/KaTeX frontmatter, research-talk structure, summary-claim references, resolvable Figure placeholders, optional paper-local image media, exact context captions, closing-page purity, multi-panel usage, and conservative per-page capacity. Marp compilation is optional and creates no persistent export artifact.
+The `slides` stage has a P5 completion gate: `artifact` must be `slides.tex`, its byte fingerprint must match `output_fingerprint`, and the current summary bundle plus generated `artifacts/slides-context.json` must pass `references/slides-contract.md`. The lint enforces the XeLaTeX/Beamer preamble, research-talk structure, summary-claim references, resolvable `\MaryFigure` records, local media, exact context captions, closing-page purity, multi-panel usage, and conservative per-page capacity. Completion always compiles `build/slides.pdf`, rejects strict LaTeX log diagnostics, runs the structured/raster PDF audit, and records matching source/PDF fingerprints plus page count.
 
 The `quiz` stage has a P6 completion gate: `artifact` must be `quiz-log.md`, its byte fingerprint must match `output_fingerprint`, and the current read/summary lineage plus `artifacts/quiz-context.json` must pass `references/quiz-contract.md`. Current-attempt sessions must cover at least one P3.5 Method claim and, when content uncertainties exist, at least one scientific-content Uxx; parse-quality-only papers degrade to method-only completion. Every new session uses a four-value judgment, includes a source-grounded correct answer, and cites exact resolvable source excerpts. Parse-quality uncertainties remain non-selectable audit notes. `quiz-log.md` is the sole delivered Q&A archive and is append-only across attempts; its session hash chain and `artifacts/quiz-head.json` checkpoint reject deletion, answer/correct-answer edits, and rejudgment while preserving legacy schema 1 records.
 

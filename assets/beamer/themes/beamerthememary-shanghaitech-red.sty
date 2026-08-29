@@ -1,0 +1,15 @@
+\ProvidesPackage{beamerthememary-shanghaitech-red}[2026/08/29 Mary Workflow VSP-Beamer theme]
+% Vendored from Heaticy/vsp-beamer @ e7bf4e5e5588ee10a386e6c79668e50f9b749124.
+\RequirePackage[red,report,nosectionpages,shtu]{beamerthemeVSP}
+
+\newcommand{\MaryFigure}[3]{%
+  \centering
+  \ifstrempty{#1}{%
+    \fbox{\parbox[c][.42\textheight][c]{.82\linewidth}{%
+      \centering\color{VSPMuted}\sffamily\bfseries #2\\[.35em]
+      \normalfont\scriptsize Original source visual unavailable.}}%
+  }{%
+    \includegraphics[width=\linewidth,height=.50\textheight,keepaspectratio]{#1}%
+  }%
+  \par\vspace{.08cm}{\scriptsize\color{VSPMuted}\textbf{#2}. #3}%
+}

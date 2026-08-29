@@ -1,6 +1,6 @@
 ---
 name: paper
-description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, write readable source-grounded summaries, build linted ShanghaiTech Marp research slides, and run append-only expert Q&A with four-value source judgments. Use when the user invokes /mw-paper, asks to register or inspect a paper, read or summarize a paper, create group-meeting slides, run paper questions or a research quiz, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
+description: Manage Mary Workflow's v2.2 paper pipeline, perform contract-validated close reading from arXiv HTML/PDF, write readable source-grounded summaries, build audited ShanghaiTech VSP-Beamer research slides, and run append-only expert Q&A with four-value source judgments. Use when the user invokes /mw-paper, asks to register or inspect a paper, read or summarize a paper, create group-meeting slides, run paper questions or a research quiz, supplies an arXiv id/URL or PDF, or applies paper stage transitions without plan/run authorization.
 ---
 
 # Mary Workflow: Paper
@@ -47,18 +47,17 @@ Manage independent paper states, close reading, grounded summaries, research sli
 14. For `/mw-paper slides [paper-id]`:
    - run `prepare-slides`, specifying `--paper-id` when needed;
    - keep acquired source files and all generated JSON sidecars under `artifacts/`; use `migrate-artifacts` for legacy workspaces and never create root-level `source.*` or generated `.json` files;
-   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` exports the current Marp deck, while `make hypo-template` creates a separate original Hypoxanthine-LaTeX visual comparison under `build/` without replacing `slides.md`; pass `PAPER_ID=<paper-id>` at the research root when needed;
-   - keep the generated project-local theme and VS Code registration intact, and open the target project root as the workspace when previewing a nested deck;
+   - use the generated paper-local `Makefile` or the `.mary-research/Makefile` dispatcher: `make slide` compiles the current Beamer deck, while `make hypo-template` creates a separate original Hypoxanthine-LaTeX visual comparison under `build/` without replacing `slides.tex`; pass `PAPER_ID=<paper-id>` at the research root when needed;
+   - keep the generated project-local `.mary-research/beamer/` runtime intact;
    - read all of `summary.md`, `artifacts/summary-ledger.json`, `artifacts/slides-context.json`, and `references/slides-contract.md`;
-   - write `slides.md` with `mary-shanghaitech-red`, `16:9`, and `math: katex` frontmatter;
+   - write `slides.tex` with Beamer `aspectratio=169`, CTeX `fontset=none`, `\usetheme{mary-shanghaitech-red}`, `% mary-slides:v2`, `\VSPtitleframe`, and `\VSPendframe`;
    - turn the summary into a talk rather than copying paragraphs: establish the problem, teach method intuition and information flow across at least two Method pages, then show experiments and takeaways;
-   - use only summary-ledger facts, attach valid hidden claim comments to factual pages, and keep claim ids invisible to the audience;
-   - use at least two suitable VSP multi-panel layouts, varying columns, rows, or pin-3 according to the material;
-   - inspect `figure_assets` in `artifacts/slides-context.json`. `prepare-slides` automatically materializes usable original visuals under `figures/`: it prefers the matching LaTeX asset and otherwise renders the original PDF page containing the figure caption. For every selected Figure with a `figure_assets` entry, automatically insert its relative HTML `<img src="figures/...">` node inside the matching exact Figure placeholder. Never replace it with a fabricated diagram or a network-fetched image; retain a numbered placeholder only when that Figure has no materialized asset;
-   - after inserting or changing an image, run `lint-slides --audit-overflow`; repair every structure, reference, placeholder, media, capacity, unloaded-image, or image-overflow failure, and inspect every 10-50 px `review` result;
-   - run `complete-slides` only after lint passes; it automatically repeats the Chromium four-edge image audit for image-bearing decks and records the fingerprint-bound result;
-   - use `--smoke-compile` only as an optional temporary Marp check; do not deliver generated HTML, PDF, or PPTX.
-15. Treat `assets/marp/` as the localized offline theme used by P5. Read `references/marp-assets-contract.md` before modifying it.
+   - use only summary-ledger facts, add exactly one `% mary-section: ...` and `% mary-claims: ...` pair to every factual frame, and keep claim ids invisible to the audience;
+   - use Beamer `columns` or equivalent paired minipages on at least two pages, sizing panels from the content and Figure aspect ratio;
+   - inspect `figure_assets` in `artifacts/slides-context.json`. `prepare-slides` automatically materializes usable original visuals under `figures/`: it prefers the matching LaTeX asset and otherwise renders the original PDF page containing the caption. Pair each selected Figure's exact JSON locator comment with `\MaryFigure{path}{id}{caption}`; use the recorded path when present and an empty path only when no asset exists. Never fabricate or fetch a replacement;
+   - run `lint-slides --audit-pdf` after authoring or changing media; repair every structure, reference, caption, media, capacity, compilation-log, PDF-geometry, overlap, or blank-page failure;
+   - run `complete-slides` only after lint passes; it always recompiles and audits `build/slides.pdf`, then records fingerprint-bound source/PDF evidence.
+15. Treat `assets/beamer/` as the pinned offline runtime used by P5. Read `references/beamer-assets-contract.md` before modifying it.
 16. For `/mw-paper quiz [paper-id]`:
    - run `prepare-quiz`, then read `artifacts/quiz-context.json` and `references/quiz-contract.md`;
    - use `next-quiz-question` to select P3.5 Mxx Method claims in order, then read the matching Method prose and ask one pedagogical paper-understanding question in the user's language;
@@ -70,4 +69,4 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - keep each Question, User answer, Judgment with rationale, Correct answer, and Paper sources in that order in the single readable `quiz-log.md`; context/head are internal sidecars;
    - after the user ends Q&A, run `lint-quiz` and `complete-quiz` once at least one Method anchor is covered plus one scientific Uxx when that catalog is non-empty; parse-quality-only papers complete method-only.
 
-Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/marp-assets-contract.md` for the offline presentation assets.
+Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/beamer-assets-contract.md` for the offline presentation runtime.

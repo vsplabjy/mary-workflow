@@ -82,7 +82,7 @@ class PaperStateTests(unittest.TestCase):
             artifact = "summary.md"
             digest = write_summary_fixture(paper_directory(self.project, self.paper_id))
         elif stage == "slides":
-            artifact = "slides.md"
+            artifact = "slides.tex"
             digest = write_slides_fixture(paper_directory(self.project, self.paper_id))
         elif stage == "quiz":
             artifact = "quiz-log.md"
@@ -105,14 +105,20 @@ class PaperStateTests(unittest.TestCase):
                     },
                 )
             digest = sha256_file(paper_directory(self.project, self.paper_id) / artifact)
-        return self.apply(
-            "complete_stage",
-            {
-                "stage": stage,
-                "output_fingerprint": digest,
-                "artifact": artifact,
-            },
-        )
+        data: dict[str, object] = {
+            "stage": stage,
+            "output_fingerprint": digest,
+            "artifact": artifact,
+        }
+        if stage == "slides":
+            data["pdf_audit"] = {
+                "status": "passed",
+                "slides_fingerprint": digest,
+                "pdf_fingerprint": fingerprint("d"),
+                "pdf_path": "build/slides.pdf",
+                "page_count": 7,
+            }
+        return self.apply("complete_stage", data)
 
     def complete_all(self) -> dict[str, object]:
         self.complete("read", fingerprint("a"))
@@ -395,7 +401,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("references/quiz-contract.md", skill)
         self.assertIn("append-only", skill)
         self.assertIn("paper_state_schema", contract)
-        self.assertIn("slides.md", contract)
+        self.assertIn("slides.tex", contract)
         self.assertIn("quiz-log.md", contract)
         self.assertTrue(manifest["version"].startswith("2.2.0-alpha.7"))
 
