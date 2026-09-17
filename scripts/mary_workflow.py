@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime helper for Mary Workflow v2.1.
+"""Model-independent runtime helper for Mary Workflow v3.0.
 
 The helper intentionally avoids third-party dependencies. It owns a small
 YAML-shaped state file and parses only the fields it writes.
@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import argparse
 import copy
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 import hashlib
-import hmac
 import json
 import os
 from pathlib import Path
@@ -31,8 +30,8 @@ from mw_runtime import (
     extract_first_json_object,
     parse_json_payload as parse_runtime_json_payload,
     require_json_object,
+    workflow_lock,
 )
-from mw_model import install_shell_integration
 from mw_reading_profile import ensure_reading_profile
 
 
@@ -42,9 +41,7 @@ REPORTS_DIR = "reports"
 ANALYSIS_DIR = "analysis"
 BRIEF_FILE = "project-brief.md"
 CYCLES_DIR = "cycles"
-STATE_VERSION = "2.1"
-RUN_GRANT_TTL_SECONDS = 300
-EMPTY_PROJECT_SENTINEL = "(empty repository)"
+STATE_VERSION = "3.0"
 VALID_PHASES = {"PLANNING", "PLANNED", "EXECUTING", "REVIEWING", "DEBUGGING", "FINISHED"}
 BRIEF_REFRESH_PHASES = {"PLANNING", "PLANNED", "FINISHED"}
 PHASE_PROMPTS = {
@@ -55,11 +52,11 @@ PHASE_PROMPTS = {
     "DEBUGGING": "mw-debug.md",
 }
 PHASE_ACTIONS = {
-    "PLANNING": {"submit_brief", "update_interview", "update_project", "update_state"},
+    "PLANNING": {"submit_brief", "update_interview", "update_project", "update_state", "delegate_task", "submit_worker_result"},
     "PLANNED": {"reopen_plan", "start_execution"},
-    "EXECUTING": {"mark_task_done", "record_error"},
-    "REVIEWING": {"set_phase", "record_error"},
-    "DEBUGGING": {"enqueue_fix_task"},
+    "EXECUTING": {"mark_task_done", "record_error", "delegate_task", "run_validation", "submit_worker_result", "confirm_milestone", "request_replan"},
+    "REVIEWING": {"set_phase", "record_error", "delegate_task", "run_validation", "submit_worker_result", "request_replan"},
+    "DEBUGGING": {"enqueue_fix_task", "delegate_task", "submit_worker_result", "request_replan"},
     "FINISHED": set(),
 }
 CORE_PROMPT_ORDER = {
@@ -75,6 +72,7 @@ IGNORED_PROJECT_PARTS = {
     ".git",
     ".mary-research",
     WORKFLOW_DIR,
+    ".mary-workflow-worker",
     "__pycache__",
     ".pytest_cache",
     ".mypy_cache",
@@ -167,6 +165,7 @@ def default_state(
     )
     return {
         "version": STATE_VERSION,
+        "runtime_meta": {"state_revision": 0, "plan_revision": 0, "frozen_plan_digest": "", "confirmations": {}, "execution_mode": "delegated", "brief": {}},
         "cycle": "C0",
         "status": status,
         "phase": "PLANNING",
@@ -213,13 +212,6 @@ def default_state(
         "lease_milestone_id": "",
         "lease_started_at": "",
         "lease_heartbeat_at": "",
-        "run_grant_digest": "",
-        "run_grant_fingerprint": "",
-        "run_grant_purpose": "",
-        "run_grant_plan_digest": "",
-        "run_grant_cycle": "",
-        "run_grant_issued_at": "",
-        "run_grant_expires_at": "",
         "milestones": [],
         "last_error": {
             "command": "",
@@ -250,7 +242,11 @@ def parse_scalar(value: str) -> str:
     if not value:
         return ""
     if value.startswith('"') and value.endswith('"'):
-        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid quoted state value: {exc}") from exc
+        return str(parsed)
     return value
 
 
@@ -262,8 +258,7 @@ def parse_json_scalar(value: str, field_name: str) -> object:
 
 
 def quote_value(value: object) -> str:
-    text = " ".join(str(value).split())
-    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 def parse_int(value: object, default: int = 0) -> int:
@@ -284,7 +279,7 @@ def parse_bool(value: object, default: bool = False) -> bool:
     return default
 
 
-def read_state(root: Path) -> State:
+def read_state(root: Path, *, allow_legacy: bool = False) -> State:
     state_path = root / "state.yaml"
     if not state_path.exists():
         return default_state(root.parent)
@@ -312,7 +307,7 @@ def read_state(root: Path) -> State:
     state["draft_milestones"] = []
     state["interview_max_rounds"] = max(
         1,
-        min(parse_int(read_config(root).get("plan_interview_max_rounds"), 3), 3),
+        parse_int(read_config(root).get("plan_interview_max_rounds"), 3),
     )
     milestones: list[Milestone] = []
     draft_milestones: list[Milestone] = []
@@ -336,6 +331,12 @@ def read_state(root: Path) -> State:
             continue
         if not line.startswith(" ") and line.startswith("cycle:"):
             state["cycle"] = parse_scalar(line.split(":", 1)[1])
+            continue
+        if not line.startswith(" ") and line.startswith("runtime_meta:"):
+            metadata = parse_json_scalar(line.split(":", 1)[1], "runtime_meta")
+            if not isinstance(metadata, dict):
+                raise SystemExit("runtime_meta must contain an object.")
+            state["runtime_meta"] = metadata
             continue
 
         if section == "project":
@@ -422,12 +423,12 @@ def read_state(root: Path) -> State:
                 continue
             if current_milestone is None:
                 continue
-            if re.match(r"^\s{4}(deliverables|acceptance):\s*$", line):
+            if re.match(r"^\s{4}(deliverables|acceptance|write_scope|read_dependencies):\s*$", line):
                 subsection = line.strip()[:-1]
                 continue
             list_match = re.match(r"^\s{6}-\s*(.*)$", line)
-            if list_match and subsection in {"deliverables", "acceptance"}:
-                current_milestone[subsection].append(parse_scalar(list_match.group(1)))
+            if list_match and subsection in {"deliverables", "acceptance", "write_scope", "read_dependencies"}:
+                current_milestone.setdefault(subsection, []).append(parse_scalar(list_match.group(1)))
                 continue
             key_value = match_key_value(line, indent=4)
             if key_value:
@@ -473,7 +474,7 @@ def read_state(root: Path) -> State:
                 state["current_milestone_id"] = value
         elif section == "progress" and key in {"completed", "total"}:
             state[key] = parse_int(value)
-        elif section == "execution_lease":
+        elif section in {"execution", "execution_lease"}:
             if key == "owner":
                 state["lease_owner"] = value
             elif key == "status":
@@ -508,10 +509,10 @@ def read_state(root: Path) -> State:
         elif section == "last_error" and key in {"command", "stderr", "returncode", "created_at"}:
             state["last_error"][key] = value
 
-    if state.get("version") != STATE_VERSION:
+    if state.get("version") != STATE_VERSION and not (allow_legacy and state.get("version") == "2.1"):
         raise SystemExit(
             f"Unsupported Mary Workflow state version: {state.get('version') or 'missing'}. "
-            "Run /mw-init --reset to create a v2.1 state. Earlier state contracts are intentionally not migrated."
+            "Run mary_workflow.py migrate to preview a non-destructive v2.1 migration."
         )
 
     state["milestones"] = milestones
@@ -550,7 +551,7 @@ def set_milestone_key(milestone: Milestone, text: str) -> None:
     value = parse_scalar(value)
     if key == "estimated_scope":
         milestone[key] = parse_int(value)
-    elif key in {"id", "status", "title", "gate", "review"}:
+    elif key in {"id", "status", "title", "gate", "review", "repair_of"}:
         milestone[key] = value
 
 
@@ -568,6 +569,12 @@ def append_milestone_section(lines: list[str], name: str, milestones: list[Miles
         lines.extend(f"      - {quote_value(item)}" for item in milestone.get("deliverables", []))
         lines.append("    acceptance:")
         lines.extend(f"      - {quote_value(item)}" for item in milestone.get("acceptance", []))
+        for scope_key in ("write_scope", "read_dependencies"):
+            if scope_key in milestone:
+                lines.append(f"    {scope_key}:")
+                lines.extend(f"      - {quote_value(item)}" for item in milestone[scope_key])
+        if milestone.get("repair_of"):
+            lines.append(f"    repair_of: {milestone['repair_of']}")
         lines.extend(
             [
                 f"    estimated_scope: {milestone['estimated_scope']}",
@@ -583,6 +590,7 @@ def write_state(root: Path, state: State) -> None:
     lines = [
         f"version: {STATE_VERSION}",
         f"cycle: {state.get('cycle', 'C0')}",
+        f"runtime_meta: {quote_value(json.dumps(state.get('runtime_meta', {}), ensure_ascii=False, separators=(',', ':')))}",
         "",
         "workflow:",
         f"  status: {state['status']}",
@@ -654,7 +662,7 @@ def write_state(root: Path, state: State) -> None:
             f"  completed: {state['completed']}",
             f"  total: {state['total']}",
             "",
-            "execution_lease:",
+            "execution:",
             f"  owner: {state['lease_owner']}",
             f"  status: {state.get('lease_status', 'none')}",
             f"  run_id: {state.get('lease_run_id', '')}",
@@ -662,16 +670,7 @@ def write_state(root: Path, state: State) -> None:
             f"  cycle: {state.get('lease_cycle', '')}",
             f"  milestone_id: {state['lease_milestone_id']}",
             f"  started_at: {state['lease_started_at']}",
-            f"  heartbeat_at: {state.get('lease_heartbeat_at', '')}",
             "",
-            "run_grant:",
-            f"  token_digest: {state.get('run_grant_digest', '')}",
-            f"  fingerprint: {state.get('run_grant_fingerprint', '')}",
-            f"  purpose: {state.get('run_grant_purpose', '')}",
-            f"  plan_digest: {state.get('run_grant_plan_digest', '')}",
-            f"  cycle: {state.get('run_grant_cycle', '')}",
-            f"  issued_at: {state.get('run_grant_issued_at', '')}",
-            f"  expires_at: {state.get('run_grant_expires_at', '')}",
         ]
     )
     append_milestone_section(lines, "milestones", milestones)
@@ -713,7 +712,7 @@ def state_draft_milestones(state: State) -> list[Milestone]:
 
 
 def all_action_names() -> list[str]:
-    return sorted({action for actions in PHASE_ACTIONS.values() for action in actions} | {"resume_execution"})
+    return sorted({action for actions in PHASE_ACTIONS.values() for action in actions} | {"resume_execution", "recover_validation"})
 
 
 def append_log(root: Path, message: str) -> None:
@@ -727,7 +726,7 @@ def append_log(root: Path, message: str) -> None:
 
 def require_root(cwd: Path) -> Path:
     root = workflow_root(cwd)
-    if not root.exists():
+    if not (root / "state.yaml").is_file():
         raise SystemExit("Mary Workflow is not initialized. Run /mw-init first.")
     return root
 
@@ -772,93 +771,38 @@ def current_plan_digest(state: State) -> str:
     payload = {
         "cycle": state.get("cycle", "C0"),
         "clarifications": list(state.get("clarifications", [])),
-        "milestones": milestone_plan_signature(state_milestones(state)),
+        "milestones": milestone_plan_signature([item for item in state_milestones(state) if not item.get("repair_of")]),
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def clear_run_grant(state: State) -> None:
-    state["run_grant_digest"] = ""
-    state["run_grant_fingerprint"] = ""
-    state["run_grant_purpose"] = ""
-    state["run_grant_plan_digest"] = ""
-    state["run_grant_cycle"] = ""
-    state["run_grant_issued_at"] = ""
-    state["run_grant_expires_at"] = ""
+def assert_frozen_plan(state: State) -> str:
+    frozen = str(state.get("runtime_meta", {}).get("frozen_plan_digest") or "")
+    if not frozen or frozen != current_plan_digest(state):
+        raise WorkflowError("The frozen plan changed. Return to planning and confirm a new revision before execution.")
+    return frozen
 
 
-def issue_run_authorization(root: Path) -> JsonObject:
-    state = read_state(root)
-    phase = str(state.get("phase"))
-    if (
-        phase == "PLANNED"
-        and state.get("interview_status") == "plan_ready"
-        and not state.get("final_plan_confirmed")
-        and state.get("lease_status") in {"none", "released"}
-    ):
-        purpose = "start"
-    elif (
-        phase in {"EXECUTING", "REVIEWING", "DEBUGGING"}
-        and state.get("status") == "stopped"
-        and state.get("lease_status") == "paused"
-    ):
-        purpose = "resume"
-    else:
-        raise SystemExit("Run authorization requires a ready plan or a stopped workflow with a paused lease.")
-
-    token = secrets.token_urlsafe(24)
-    token_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    issued_at = datetime.now(timezone.utc).replace(microsecond=0)
-    expires_at = issued_at + timedelta(seconds=RUN_GRANT_TTL_SECONDS)
-    plan_digest = current_plan_digest(state)
-    fingerprint = token_digest[:12]
-    state["run_grant_digest"] = token_digest
-    state["run_grant_fingerprint"] = fingerprint
-    state["run_grant_purpose"] = purpose
-    state["run_grant_plan_digest"] = plan_digest
-    state["run_grant_cycle"] = str(state.get("cycle", "C0"))
-    state["run_grant_issued_at"] = issued_at.isoformat()
-    state["run_grant_expires_at"] = expires_at.isoformat()
-    state["updated_at"] = issued_at.isoformat()
-    write_state(root, state)
-    append_log(root, f"issued /mw-run grant purpose={purpose} fingerprint={fingerprint} plan={plan_digest[:12]}")
-    return {
-        "token": token,
-        "purpose": purpose,
-        "fingerprint": fingerprint,
-        "plan_digest": plan_digest,
-        "expires_at": expires_at.isoformat(),
-    }
-
-
-def consume_run_grant(state: State, token: str, expected_purpose: str) -> str:
-    stored_digest = str(state.get("run_grant_digest") or "")
-    supplied_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    if not stored_digest or not hmac.compare_digest(stored_digest, supplied_digest):
-        raise WorkflowError("The /mw-run grant is missing, invalid, or already consumed.")
-    if state.get("run_grant_purpose") != expected_purpose:
-        raise WorkflowError(f"The /mw-run grant purpose must be {expected_purpose}.")
-    if state.get("run_grant_cycle") != state.get("cycle"):
-        raise WorkflowError("The /mw-run grant belongs to a different cycle.")
-    if state.get("run_grant_plan_digest") != current_plan_digest(state):
-        raise WorkflowError("The /mw-run grant is stale because the plan changed.")
-    try:
-        expires_at = datetime.fromisoformat(str(state.get("run_grant_expires_at")))
-    except ValueError as exc:
-        raise WorkflowError("The /mw-run grant has an invalid expiry timestamp.") from exc
-    if datetime.now(timezone.utc) > expires_at:
-        raise WorkflowError("The /mw-run grant has expired.")
-    fingerprint = str(state.get("run_grant_fingerprint") or supplied_digest[:12])
-    clear_run_grant(state)
-    return fingerprint
+def confirm_execution(state: State, data: JsonObject, purpose: str) -> None:
+    digest = assert_frozen_plan(state)
+    if data.get("plan_digest") != digest:
+        raise WorkflowError("plan_digest must match the displayed frozen plan; refresh /mw-run context.")
+    confirmation = require_text(data.get("confirmation"), "confirmation")
+    if data.get("source") != "/mw-run":
+        raise WorkflowError("Execution requires an explicit /mw-run instruction, recorded as source=/mw-run.")
+    metadata = state.setdefault("runtime_meta", {})
+    metadata.setdefault("authorizations", []).append({
+        "purpose": purpose, "plan_digest": digest, "plan_revision": metadata.get("plan_revision", 0),
+        "confirmation": confirmation, "source": "/mw-run", "recorded_at": now_iso(),
+    })
 
 
 def acquire_execution_lease(state: State) -> None:
     if state.get("lease_status") not in {"none", "released"}:
         raise WorkflowError(f"Cannot acquire execution lease while lease_status={state.get('lease_status')}.")
     timestamp = now_iso()
-    state["lease_owner"] = "codex"
+    state["lease_owner"] = "host"
     state["lease_status"] = "active"
     state["lease_run_id"] = secrets.token_hex(12)
     state["lease_plan_digest"] = current_plan_digest(state)
@@ -870,7 +814,7 @@ def acquire_execution_lease(state: State) -> None:
 
 def sync_execution_lease(state: State) -> None:
     if state.get("lease_status") == "active":
-        state["lease_plan_digest"] = current_plan_digest(state)
+        assert_frozen_plan(state)
         state["lease_milestone_id"] = state.get("current_milestone_id", "")
         state["lease_heartbeat_at"] = now_iso()
 
@@ -887,7 +831,7 @@ def resume_execution_lease(state: State) -> None:
         raise WorkflowError("resume_execution requires a paused existing lease.")
     if state.get("lease_plan_digest") != current_plan_digest(state):
         raise WorkflowError("Cannot resume because the active plan no longer matches the lease.")
-    state["lease_owner"] = "codex"
+    state["lease_owner"] = "host"
     state["lease_status"] = "active"
     state["lease_heartbeat_at"] = now_iso()
 
@@ -912,7 +856,7 @@ def clear_execution_lease(state: State) -> None:
 
 def refresh_progress(state: State) -> None:
     milestones = state_milestones(state)
-    state["completed"] = sum(1 for milestone in milestones if milestone.get("status") == "done")
+    state["completed"] = sum(1 for milestone in milestones if milestone.get("status") == "done" and milestone.get("review") in {"accepted", "accepted-next"})
     state["total"] = len(milestones)
     current = current_milestone(state)
     if current:
@@ -946,8 +890,8 @@ def first_pending_milestone(state: State) -> Milestone | None:
 def normalize_milestones(value: object) -> list[Milestone]:
     if not isinstance(value, list):
         raise WorkflowError("update_state requires data.milestones to be a list.")
-    if not 1 <= len(value) <= 7:
-        raise WorkflowError("Mary Workflow accepts 1 to 7 milestones per plan.")
+    if not value:
+        raise WorkflowError("A plan requires at least one independently verifiable milestone.")
 
     milestones: list[Milestone] = []
     for index, item in enumerate(value, start=1):
@@ -967,14 +911,18 @@ def normalize_milestones(value: object) -> list[Milestone]:
         estimated_scope = parse_int(item.get("estimated_scope"), -1)
         if estimated_scope < 0:
             raise WorkflowError(f"{milestone_id}.estimated_scope must be a non-negative integer.")
-        if estimated_scope > 5:
-            raise WorkflowError(
-                f"{milestone_id}.estimated_scope is {estimated_scope}; the limit is 5 non-test files. "
-                "Split this into smaller independently verifiable milestones."
-            )
         gate = str(item.get("gate") or "auto").strip()
         if gate not in {"auto", "confirm"}:
             raise WorkflowError(f"{milestone_id}.gate must be auto or confirm.")
+        if any(existing["id"] == milestone_id for existing in milestones):
+            raise WorkflowError(f"Duplicate milestone id: {milestone_id}")
+        write_scope = normalize_optional_list(item.get("write_scope")) or list(deliverables)
+        from mw_workers import validate_relative_path
+        try:
+            for path in [*deliverables, *write_scope, *normalize_optional_list(item.get("read_dependencies"))]:
+                validate_relative_path(path)
+        except ValueError as exc:
+            raise WorkflowError(str(exc)) from exc
         milestones.append(
             {
                 "id": milestone_id,
@@ -982,6 +930,8 @@ def normalize_milestones(value: object) -> list[Milestone]:
                 "title": title,
                 "deliverables": deliverables,
                 "acceptance": acceptance,
+                "write_scope": write_scope,
+                "read_dependencies": normalize_optional_list(item.get("read_dependencies")),
                 "estimated_scope": estimated_scope,
                 "gate": gate,
                 "review": "",
@@ -1000,6 +950,14 @@ def normalize_string_list(value: object, field_name: str) -> list[str]:
 
 
 def apply_action(root: Path, payload: JsonObject) -> State:
+    # Validation subprocesses must not hold the state lock: stop must remain usable.
+    if payload.get("action") == "run_validation":
+        return action_run_validation(root, payload)
+    with workflow_lock(root):
+        return _apply_action_locked(root, payload)
+
+
+def _apply_action_locked(root: Path, payload: JsonObject) -> State:
     state = read_state(root)
     try:
         action, data = action_envelope_parts(payload)
@@ -1018,6 +976,11 @@ def apply_action(root: Path, payload: JsonObject) -> State:
         )
 
     try:
+        expected_revision = payload.get("expected_revision")
+        if expected_revision is not None and expected_revision != state.get("runtime_meta", {}).get("state_revision", 0):
+            raise WorkflowError("State revision changed. Read current state and rebuild the action.")
+        if state["phase"] in {"EXECUTING", "REVIEWING", "DEBUGGING"} and action not in {"request_replan", "recover_validation"}:
+            assert_frozen_plan(state)
         working_state = copy.deepcopy(state)
         append_log(root, summarize_action(action, data))
         if action == "update_interview":
@@ -1042,13 +1005,32 @@ def apply_action(root: Path, payload: JsonObject) -> State:
             state = action_record_error(root, working_state, data)
         elif action == "enqueue_fix_task":
             state = action_enqueue_fix_task(root, working_state, data)
+        elif action == "delegate_task":
+            state = action_delegate_task(root, working_state, data)
+        elif action == "submit_worker_result":
+            from mw_workers import submit_result
+            record = submit_result(root, working_state, data)
+            working_state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
+            state = working_state
+        elif action == "confirm_milestone":
+            state = action_confirm_milestone(root, working_state, data)
+        elif action == "request_replan":
+            state = action_request_replan(root, working_state, data)
+        elif action == "recover_validation":
+            from mw_workers import recover_validation
+            record = recover_validation(root, working_state, data)
+            working_state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
+            state = working_state
         else:
             return reject_action(root, state, action, f"Unknown action: {action}.")
+    except ValueError as exc:
+        return reject_action(root, state, action, str(exc))
     except WorkflowError as exc:
         return reject_action(root, state, action, str(exc))
 
     state.setdefault("action_counts", {})[action] = int(state.setdefault("action_counts", {}).get(action, 0)) + 1
     refresh_progress(state)
+    state.setdefault("runtime_meta", {})["state_revision"] = state.get("runtime_meta", {}).get("state_revision", 0) + 1
     write_state(root, state)
     return state
 
@@ -1059,22 +1041,39 @@ def is_action_allowed(state: State, action: str) -> bool:
 
 def legal_actions_for_state(state: State) -> set[str]:
     phase = str(state.get("phase"))
+    recovery = {"recover_validation"}
     brief_status = str(state.get("project_brief_status") or "machine_detected")
+    if state.get("status") == "stopped":
+        return recovery | ({"resume_execution", "request_replan"} if phase in {"EXECUTING", "REVIEWING", "DEBUGGING"} else set())
     if brief_status == "refresh_required" and phase in BRIEF_REFRESH_PHASES:
-        return {"submit_brief"}
+        return recovery | {"submit_brief", "delegate_task", "submit_worker_result"}
     if phase == "PLANNING" and brief_status != "complete":
-        return {"submit_brief", "update_project"}
-    if state.get("status") == "stopped" and phase in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
-        return {"resume_execution"}
-    return PHASE_ACTIONS.get(phase, set())
+        return recovery | {"submit_brief", "update_project", "delegate_task", "submit_worker_result"}
+    return recovery | PHASE_ACTIONS.get(phase, set())
 
 
 def reject_action(root: Path, state: State, action: str, reason: str) -> State:
     state["rejected_actions"] = int(state.get("rejected_actions", 0)) + 1
     state["updated_at"] = now_iso()
+    phase = state.get("phase")
+    if state.get("status") == "stopped":
+        suggested = "Quiesce stopped workers; explicitly resume the same plan or request_replan for a scope change."
+    elif phase == "PLANNED":
+        suggested = "Inspect the frozen plan; /mw-run starts it, or reopen_plan revises it."
+    elif phase == "DEBUGGING":
+        suggested = "Diagnose the retained error, enqueue a repair within approved scope, or request_replan for a changed scope."
+    elif phase == "REVIEWING":
+        suggested = "Collect independent verifier evidence; use set_phase with findings for rework or replanning."
+    else:
+        suggested = "Read current state and the indicated contract, correct the payload, and retry only the legal action."
+    metadata = state.setdefault("runtime_meta", {})
+    metadata["last_rejection"] = {"code": "ACTION_REJECTED", "action": action, "phase": phase,
+                                  "reason": reason, "allowed_actions": sorted(legal_actions_for_state(state)),
+                                  "suggested_next": suggested}
+    metadata["state_revision"] = metadata.get("state_revision", 0) + 1
     append_log(root, f"rejected action={action or '(missing)'} phase={state.get('phase')} reason={reason}")
     write_state(root, state)
-    raise SystemExit(f"Rejected action {action or '(missing)'}: {reason}")
+    raise SystemExit(f"Rejected action {action or '(missing)'}: {reason}\n" + json.dumps(metadata["last_rejection"], ensure_ascii=False))
 
 
 def summarize_action(action: str, data: JsonObject) -> str:
@@ -1128,6 +1127,9 @@ def interview_clarifications(state: State) -> list[str]:
             result.append(f"Round 0 defaults: {defaults}; user_response={answers}")
         elif kind == "assumptions":
             result.append(f"Interview off assumptions: {defaults}; user_response={answers}")
+        elif kind == "request":
+            result.extend(normalize_optional_list(item.get("answers")))
+            result.extend("Disclosed assumption: " + item for item in normalize_optional_list(item.get("defaults")))
         elif kind == "revision":
             revision_index += 1
             result.append(f"Plan revision {revision_index}: feedback={answers}; defaults={defaults}")
@@ -1141,6 +1143,8 @@ def milestone_plan_signature(milestones: list[Milestone]) -> list[dict[str, obje
             "title": item.get("title"),
             "deliverables": list(item.get("deliverables", [])),
             "acceptance": list(item.get("acceptance", [])),
+            "write_scope": list(item.get("write_scope", item.get("deliverables", []))),
+            "read_dependencies": list(item.get("read_dependencies", [])),
             "estimated_scope": item.get("estimated_scope"),
             "gate": item.get("gate", "auto"),
         }
@@ -1149,7 +1153,7 @@ def milestone_plan_signature(milestones: list[Milestone]) -> list[dict[str, obje
 
 
 def configured_interview_max_rounds(root: Path) -> int:
-    return max(1, min(parse_int(read_config(root).get("plan_interview_max_rounds"), 3), 3))
+    return max(1, parse_int(read_config(root).get("plan_interview_max_rounds"), 3))
 
 
 def reset_planning_session(state: State, root: Path, clear_milestones: bool = True) -> None:
@@ -1161,7 +1165,6 @@ def reset_planning_session(state: State, root: Path, clear_milestones: bool = Tr
     state["clarifications"] = []
     state["draft_milestones"] = []
     state["started_at"] = ""
-    clear_run_grant(state)
     state["current_milestone_id"] = ""
     if clear_milestones:
         state["milestones"] = []
@@ -1193,8 +1196,8 @@ def append_interview_round(state: State, root: Path, data: JsonObject) -> None:
         max_rounds = configured_interview_max_rounds(root)
         if round_number > max_rounds:
             raise WorkflowError(f"Interview round {round_number} exceeds configured maximum {max_rounds}.")
-        if not 3 <= len(questions) <= 5:
-            raise WorkflowError("Each active interview round requires 3 to 5 questions.")
+        if not questions:
+            raise WorkflowError("An interview round requires at least one material question.")
         anchor = str(data.get("anchor") or "").strip()
         uncertainty = str(data.get("uncertainty") or "").strip()
         if round_number > 1 and (not anchor or not uncertainty):
@@ -1223,24 +1226,9 @@ def append_interview_round(state: State, root: Path, data: JsonObject) -> None:
 
 
 def validate_interview_depth(root: Path, state: State, draft: list[Milestone]) -> None:
-    if read_config(root).get("plan_interview", "on") != "on":
-        return
-    answered_rounds = [
-        item
-        for item in interview_rounds(state)
-        if item.get("kind") == "interview" and item.get("status") == "answered"
-    ]
-    if len(draft) >= 5 and len(answered_rounds) < 2:
-        raise WorkflowError("Plans with 5 or more milestones require at least 2 answered interview rounds.")
-    if 3 <= len(draft) <= 4 and not answered_rounds:
-        raise WorkflowError("Plans with 3 or 4 milestones require at least 1 answered interview round.")
-    if len(draft) <= 2 and not answered_rounds:
-        defaults_confirmed = any(
-            item.get("kind") == "default_confirmation" and item.get("status") == "answered"
-            for item in interview_rounds(state)
-        )
-        if not defaults_confirmed:
-            raise WorkflowError("A 0-round small plan requires explicit user confirmation of its defaults.")
+    """Only unresolved questions block a plan; task count does not determine rounds."""
+    if any(item.get("status") == "awaiting_answer" for item in interview_rounds(state)):
+        raise WorkflowError("Resolve pending material questions before freezing the draft.")
 
 
 def action_update_interview(root: Path, state: State, data: JsonObject) -> State:
@@ -1282,27 +1270,23 @@ def action_update_interview(root: Path, state: State, data: JsonObject) -> State
             state["interview_status"] = "in_progress"
             append_interview_round(state, root, next_round)
     elif mode == "propose":
-        if interview_enabled:
-            raise WorkflowError("Interview is on; open and resolve the required interview rounds first.")
-        assumptions = normalize_string_list(data.get("clarifications"), "update_interview.data.clarifications")
+        if any(item.get("status") == "awaiting_answer" for item in interview_rounds(state)):
+            raise WorkflowError("Resolve pending questions before proposing a draft.")
+        clarifications = normalize_string_list(data.get("clarifications"), "update_interview.data.clarifications")
         questions = normalize_optional_list(data.get("questions"))
-        if len(questions) != 1:
-            raise WorkflowError("Interview-off assumptions require exactly one explicit confirmation question.")
+        assumptions = normalize_optional_list(data.get("defaults"))
         draft = normalize_milestones(data.get("draft_milestones"))
         state["interview_rounds"] = [
             {
-                "kind": "assumptions",
-                "round": 0,
-                "status": "awaiting_answer",
-                "anchor": "interview disabled",
-                "uncertainty": "explicit assumption confirmation",
-                "questions": questions,
-                "answers": [],
+                "kind": "assumptions" if questions else "request",
+                "round": 0, "status": "awaiting_answer" if questions else "answered",
+                "anchor": "user request", "uncertainty": " | ".join(questions),
+                "questions": questions, "answers": [] if questions else clarifications,
                 "defaults": assumptions,
             }
         ]
         state["draft_milestones"] = draft
-        state["interview_status"] = "awaiting_answers"
+        state["interview_status"] = "awaiting_answers" if questions else "draft_ready"
         state["final_plan_confirmed"] = False
     elif mode == "revise":
         if state.get("interview_status") != "draft_ready":
@@ -1388,8 +1372,8 @@ def normalize_positioning(value: object) -> JsonObject:
 def normalize_brief_architecture(value: object, inventory: set[str]) -> JsonObject:
     data = require_object(value, "submit_brief.data.architecture")
     raw_modules = data.get("modules")
-    if not isinstance(raw_modules, list) or not raw_modules:
-        raise WorkflowError("architecture.modules must be a non-empty list.")
+    if not isinstance(raw_modules, list) or (inventory and not raw_modules):
+        raise WorkflowError("architecture.modules must cover the project; an empty repository may use an empty list.")
     modules: list[JsonObject] = []
     for index, item in enumerate(raw_modules, start=1):
         module = require_object(item, f"architecture.modules[{index}]")
@@ -1408,47 +1392,15 @@ def normalize_brief_architecture(value: object, inventory: set[str]) -> JsonObje
         )
     return {
         "modules": modules,
-        "dependency_graph": normalize_string_list(data.get("dependency_graph"), "architecture.dependency_graph"),
-        "data_flow": normalize_string_list(data.get("data_flow"), "architecture.data_flow"),
-        "state_management": normalize_string_list(data.get("state_management"), "architecture.state_management"),
+        "dependency_graph": normalize_optional_list(data.get("dependency_graph")),
+        "data_flow": normalize_optional_list(data.get("data_flow")),
+        "state_management": normalize_optional_list(data.get("state_management")),
     }
 
 
-def normalize_file_ledger(value: object, expected_inventory: list[str]) -> list[JsonObject]:
-    if not isinstance(value, list) or not value:
-        raise WorkflowError("file_ledger must be a non-empty list covering the full machine inventory.")
-    ledger: list[JsonObject] = []
-    seen: set[str] = set()
-    for index, item in enumerate(value, start=1):
-        record = require_object(item, f"file_ledger[{index}]")
-        path = require_text(record.get("path"), f"file_ledger[{index}].path")
-        if path in seen:
-            raise WorkflowError(f"file_ledger contains duplicate path: {path}")
-        seen.add(path)
-        ledger.append(
-            {
-                "path": path,
-                "purpose": require_text(record.get("purpose"), f"file_ledger[{index}].purpose"),
-                "exports": normalize_string_list(record.get("exports"), f"file_ledger[{index}].exports"),
-                "used_by": normalize_string_list(record.get("used_by"), f"file_ledger[{index}].used_by"),
-            }
-        )
-    expected = set(expected_inventory)
-    missing = sorted(expected - seen)
-    extra = sorted(seen - expected)
-    if missing or extra:
-        details = []
-        if missing:
-            details.append(f"missing={missing}")
-        if extra:
-            details.append(f"extra={extra}")
-        raise WorkflowError("file_ledger must exactly cover machine inventory: " + "; ".join(details))
-    return ledger
-
-
 def normalize_uncertainties(value: object) -> list[JsonObject]:
-    if not isinstance(value, list) or not value:
-        raise WorkflowError("uncertainties must be a non-empty list of inferred or unresolved items.")
+    if not isinstance(value, list):
+        raise WorkflowError("uncertainties must be a list of inferred or unresolved items.")
     result: list[JsonObject] = []
     for index, item in enumerate(value, start=1):
         record = require_object(item, f"uncertainties[{index}]")
@@ -1466,16 +1418,14 @@ def normalize_uncertainties(value: object) -> list[JsonObject]:
 
 
 def normalize_validation_evidence(value: object) -> list[JsonObject]:
-    if not isinstance(value, list) or not value:
-        raise WorkflowError("validation must contain build, test, and run evidence.")
+    if not isinstance(value, list):
+        raise WorkflowError("validation must be a list of applicable checks (an empty list makes no execution claim).")
     result: list[JsonObject] = []
     kinds: set[str] = set()
     for index, item in enumerate(value, start=1):
         record = require_object(item, f"validation[{index}]")
         kind = require_text(record.get("kind"), f"validation[{index}].kind")
         status = require_text(record.get("status"), f"validation[{index}].status")
-        if kind not in {"build", "test", "run"}:
-            raise WorkflowError(f"validation[{index}].kind must be build, test, or run.")
         if status not in {"passed", "failed", "skipped"}:
             raise WorkflowError(f"validation[{index}].status must be passed, failed, or skipped.")
         kinds.add(kind)
@@ -1488,102 +1438,63 @@ def normalize_validation_evidence(value: object) -> list[JsonObject]:
                 "duration": require_text(record.get("duration"), f"validation[{index}].duration"),
             }
         )
-    missing = {"build", "test", "run"} - kinds
-    if missing:
-        raise WorkflowError(f"validation is missing evidence kind(s): {', '.join(sorted(missing))}.")
     return result
 
 
-def normalize_analysis_evidence(value: object, inventory: set[str], changed_files: list[str]) -> JsonObject:
-    data = require_object(value, "submit_brief.data.analysis_evidence")
-    if data.get("pass1_inventory_complete") is not True:
-        raise WorkflowError("analysis_evidence.pass1_inventory_complete must be true.")
-    pass2 = require_object(data.get("pass2"), "analysis_evidence.pass2")
-    normalized_pass2: JsonObject = {}
-    for category in ("entrypoints", "configuration", "core_modules", "tests"):
-        paths = normalize_string_list(pass2.get(category), f"analysis_evidence.pass2.{category}")
-        invalid = [path for path in paths if path not in inventory and not path.startswith("(none")]
-        if invalid:
-            raise WorkflowError(f"analysis_evidence.pass2.{category} references unknown files: {', '.join(invalid)}")
-        normalized_pass2[category] = paths
-    pass3 = require_object(data.get("pass3"), "analysis_evidence.pass3")
-    raw_summaries = pass3.get("module_summaries")
-    if not isinstance(raw_summaries, list) or not raw_summaries:
-        raise WorkflowError("analysis_evidence.pass3.module_summaries must be non-empty.")
-    module_summaries: list[JsonObject] = []
-    for index, item in enumerate(raw_summaries, start=1):
-        summary = require_object(item, f"analysis_evidence.pass3.module_summaries[{index}]")
-        module_summaries.append(
-            {
-                "module": require_text(summary.get("module"), f"module_summaries[{index}].module"),
-                "summary": require_text(summary.get("summary"), f"module_summaries[{index}].summary"),
-            }
-        )
-    reread_files = normalize_string_list(pass3.get("reread_files"), "analysis_evidence.pass3.reread_files")
-    invalid_reread = [path for path in reread_files if path not in inventory and not path.startswith("(none")]
-    if invalid_reread:
-        raise WorkflowError(f"analysis_evidence.pass3.reread_files references unknown files: {', '.join(invalid_reread)}")
-    reviewed_changed_files = normalize_optional_list(data.get("reviewed_changed_files"))
-    if reviewed_changed_files != changed_files:
-        raise WorkflowError(
-            "analysis_evidence.reviewed_changed_files must exactly match project.changed_files for this refresh."
-        )
-    return {
-        "pass1_inventory_complete": True,
-        "pass2": normalized_pass2,
-        "pass3": {
-            "synthesis": require_text(pass3.get("synthesis"), "analysis_evidence.pass3.synthesis"),
-            "module_summaries": module_summaries,
-            "reread_files": reread_files,
-        },
-        "reviewed_changed_files": reviewed_changed_files,
-    }
-
-
 def action_submit_brief(root: Path, state: State, data: JsonObject) -> State:
-    mode = str(data.get("mode") or "").strip()
+    from mw_brief import merge_brief_update, normalize_coverage, normalize_records
+    mode = str(data.get("mode") or "")
     brief_status = str(state.get("project_brief_status") or "machine_detected")
-    expected_mode = "cycle_refresh" if brief_status == "refresh_required" else "initial"
-    if brief_status == "complete":
-        expected_mode = "correction"
+    expected_mode = "cycle_refresh" if brief_status == "refresh_required" else ("correction" if brief_status == "complete" else "initial")
     if mode != expected_mode:
         raise WorkflowError(f"submit_brief mode must be {expected_mode} while brief_status={brief_status}.")
-    if brief_status == "refresh_required":
-        current_changes = changed_project_files(state)
-        if current_changes != list(state.get("project_changed_files", [])):
-            raise WorkflowError("Project files changed again after cycle scan. Rerun /mw-cycle before submit_brief.")
-
+    changes = changed_project_files(state)
+    if brief_status == "refresh_required" and changes != list(state.get("project_changed_files", [])):
+        raise WorkflowError("Project files changed again after scan. Rerun /mw-cycle before submit_brief.")
     project_root = Path(str(state.get("project_root") or root.parent))
     detected = detect_project(project_root)
     inventory = list(detected["inventory"])
-    inventory_set = set(inventory)
-    positioning = normalize_positioning(data.get("positioning"))
-    architecture = normalize_brief_architecture(data.get("architecture"), inventory_set)
-    ledger = normalize_file_ledger(data.get("file_ledger"), inventory)
-    uncertainties = normalize_uncertainties(data.get("uncertainties"))
-    validation = normalize_validation_evidence(data.get("validation"))
-    analysis_evidence = normalize_analysis_evidence(
-        data.get("analysis_evidence"), inventory_set, list(state.get("project_changed_files", []))
-    )
-
+    metadata = state.setdefault("runtime_meta", {})
+    old_brief = metadata.get("brief", {})
+    if mode == "cycle_refresh" and "update" in data:
+        update = copy.deepcopy(require_object(data["update"], "submit_brief.update"))
+        reviewed = update.get("reviewed_changed_files")
+        if not isinstance(reviewed, list) or len(reviewed) != len(set(reviewed)) or set(reviewed) != set(changes):
+            raise WorkflowError("update.reviewed_changed_files must exactly match project.changed_files, including prefixes.")
+        update["reviewed_changed_files"] = [item.split(":", 1)[1] for item in reviewed]
+        brief = merge_brief_update(old_brief, update, inventory, [item.split(":", 1)[1] for item in changes])
+    else:
+        if mode == "cycle_refresh" and old_brief and not old_brief.get("legacy_pending"):
+            raise WorkflowError("Cycle refresh requires a version-bound update delta with explicit retained modules.")
+        if mode == "cycle_refresh" and set(data.get("reviewed_changed_files", [])) != set(changes):
+            raise WorkflowError("Legacy coverage refresh must acknowledge every changed-file entry.")
+        coverage = normalize_coverage(data.get("coverage"), inventory)
+        if not coverage["complete"]:
+            raise WorkflowError(f"Coverage leaves unread files: {coverage['unread_files']}")
+        records = normalize_records(data.get("records", old_brief.get("records", [])))
+        if old_brief.get("records") and records[:len(old_brief["records"])] != old_brief["records"]:
+            raise WorkflowError("Preserve project record history; append superseding records instead of replacing it.")
+        brief = {key: copy.deepcopy(data.get(key)) for key in ("positioning", "architecture", "uncertainties", "validation")}
+        brief.update({"version": state.get("project_brief_version", 0) + 1, "coverage": coverage, "records": records})
+    brief["positioning"] = normalize_positioning(brief.get("positioning"))
+    brief["architecture"] = normalize_brief_architecture(brief.get("architecture"), set(inventory))
+    brief["uncertainties"] = normalize_uncertainties(brief.get("uncertainties"))
+    brief["validation"] = normalize_validation_evidence(brief.get("validation"))
+    brief.pop("legacy_pending", None)
     apply_project_detection(state, detected)
-    state["project_positioning"] = positioning
-    state["project_architecture"] = architecture
-    state["project_file_ledger"] = ledger
-    state["project_uncertainties"] = uncertainties
-    state["project_validation"] = validation
-    state["project_analysis_evidence"] = analysis_evidence
+    metadata["brief"] = brief
+    metadata.pop("legacy_brief_refresh_pending", None)
+    for key in ("positioning", "architecture", "uncertainties", "validation"):
+        state[f"project_{key}"] = brief[key]
+    state["project_analysis_evidence"] = brief.get("refresh_evidence", {})
     state["project_changed_files"] = []
     state["project_brief_status"] = "complete"
-    state["project_brief_version"] = parse_int(state.get("project_brief_version"), 0) + 1
+    state["project_brief_version"] = brief["version"]
     state["project_brief_updated_at"] = now_iso()
     state["project_brief_cycle"] = str(state.get("cycle", "C0"))
     state["updated_at"] = now_iso()
     write_project_brief(root, state)
-    append_log(
-        root,
-        f"submitted project brief mode={mode} version={state['project_brief_version']} files={len(ledger)}",
-    )
+    append_log(root, f"submitted project brief mode={mode} version={brief['version']} modules={len(brief['coverage']['modules'])}")
     return state
 
 
@@ -1610,7 +1521,11 @@ def action_update_state(root: Path, state: State, data: JsonObject) -> State:
     state["clarifications"] = clarifications
     state["milestones"] = milestones
     state["current_milestone_id"] = milestones[0]["id"]
-    clear_run_grant(state)
+    metadata = state.setdefault("runtime_meta", {})
+    metadata["plan_revision"] = metadata.get("plan_revision", 0) + 1
+    metadata["frozen_plan_digest"] = current_plan_digest(state)
+    metadata["confirmations"] = {}
+    metadata["milestone_tasks"] = {}
     refresh_progress(state)
     set_phase(state, root, "PLANNED", "envelope: update_state; plan ready")
     append_log(root, f"finalized plan milestones={len(milestones)} awaiting=/mw-run")
@@ -1624,7 +1539,7 @@ def action_reopen_plan(root: Path, state: State, data: JsonObject) -> State:
     state["interview_status"] = "draft_ready"
     state["final_plan_confirmed"] = False
     state["current_milestone_id"] = ""
-    clear_run_grant(state)
+    state.setdefault("runtime_meta", {})["frozen_plan_digest"] = ""
     clear_execution_lease(state)
     refresh_progress(state)
     set_phase(state, root, "PLANNING", "envelope: reopen_plan")
@@ -1635,101 +1550,212 @@ def action_reopen_plan(root: Path, state: State, data: JsonObject) -> State:
     return state
 
 
+def action_request_replan(root: Path, state: State, data: JsonObject) -> State:
+    from mw_workers import cancel_tasks, list_tasks
+    feedback = require_text(data.get("feedback"), "request_replan.feedback")
+    ensure_validation_settled(root)
+    pending = [task for task in list_tasks(root) if task.get("status") == "running"]
+    if (pending or state.get("runtime_meta", {}).get("stop_pending")) and data.get("workers_quiescent") is not True:
+        raise WorkflowError("Stop and quiesce workers before replanning; then record workers_quiescent=true.")
+    metadata = state.setdefault("runtime_meta", {})
+    metadata.setdefault("plan_history", []).append({
+        "plan_revision": metadata.get("plan_revision"), "plan_digest": metadata.get("frozen_plan_digest"),
+        "milestones": copy.deepcopy(state_milestones(state)), "feedback": feedback, "recorded_at": now_iso(),
+    })
+    cancel_tasks(root, "explicit replan request")
+    clear_execution_lease(state)
+    reset_planning_session(state, root)
+    metadata["frozen_plan_digest"] = ""
+    metadata["stop_pending"] = False
+    set_phase(state, root, "PLANNING", "envelope: request_replan")
+    return state
+
+
 def action_start_execution(root: Path, state: State, data: JsonObject) -> State:
-    token = str(data.get("token") or "")
-    fingerprint = consume_run_grant(state, token, "start")
     if state.get("final_plan_confirmed") or state.get("interview_status") != "plan_ready":
         raise WorkflowError("start_execution requires an unconfirmed plan_ready state.")
     pending = first_pending_milestone(state)
     if not pending:
         raise WorkflowError("start_execution requires at least one pending milestone.")
+    confirm_execution(state, data, "start")
+    execution_mode = data.get("execution_mode", "delegated")
+    if execution_mode not in {"delegated", "single_agent"}:
+        raise WorkflowError("execution_mode must be delegated or single_agent.")
+    state["runtime_meta"]["execution_mode"] = execution_mode
     state["final_plan_confirmed"] = True
     state["interview_status"] = "complete"
     state["started_at"] = state.get("started_at") or now_iso()
     state["current_milestone_id"] = pending["id"]
-    refresh_progress(state)
     acquire_execution_lease(state)
     set_phase(state, root, "EXECUTING", "/mw-run: start_execution")
-    sync_execution_lease(state)
-    append_log(root, f"consumed /mw-run grant purpose=start fingerprint={fingerprint}")
-    append_log(root, f"started execution run={state['lease_run_id']} milestone={pending['id']}")
+    append_log(root, f"started execution run={state['lease_run_id']} milestone={pending['id']} mode={execution_mode}")
     return state
 
 
 def action_resume_execution(root: Path, state: State, data: JsonObject) -> State:
     if state.get("status") != "stopped":
         raise WorkflowError("resume_execution requires status=stopped.")
-    token = str(data.get("token") or "")
-    fingerprint = consume_run_grant(state, token, "resume")
+    ensure_validation_settled(root)
+    confirm_execution(state, data, "resume")
+    if state.get("runtime_meta", {}).get("stop_pending"):
+        if data.get("workers_quiescent") is not True:
+            raise WorkflowError("Verify stopped workers no longer write, then resume with workers_quiescent=true.")
+        state["runtime_meta"]["stop_pending"] = False
     resume_execution_lease(state)
     state["status"] = "running"
     state["updated_at"] = now_iso()
     sync_prompt_for_phase(state, root)
-    append_log(root, f"consumed /mw-run grant purpose=resume fingerprint={fingerprint}")
     append_log(root, f"resumed execution run={state['lease_run_id']} phase={state['phase']}")
     return state
 
 
+def action_confirm_milestone(root: Path, state: State, data: JsonObject) -> State:
+    milestone = current_milestone(state)
+    if not milestone or data.get("id") != milestone["id"]:
+        raise WorkflowError("confirm_milestone must identify the current milestone.")
+    if data.get("plan_digest") != assert_frozen_plan(state):
+        raise WorkflowError("Milestone confirmation requires the current frozen plan_digest.")
+    confirmation = require_text(data.get("confirmation"), "confirmation")
+    state.setdefault("runtime_meta", {}).setdefault("confirmations", {})[milestone["id"]] = {
+        "confirmation": confirmation, "plan_revision": state["runtime_meta"].get("plan_revision"), "recorded_at": now_iso(),
+    }
+    if milestone.get("repair_of"):
+        state["runtime_meta"]["confirmations"][milestone["repair_of"]] = state["runtime_meta"]["confirmations"][milestone["id"]]
+    return state
+
+
+def action_delegate_task(root: Path, state: State, data: JsonObject) -> State:
+    from mw_workers import create_task
+    milestone = current_milestone(state)
+    role = data.get("role")
+    if state.get("runtime_meta", {}).get("stop_pending"):
+        ensure_validation_settled(root)
+        if data.get("workers_quiescent") is not True:
+            raise WorkflowError("Previous workers may still write; interrupt/wait, inspect changes, then dispatch with workers_quiescent=true.")
+        state["runtime_meta"]["stop_pending"] = False
+    if role == "implementer":
+        if state["phase"] != "EXECUTING":
+            raise WorkflowError("Implementers run only in EXECUTING; DEBUGGING diagnoses and enqueues repairs.")
+        if milestone and milestone.get("gate") == "confirm" and milestone["id"] not in state.get("runtime_meta", {}).get("confirmations", {}):
+            raise WorkflowError("This milestone requires confirm_milestone with the user's explicit confirmation before dispatch.")
+    if role == "verifier" and state["phase"] != "REVIEWING":
+        raise WorkflowError("Milestone verifiers run only in REVIEWING.")
+    record = create_task(root, state, data)
+    state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
+    return state
+
+
+def action_run_validation(root: Path, payload: JsonObject) -> State:
+    from mw_workers import run_validation
+    with workflow_lock(root):
+        state = read_state(root)
+        try:
+            action, data = action_envelope_parts(payload)
+            if action not in legal_actions_for_state(state):
+                raise WorkflowError("run_validation is unavailable; resume a stopped run or dispatch in the correct phase.")
+            assert_frozen_plan(state)
+        except (WorkflowError, ValueError) as exc:
+            return reject_action(root, state, "run_validation", str(exc))
+    try:
+        evidence = run_validation(root, state, data)
+    except (WorkflowError, ValueError) as exc:
+        with workflow_lock(root):
+            return reject_action(root, read_state(root), "run_validation", str(exc))
+    with workflow_lock(root):
+        state = read_state(root)
+        state.setdefault("runtime_meta", {})["last_evidence"] = evidence
+        state["runtime_meta"]["state_revision"] = state["runtime_meta"].get("state_revision", 0) + 1
+        state.setdefault("action_counts", {})["run_validation"] = state.get("action_counts", {}).get("run_validation", 0) + 1
+        append_log(root, f"validation task={data.get('task_id')} check={data.get('acceptance_id')} result={evidence.get('result')}")
+        write_state(root, state)
+        return state
+
+
 def action_mark_task_done(root: Path, state: State, data: JsonObject) -> State:
-    milestone_id = str(data.get("id") or data.get("milestone_id") or state.get("current_milestone_id") or "").strip()
-    if not milestone_id:
-        raise WorkflowError("mark_task_done requires data.id or data.milestone_id.")
-    milestone = find_milestone(state, milestone_id)
-    if not milestone:
-        raise WorkflowError(f"Milestone not found: {milestone_id}")
+    from mw_workers import verify_milestone_evidence
+    milestone_id = str(data.get("id") or data.get("milestone_id") or "")
+    milestone = current_milestone(state)
+    if not milestone or milestone_id != milestone["id"]:
+        raise WorkflowError("mark_task_done must identify the current milestone.")
+    evidence = verify_milestone_evidence(root, state, milestone, data)
+    state.setdefault("runtime_meta", {}).setdefault("milestone_tasks", {})[milestone_id] = list(data["task_ids"])
     milestone["status"] = "done"
     milestone["review"] = "pending"
-    state["current_milestone_id"] = milestone_id
-    write_milestone_report(root, milestone, data, "execution")
-    refresh_progress(state)
-    set_phase(state, root, "REVIEWING", "auto: all tasks done")
+    write_milestone_report(root, milestone, {**data, "evidence": evidence}, "execution")
+    set_phase(state, root, "REVIEWING", "auto: implementation submitted")
     sync_execution_lease(state)
-    append_log(root, f"marked {milestone_id} done")
+    append_log(root, f"submitted {milestone_id} for independent review")
     return state
 
 
 def action_set_phase(root: Path, state: State, data: JsonObject) -> State:
+    from mw_workers import accept_tasks, cancel_tasks, list_tasks, verify_review_evidence
     phase = str(data.get("phase") or "").upper()
-    if not phase:
-        raise WorkflowError("set_phase requires data.phase.")
-    if phase not in {"EXECUTING", "PLANNING", "FINISHED"}:
-        raise WorkflowError("REVIEWING set_phase may target only EXECUTING, PLANNING, or FINISHED.")
     decision = str(data.get("decision") or "").strip().lower()
     current = current_milestone(state)
-    if current:
-        current["review"] = decision or phase.lower()
-        write_milestone_report(root, current, data, "review")
+    if not current or phase not in {"EXECUTING", "PLANNING", "FINISHED"}:
+        raise WorkflowError("REVIEWING requires a current milestone and may target EXECUTING, PLANNING, or FINISHED.")
+    evidence: JsonObject = {}
+    ensure_validation_settled(root)
+    active = [task for task in list_tasks(root) if task.get("status") == "running"]
+    if active and data.get("workers_quiescent") is not True:
+        raise WorkflowError("Review transition requires workers to settle; interrupt/wait before recording workers_quiescent=true.")
+    if phase == "PLANNING":
+        if not data.get("findings"):
+            raise WorkflowError("Replanning requires concrete findings explaining the scope or acceptance change.")
+        decision = "replan"
+    elif decision in {"needs-fix", "fix", "rework"}:
+        if phase != "EXECUTING" or not data.get("findings"):
+            raise WorkflowError("A rejected review requires findings and phase EXECUTING.")
+        decision = "needs-fix"
+    elif decision in {"accepted", "accepted-next"}:
+        evidence = verify_review_evidence(root, state, current, data)
+        remaining = [item for item in state_milestones(state) if item["id"] != current["id"] and
+                     (item.get("status") != "done" or item.get("review") not in {"accepted", "accepted-next"})]
+        if phase == "FINISHED" and remaining:
+            raise WorkflowError("Cannot finish while other milestones remain unfinished or unaccepted.")
+        if phase == "EXECUTING" and not first_pending_milestone(state):
+            raise WorkflowError("No pending milestone remains; use phase FINISHED.")
+    else:
+        raise WorkflowError("Review decision must be accepted, accepted-next, needs-fix, or an evidenced replan.")
 
-    if phase == "EXECUTING":
-        if current and decision in {"needs-fix", "fix", "rework"}:
-            current["status"] = "pending"
-            state["current_milestone_id"] = current["id"]
-        else:
-            pending = first_pending_milestone(state)
-            if not pending:
-                raise WorkflowError("No pending milestone remains; use phase FINISHED.")
-            state["current_milestone_id"] = pending["id"]
-    elif phase == "FINISHED":
-        unfinished = [milestone["id"] for milestone in state_milestones(state) if milestone.get("status") != "done"]
-        if unfinished:
-            raise WorkflowError(f"Cannot finish while milestones remain unfinished: {', '.join(unfinished)}")
-        state["current_milestone_id"] = ""
-        clear_run_grant(state)
-        release_execution_lease(state)
-    elif phase == "PLANNING":
-        clear_run_grant(state)
+    current["review"] = decision
+    write_milestone_report(root, current, {**data, "evidence": evidence}, "review")
+    if decision in {"accepted", "accepted-next"}:
+        task_ids = state.get("runtime_meta", {}).get("milestone_tasks", {}).get(current["id"], [])
+        accept_tasks(root, state, [*task_ids, data["verifier_task_id"]])
+    if phase == "PLANNING":
+        cancel_tasks(root, "replanning")
         release_execution_lease(state)
         reset_planning_session(state, root)
-    elif phase not in VALID_PHASES:
-        raise WorkflowError(f"Invalid phase: {phase}.")
-
-    refresh_progress(state)
+        state.setdefault("runtime_meta", {})["frozen_plan_digest"] = ""
+    elif phase == "FINISHED":
+        cancel_tasks(root, "run finished")
+        state["current_milestone_id"] = ""
+        release_execution_lease(state)
+    elif decision == "needs-fix":
+        cancel_tasks(root, "review rejected; preserve evidence and redispatch")
+        current["status"] = "pending"
+        state["current_milestone_id"] = current["id"]
+    else:
+        state["current_milestone_id"] = first_pending_milestone(state)["id"]
     set_phase(state, root, phase, "envelope: set_phase")
+    refresh_progress(state)
     sync_execution_lease(state)
     return state
 
 
 def action_record_error(root: Path, state: State, data: JsonObject) -> State:
+    from mw_workers import cancel_tasks, list_tasks
+    active = [task for task in list_tasks(root) if task.get("status") == "running"]
+    cancel_tasks(root, "error recorded; preserve partial work")
+    if active:
+        state.setdefault("runtime_meta", {})["stop_pending"] = True
+    errors = root / REPORTS_DIR / str(state.get("cycle", "C0")) / "errors"
+    errors.mkdir(parents=True, exist_ok=True)
+    error_path = errors / f"error-{secrets.token_hex(8)}.json"
+    atomic_write_text(error_path, json.dumps({"recorded_at": now_iso(), "data": data}, ensure_ascii=False, indent=2) + "\n")
+    state.setdefault("runtime_meta", {})["last_error_ref"] = str(error_path.relative_to(root))
     state["last_error"] = {
         "command": normalize_error_text(data.get("command", ""), 200),
         "stderr": normalize_error_text(data.get("stderr", ""), 500),
@@ -1742,37 +1768,42 @@ def action_record_error(root: Path, state: State, data: JsonObject) -> State:
 
 
 def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State:
-    title = str(data.get("title") or data.get("task") or "").strip()
-    if not title:
-        raise WorkflowError("enqueue_fix_task requires data.title.")
+    from mw_workers import cancel_tasks
     current = current_milestone(state)
-    next_id = f"milestone-{len(state_milestones(state)) + 1}"
-    fix_milestone = {
-        "id": next_id,
-        "status": "pending",
-        "title": title,
-        "deliverables": normalize_optional_list(data.get("deliverables")) or (current or {}).get("deliverables", ["current milestone deliverables"]),
-        "acceptance": normalize_optional_list(data.get("acceptance")) or (current or {}).get("acceptance", ["rerun failing command"]),
-        "estimated_scope": max(1, min(parse_int(data.get("estimated_scope"), 1), 5)),
-        "gate": "auto",
-        "review": "",
-    }
+    if not current:
+        raise WorkflowError("A repair requires a current milestone.")
+    title = require_text(data.get("title") or data.get("task"), "repair title")
+    origin_id = current.get("repair_of") or current["id"]
+    origin = find_milestone(state, origin_id)
+    deliverables = normalize_optional_list(data.get("deliverables")) or list(origin["deliverables"])
+    scope = normalize_optional_list(data.get("write_scope")) or list(origin.get("write_scope", origin["deliverables"]))
+    acceptance = normalize_optional_list(data.get("acceptance")) or list(origin["acceptance"])
+    if not set(deliverables) <= set(origin["deliverables"]) or not set(scope) <= set(origin.get("write_scope", origin["deliverables"])):
+        raise WorkflowError("Repair exceeds the approved scope. Review and replan the original milestone.")
+    if acceptance != list(origin["acceptance"]):
+        raise WorkflowError("Repair acceptance must preserve the original commands; changing acceptance requires replanning.")
     milestones = state_milestones(state)
-    insert_at = len(milestones)
-    for index, milestone in enumerate(milestones):
-        if milestone.get("status") != "done":
-            insert_at = index
-            break
+    next_id = f"milestone-{max(int(item['id'].split('-')[-1]) for item in milestones) + 1}"
+    fix_milestone = {
+        "id": next_id, "status": "pending", "title": title,
+        "deliverables": deliverables, "write_scope": scope,
+        "read_dependencies": list(origin.get("read_dependencies", [])),
+        "acceptance": acceptance, "estimated_scope": max(0, parse_int(data.get("estimated_scope"), len(scope))),
+        "gate": origin.get("gate", "auto"), "review": "", "repair_of": origin_id,
+    }
+    current["status"] = "pending"
+    current["review"] = "needs-fix"
+    insert_at = milestones.index(current)
     milestones.insert(insert_at, fix_milestone)
     state["milestones"] = milestones
+    confirmation = state.get("runtime_meta", {}).get("confirmations", {}).get(origin_id)
+    if confirmation:
+        state["runtime_meta"]["confirmations"][next_id] = copy.deepcopy(confirmation)
+    cancel_tasks(root, "repair queued")
     state["current_milestone_id"] = next_id
-    if data.get("source_error"):
-        state["last_error"]["stderr"] = normalize_error_text(data.get("source_error"), 500)
-        state["last_error"]["created_at"] = state["last_error"].get("created_at") or now_iso()
-    refresh_progress(state)
     set_phase(state, root, "EXECUTING", "enqueue_fix_task")
     sync_execution_lease(state)
-    append_log(root, f"enqueued fix milestone {next_id}")
+    append_log(root, f"enqueued repair {next_id} repair_of={origin_id}")
     return state
 
 
@@ -1814,7 +1845,14 @@ def write_milestone_report(root: Path, milestone: Milestone, data: JsonObject, k
     diff_stat = git_diff_stat(root.parent)
     if diff_stat:
         lines.extend(["", "## git diff --stat", "", "```text", diff_stat, "```"])
-    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    report_text = "\n".join(lines) + "\n"
+    attempt = len(list(reports.glob(f"{milestone['id']}.{kind}.*.md"))) + 1
+    attempt_path = reports / f"{milestone['id']}.{kind}.{attempt:04d}.md"
+    if attempt_path.exists():
+        raise WorkflowError(f"Evidence already exists: {attempt_path}")
+    atomic_write_text(attempt_path, report_text)
+    previous = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
+    atomic_write_text(report_path, previous + ("\n---\n\n" if previous else "") + report_text)
 
 
 def git_diff_stat(project_root: Path) -> str:
@@ -1893,7 +1931,9 @@ def parse_json_payload(raw: str) -> object:
 
 
 def seed_core_prompts(root: Path, overwrite: bool = False) -> int:
-    source_dir = skill_root() / WORKFLOW_DIR / PROMPTS_DIR
+    source_dir = skill_root() / "references" / "phases"
+    if not source_dir.exists():
+        source_dir = skill_root() / WORKFLOW_DIR / PROMPTS_DIR
     target_dir = root / PROMPTS_DIR
     if not source_dir.exists():
         return 0
@@ -1935,7 +1975,22 @@ def detect_project(project_root: Path) -> dict[str, object]:
     suffixes = {path.suffix for path in files}
     if ".py" in suffixes or {"pyproject.toml", "requirements.txt", "setup.py"} & names:
         tech_stack.append("python")
-        test_commands.append("pytest")
+        test_frameworks: set[str] = set()
+        for path in files:
+            if path.suffix != ".py" or not (path.name.startswith("test") or path.name.endswith("_test.py")):
+                continue
+            try:
+                with path.open(encoding="utf-8") as handle:
+                    header = handle.read(65536)
+            except (OSError, UnicodeDecodeError):
+                continue
+            for framework in ("unittest", "pytest"):
+                if re.search(rf"(?m)^\s*(?:import {framework}\b|from {framework}\b)", header):
+                    test_frameworks.add(framework)
+        if "unittest" in test_frameworks:
+            test_commands.append("python -m unittest discover -s tests -v" if (project_root / "tests").is_dir() else "python -m unittest discover -v")
+        if "pytest" in test_frameworks or "pytest.ini" in names:
+            test_commands.append("python -m pytest")
         if {"pyproject.toml", "setup.py"} & names:
             build_commands.append("python -m build")
         if "main.py" in names:
@@ -1973,7 +2028,7 @@ def detect_project(project_root: Path) -> dict[str, object]:
         build_commands.append("cmake -S . -B build && cmake --build build")
     if not tech_stack:
         tech_stack.append("unknown")
-    inventory = [str(path.relative_to(project_root)) for path in files] or [EMPTY_PROJECT_SENTINEL]
+    inventory = [str(path.relative_to(project_root)) for path in files]
     return {
         "root": str(project_root),
         "structure": list(inventory),
@@ -2108,7 +2163,7 @@ def read_config(root: Path) -> dict[str, Any]:
         "language": "zh",
         "plan_interview": "on",
         "plan_interview_max_rounds": "3",
-        "plan_questions_per_round": "3-5",
+        "plan_questions_per_round": "adaptive",
         "init_ignore": list(DEFAULT_INIT_IGNORE_GLOBS),
     }
     config_path = root / "config.yaml"
@@ -2158,7 +2213,7 @@ def read_config(root: Path) -> dict[str, Any]:
         elif section == "plan" and key in {"interview.max_rounds", "max_rounds"}:
             config["plan_interview_max_rounds"] = value or "3"
         elif section == "plan" and key in {"interview.questions_per_round", "questions_per_round"}:
-            config["plan_questions_per_round"] = value or "3-5"
+            config["plan_questions_per_round"] = value or "adaptive"
         elif section == "plan" and key == "max_questions":
             config["plan_questions_per_round"] = f"3-{value or '5'}"
     if not found_init_ignore:
@@ -2171,7 +2226,7 @@ def write_config(
     language: str = "zh",
     plan_interview: str = "on",
     plan_interview_max_rounds: str = "3",
-    plan_questions_per_round: str = "3-5",
+    plan_questions_per_round: str = "adaptive",
     init_ignore: list[str] | None = None,
 ) -> None:
     config_path = root / "config.yaml"
@@ -2248,7 +2303,7 @@ def write_project_brief(root: Path, state: State) -> None:
     analysis = (
         state.get("project_analysis_evidence") if isinstance(state.get("project_analysis_evidence"), dict) else {}
     )
-    pending = "（等待 `submit_brief` 全量理解结果）"
+    pending = "（未记录／不适用）" if state.get("project_brief_status") == "complete" else "（等待 `submit_brief` 理解结果）"
     lines = [
         "# 项目理解简报",
         "",
@@ -2281,7 +2336,7 @@ def write_project_brief(root: Path, state: State) -> None:
         f"### 全量文本文件清单（{len(state.get('project_inventory', []))}）",
         *(f"- `{item}`" for item in state.get("project_inventory", [])),
         "",
-        "### 三遍理解证据",
+        "### 增量理解证据",
         "",
         "```json",
         json.dumps(analysis or {"status": pending}, ensure_ascii=False, indent=2),
@@ -2340,17 +2395,21 @@ def write_project_brief(root: Path, state: State) -> None:
         lines.extend(f"- {item}" for item in state_flow)
     else:
         lines.append(f"- {pending}")
-    lines.extend(["", "## 4. 文件级账本", ""])
-    ledger = [item for item in state.get("project_file_ledger", []) if isinstance(item, dict)]
-    if ledger:
-        for item in ledger:
-            exports = ", ".join(item.get("exports", []))
-            used_by = ", ".join(item.get("used_by", []))
-            lines.append(
-                f"- `{item.get('path', '')}` — {item.get('purpose', '')}；导出：{exports}；被使用：{used_by}"
-            )
-    else:
-        lines.append(f"- {pending}")
+    lines.extend(["", "## 4. 模块覆盖与项目记录", ""])
+    brief = state.get("runtime_meta", {}).get("brief", {})
+    coverage = brief.get("coverage", {})
+    for module in coverage.get("modules", []):
+        lines.append(f"- **{module['id']}**：{module['summary']}")
+        lines.append("  文件：" + ", ".join(f"`{path}`" for path in module["files"]))
+        if module.get("boundary_files"):
+            lines.append("  边界：" + ", ".join(f"`{path}`" for path in module["boundary_files"]))
+    lines.append(f"- 未覆盖：{len(coverage.get('unread_files', [])) if coverage else '尚未登记'}")
+    for record in brief.get("records", []):
+        lines.append(f"- [{record['kind']}] {record.get('id', '')} {record['text']}")
+        if record.get("supersedes"):
+            lines.append("  supersedes: " + ", ".join(record["supersedes"]))
+    if state.get("project_file_ledger"):
+        lines.append("- 迁移前文件账本保存在 state 的历史字段中；当前使用模块覆盖。")
     lines.extend(["", "## 5. 不确定性清单", ""])
     uncertainties = [item for item in state.get("project_uncertainties", []) if isinstance(item, dict)]
     if uncertainties:
@@ -2370,26 +2429,40 @@ def write_project_brief(root: Path, state: State) -> None:
             "如果理解不准确，请指出证据；机器探测字段用 `update_project` 修正，理解正文用 `submit_brief` 重交。",
         ]
     )
-    brief_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(brief_path, "\n".join(lines) + "\n", encoding="utf-8")
 
 
 def cmd_init(args: argparse.Namespace) -> int:
     root = workflow_root(Path.cwd())
     reading_profile, profile_created = ensure_reading_profile(Path.cwd())
     if args.reset and root.exists():
-        remove_tree(root)
+        for child in root.iterdir():
+            if child.name == ".write.lock":
+                continue
+            if child.is_dir() and not child.is_symlink():
+                remove_tree(child)
+            else:
+                child.unlink()
     elif (root / "state.yaml").exists():
         state_text = (root / "state.yaml").read_text(encoding="utf-8")
         version_pattern = rf"^version:\s*{re.escape(STATE_VERSION)}\s*$"
         if not re.search(version_pattern, state_text, flags=re.MULTILINE):
-            raise SystemExit("Existing Mary Workflow state is not v2.1. Run /mw-init --reset to recreate it.")
+            raise SystemExit("Existing state needs migration. Run mary_workflow.py migrate to preview; use --apply after inspecting it.")
         (root / PROMPTS_DIR).mkdir(exist_ok=True)
         (root / ANALYSIS_DIR).mkdir(exist_ok=True)
         ensure_init_ignore_config(root)
-        refreshed = seed_core_prompts(root, overwrite=True)
+        refreshed = seed_core_prompts(root, overwrite=False)
         state = read_state(root)
         state_changed = False
         phase = str(state.get("phase") or "PLANNING")
+        if state.get("status") == "stopped" and phase in {"PLANNING", "PLANNED"}:
+            ensure_validation_settled(root)
+            if state.get("runtime_meta", {}).get("stop_pending") and not getattr(args, "workers_quiescent", False):
+                raise SystemExit("Quiesce cancelled explorers, then rerun init --workers-quiescent to resume understanding/planning.")
+            state["status"] = "planning" if phase == "PLANNING" else "ready"
+            state.setdefault("runtime_meta", {})["stop_pending"] = False
+            state["runtime_meta"]["state_revision"] = state["runtime_meta"].get("state_revision", 0) + 1
+            write_state(root, state)
         brief_status = str(state.get("project_brief_status") or "machine_detected")
         skipped_active_check = phase not in BRIEF_REFRESH_PHASES
         if brief_status == "complete" and not skipped_active_check:
@@ -2416,10 +2489,8 @@ def cmd_init(args: argparse.Namespace) -> int:
             suffix = "已按当前 init.ignore 与 .maryignore 刷新机器探测。"
         else:
             suffix = "state 保持不变。"
-        shell_setup = install_shell_integration()
         print(f"Mary Workflow 已初始化，已刷新 {refreshed} 个核心 prompt；{suffix}")
         print_status(state, read_config(root).get("language", "zh"))
-        print(shell_setup)
         print(f"论文阅读配置：{reading_profile}" + ("（已创建，可编辑）" if profile_created else ""))
         print("下一步：渲染 /mw-init 理解上下文；简报 complete 后才能运行 /mw-plan。")
         return 0
@@ -2444,14 +2515,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     refresh_progress(state)
     write_state(root, state)
     write_project_brief(root, state)
-    append_log(root, "initialized workflow v2.1")
-    shell_setup = install_shell_integration()
+    append_log(root, "initialized workflow v3.0")
+    from mw_bundle import install_bundle
+    install_bundle(root, skill_root())
 
-    print(f"已初始化 {WORKFLOW_DIR} v2.1，写入 {len(prompts)} 个 prompt。")
+    print(f"已初始化 {WORKFLOW_DIR} v3.0，写入 {len(prompts)} 个 prompt。")
     print(f"项目理解简报：{root / BRIEF_FILE}")
-    print("机器探测骨架已生成；接下来必须完成三遍全量理解并提交 submit_brief。")
+    print("机器清单已生成；按模块完成覆盖并提交 submit_brief。")
     print("后续 plan/run 默认使用中文。若希望改为 auto 或 en，请告诉我，我会写入 config.yaml 的 output.language。")
-    print(shell_setup)
     print(f"论文阅读配置：{reading_profile}（已创建，可编辑）")
     print("下一步：继续 /mw-init 理解流程；简报 complete 后再运行 /mw-plan。")
     if seeded:
@@ -2464,10 +2535,27 @@ def cmd_init(args: argparse.Namespace) -> int:
 def cmd_cycle(args: argparse.Namespace) -> int:
     root = require_root(Path.cwd())
     state = read_state(root)
+    ensure_validation_settled(root)
+    if state.get("phase") in {"EXECUTING", "REVIEWING", "DEBUGGING"} and state.get("status") != "stopped":
+        raise SystemExit("Stop the active run and quiesce its workers before archiving a cycle.")
+    if state.get("runtime_meta", {}).get("stop_pending") and not getattr(args, "workers_quiescent", False):
+        raise SystemExit("Verify stopped workers no longer write, then use cycle --workers-quiescent.")
+    if state.get("phase") in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
+        state = action_request_replan(root, state, {"feedback": "/mw-cycle requested archival of a stopped unfinished run", "workers_quiescent": True})
+        write_state(root, state)
     brief_status = str(state.get("project_brief_status") or "machine_detected")
     if brief_status not in {"complete", "refresh_required"}:
         raise SystemExit("Project brief is incomplete. Finish /mw-init and submit_brief before /mw-cycle.")
     changed_files = changed_project_files(state)
+    if state.get("runtime_meta", {}).get("legacy_brief_refresh_pending") or state.get("runtime_meta", {}).get("brief", {}).get("legacy_pending"):
+        state["project_brief_status"] = "refresh_required"
+        state["project_changed_files"] = changed_files
+        write_state(root, state)
+        write_project_brief(root, state)
+        print("历史简报的模块覆盖待核对。提交 submit_brief mode=cycle_refresh 完成覆盖后再归档。")
+        for item in changed_files:
+            print(f"- {item}")
+        return 0
     if changed_files:
         state["project_brief_status"] = "refresh_required"
         state["project_changed_files"] = changed_files
@@ -2511,6 +2599,10 @@ def cmd_cycle(args: argparse.Namespace) -> int:
         shutil.copytree(analysis_root, archive / ANALYSIS_DIR)
         shutil.rmtree(analysis_root)
     analysis_root.mkdir(exist_ok=True)
+    tasks_root = root / "tasks"
+    if tasks_root.exists():
+        shutil.copytree(tasks_root, archive / "tasks")
+        shutil.rmtree(tasks_root)
     make_readonly(archive)
 
     state["cycle"] = new_cycle
@@ -2523,11 +2615,15 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     state["completed"] = 0
     state["total"] = 0
     clear_execution_lease(state)
-    clear_run_grant(state)
     state["last_error"] = {"command": "", "stderr": "", "returncode": "", "created_at": ""}
     state["action_counts"] = {action: 0 for action in all_action_names()}
     state["rejected_actions"] = 0
     state["phase_history"] = []
+    metadata = state.setdefault("runtime_meta", {})
+    for key in ("last_task_id", "last_evidence", "milestone_tasks", "confirmations", "authorizations", "stop_pending"):
+        metadata.pop(key, None)
+    metadata["frozen_plan_digest"] = ""
+    metadata["state_revision"] = metadata.get("state_revision", 0) + 1
     sync_prompt_for_phase(state, root)
     write_state(root, state)
     write_project_brief(root, state)
@@ -2552,23 +2648,37 @@ def cmd_apply_action(args: argparse.Namespace) -> int:
     if payload.get("action") == "submit_brief":
         print((root / BRIEF_FILE).read_text(encoding="utf-8"))
         return 0
+    if payload.get("action") in {"delegate_task", "submit_worker_result", "recover_validation"}:
+        from mw_workers import list_tasks
+        task_id = state.get("runtime_meta", {}).get("last_task_id")
+        print(json.dumps(next(task for task in list_tasks(root) if task["task_id"] == task_id), ensure_ascii=False, indent=2))
+    elif payload.get("action") == "run_validation":
+        print(json.dumps(state.get("runtime_meta", {}).get("last_evidence", {}), ensure_ascii=False, indent=2))
     print_status(state, read_config(root).get("language", "zh"))
     return 0
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
+    from mw_workers import cancel_tasks
     root = require_root(Path.cwd())
-    state = read_state(root)
-    if state.get("phase") == "FINISHED":
-        raise SystemExit("Mary Workflow is already FINISHED.")
-    clear_run_grant(state)
-    if state.get("phase") in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
-        pause_execution_lease(state)
-    state["status"] = "stopped"
-    state["updated_at"] = now_iso()
-    write_state(root, state)
-    append_log(root, "stopped workflow")
+    with workflow_lock(root):
+        state = read_state(root)
+        if state.get("phase") == "FINISHED":
+            raise SystemExit("Mary Workflow is already FINISHED.")
+        cancelled = cancel_tasks(root, "user stopped workflow", include_ready=False)
+        if state.get("phase") in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
+            pause_execution_lease(state)
+        state["status"] = "stopped"
+        state["updated_at"] = now_iso()
+        metadata = state.setdefault("runtime_meta", {})
+        metadata["stop_pending"] = bool(cancelled) or bool(metadata.get("stop_pending"))
+        metadata["state_revision"] = metadata.get("state_revision", 0) + 1
+        write_state(root, state)
+        append_log(root, "stopped workflow; reject late results and quiesce host workers")
     print_status(state, read_config(root).get("language", "zh"))
+    if cancelled:
+        print("Interrupt the listed host workers, verify writes have stopped, and record workers_quiescent on resume.")
+        print(json.dumps(cancelled, ensure_ascii=False))
     return 0
 
 
@@ -2597,11 +2707,8 @@ def print_status_en(state: State, milestone: Milestone | None, milestone_id: str
     print(f"progress: {state['completed']}/{state['total']}")
     print(f"current_prompt: {state['current_prompt'] or '(none)'}")
     print(f"current_milestone: {milestone_id}")
-    print(f"lease_status: {state.get('lease_status', 'none')}")
-    print(f"lease_run_id: {state.get('lease_run_id') or '(none)'}")
-    print(f"run_grant: {state.get('run_grant_purpose') or '(none)'}")
-    if state.get("run_grant_fingerprint"):
-        print(f"run_grant_fingerprint: {state['run_grant_fingerprint']}")
+    print(f"run_status: {state.get('lease_status', 'none')}")
+    print(f"run_id: {state.get('lease_run_id') or '(none)'}")
     if milestone:
         print(f"title: {milestone['title']}")
         print(f"gate: {milestone.get('gate', 'auto')}")
@@ -2636,11 +2743,8 @@ def print_status_zh(state: State, milestone: Milestone | None, milestone_id: str
     print(f"进度: {state['completed']}/{state['total']}")
     print(f"当前 prompt: {state['current_prompt'] or '(none)'}")
     print(f"当前 milestone: {milestone_id}")
-    print(f"lease 状态: {state.get('lease_status', 'none')}")
-    print(f"lease run id: {state.get('lease_run_id') or '(none)'}")
-    print(f"run grant: {state.get('run_grant_purpose') or '(none)'}")
-    if state.get("run_grant_fingerprint"):
-        print(f"run grant 指纹: {state['run_grant_fingerprint']}")
+    print(f"运行状态: {state.get('lease_status', 'none')}")
+    print(f"run id: {state.get('lease_run_id') or '(none)'}")
     if milestone:
         print(f"标题: {milestone['title']}")
         print(f"gate: {milestone.get('gate', 'auto')}")
@@ -2659,17 +2763,49 @@ def print_status_zh(state: State, milestone: Milestone | None, milestone_id: str
             print(f"  - {entry}")
 
 
+def ensure_validation_settled(root: Path) -> None:
+    from mw_workers import list_tasks
+    if any(task.get("active_validation") for task in list_tasks(root)):
+        raise WorkflowError("A local validation command is still active or shutting down; wait for its result. If its coordinator crashed, use recover_validation with task_id and attempt_id to verify termination before retrying.")
+
+
+def cmd_tasks(args: argparse.Namespace) -> int:
+    from mw_workers import list_tasks
+    print(json.dumps(list_tasks(require_root(Path.cwd())), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_maintenance(args: argparse.Namespace) -> int:
+    from mw_bundle import apply_migration, apply_upgrade, preview_migration, preview_upgrade
+    root = require_root(Path.cwd())
+    if args.command == "migrate":
+        result = apply_migration(root, skill_root()) if args.apply else preview_migration(root)
+    else:
+        result = apply_upgrade(root, skill_root(), workers_quiescent=args.workers_quiescent) if args.apply else preview_upgrade(root, skill_root())
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Mary Workflow v2.1 runtime helper")
+    parser = argparse.ArgumentParser(description="Mary Workflow v3.0 model-independent runtime helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init", help="create or reset .mary-workflow")
     init_parser.add_argument("--reset", action="store_true", help="remove and recreate .mary-workflow")
     init_parser.add_argument("--with-examples", action="store_true", help="create two starter prompts")
+    init_parser.add_argument("--workers-quiescent", action="store_true", help="resume paused understanding after stopping its explorers")
     init_parser.set_defaults(func=cmd_init)
 
     subparsers.add_parser("status", help="show status without mutating state").set_defaults(func=cmd_status)
-    subparsers.add_parser("cycle", help="archive current cycle and reset active state").set_defaults(func=cmd_cycle)
+    cycle_parser = subparsers.add_parser("cycle", help="archive current cycle and reset active state")
+    cycle_parser.add_argument("--workers-quiescent", action="store_true", help="attest stopped workers no longer write")
+    cycle_parser.set_defaults(func=cmd_cycle)
+    for operation in ("migrate", "upgrade"):
+        maintenance = subparsers.add_parser(operation, help=f"preview {operation}; --apply backs up before changes")
+        maintenance.add_argument("--apply", action="store_true")
+        maintenance.add_argument("--workers-quiescent", action="store_true")
+        maintenance.set_defaults(func=cmd_maintenance)
+    subparsers.add_parser("tasks", help="show persisted worker tasks as JSON").set_defaults(func=cmd_tasks)
 
     action_parser = subparsers.add_parser("apply-action", help="apply AI JSON action to state")
     action_source = action_parser.add_mutually_exclusive_group()
@@ -2682,9 +2818,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    return args.func(args)
+    from mw_bundle import BundleError, forward_to_pinned
+    try:
+        forwarded = forward_to_pinned(workflow_root(Path.cwd()), "mary_workflow.py", argv)
+        if forwarded is not None:
+            return forwarded
+        args = build_parser().parse_args(argv)
+        if args.command in {"init", "cycle"}:
+            with workflow_lock(workflow_root(Path.cwd())):
+                return args.func(args)
+        return args.func(args)
+    except (BundleError, ValueError, WorkflowError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":

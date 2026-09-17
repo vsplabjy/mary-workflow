@@ -9,10 +9,59 @@ from pathlib import Path
 import re
 import secrets
 import stat
+import threading
+from contextlib import contextmanager
 from typing import Any
 
 
 JsonObject = dict[str, Any]
+
+_LOCKS: dict[str, threading.RLock] = {}
+_LOCK_DEPTH = threading.local()
+
+
+@contextmanager
+def workflow_lock(root: Path):
+    """Serialize cooperating writers, including nested calls in one thread.
+
+    The lock file is not an execution lease: the OS releases it on process exit.
+    Read-only commands do not acquire it. Long subprocesses must run outside it.
+    """
+    root = root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    key = str(root)
+    lock = _LOCKS.setdefault(key, threading.RLock())
+    with lock:
+        depths = getattr(_LOCK_DEPTH, "depths", {})
+        _LOCK_DEPTH.depths = depths
+        if depths.get(key, 0):
+            depths[key] += 1
+            try:
+                yield
+            finally:
+                depths[key] -= 1
+            return
+        with (root / ".write.lock").open("a+b") as handle:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0)
+                handle.write(b"\0")
+                handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            depths[key] = 1
+            try:
+                yield
+            finally:
+                depths.pop(key, None)
+                if os.name == "nt":
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 class EnvelopeError(ValueError):

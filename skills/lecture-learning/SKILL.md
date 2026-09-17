@@ -46,7 +46,7 @@ Sync useful English terms to English learning. Put exam points and common mistak
 
 ## Trigger and State Discipline
 
-For `/mw-learn`, treat one Lecture or one bounded topic as one Mary Workflow milestone. The command must preserve the normal plan interview, run authorization, execution lease, review, stop/resume, and cycle rules. Use relative local source paths as milestone deliverables; do not invent external ids/URLs, external synchronization results, or code changes for content work.
+For `/mw-learn`, treat one Lecture or one bounded topic as one Mary Workflow milestone. The command must preserve the normal plan interview, explicit run authorization bound to the frozen plan, recorded worker evidence, independent review, stop/resume, and cycle rules. Use relative local source paths as milestone deliverables; do not invent external ids/URLs, external synchronization results, or code changes for content work.
 
 If the source note already exists, update it in place. If a duplicate local file was created, merge back into the canonical note, remove the duplicate only after confirming no unique content is lost, and repair local Course Hub links.
 
@@ -58,3 +58,7 @@ If the source note already exists, update it in place. If a duplicate local file
 - Terminology, Greek letters, formulas, units, and derivations follow slides.
 - Every recording-only addition has a `🎙` marker; uncertainty has `⚠️存疑`.
 - Summary contains exam points, mistakes, deadlines, and one next action.
+
+## Coordination
+
+Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.

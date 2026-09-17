@@ -1,0 +1,18 @@
+# Mary Execute Phase
+
+The main agent is the coordinator. Read current state; require `EXECUTING` and an active run bound to the frozen plan. At milestone boundaries verify state, task identity, deliverables, and changed inputs, then reuse relevant working context. Follow the subagent and state contracts in this pinned bundle.
+
+1. Confirm the current milestone and scope. A `gate: confirm` requires a recorded applicable user confirmation through `confirm_milestone`; do not ask again when that gate was already authorized.
+2. Dispatch concrete independent tasks through `delegate_task` when the host supports workers. Supply task/attempt identity, frozen plan revision, objective, deliverables, allowed write scope, original acceptance, baseline, relevant context, restrictions, and result format. The main agent owns state; workers write only assigned product paths and task scratch.
+3. Keep milestones sequential. Parallelize tasks only when their dependencies, files, generated outputs, interfaces, and runtime resources permit it. Do not create busywork merely to use workers. Use the documented single-agent compatibility mode when workers are unavailable and disclose its review limits.
+4. Stabilize all sibling implementation writes before validation or result submission. Capture actual validation through `run_validation`; the main agent runs this action against the frozen acceptance command and records its returned evidence ID. Workers return `ready_for_review`, not workflow completion; the main agent records their envelope through `submit_worker_result`. Skipped checks need reasons and cannot satisfy required acceptance. Preserve failed attempts and raw evidence.
+5. Check artifact versions, actual changes including staged/untracked/deleted files against the dispatch baseline, scope, task identity, and evidence freshness. Reject stale, duplicated, stopped, or out-of-scope results. Do not weaken tests or acceptance to obtain a pass; legitimate test changes must be in scope and independently reviewed.
+6. Apply `mark_task_done` with the current milestone and eligible task IDs. This moves to `REVIEWING`; it does not mean independent acceptance already occurred.
+
+```json
+{"action":"mark_task_done","data":{"id":"milestone-1","task_ids":["<eligible implementation task id>"]}}
+```
+
+Failure uses `record_error` with the actual command, error output, and return code. Preserve environment/input blockers without claiming success or retrying indefinitely. Product repair runs only as authorized execution work; a scope change uses `request_replan` with concrete feedback. After completion re-render `/mw-run` and continue into independent review.
+
+Keep phase-local progress visible and report verification limits in the configured language. On stop, cease dispatch/acceptance, notify or interrupt workers, persist pause, and wait for writes to settle. Never delegate authorization, final acceptance, workflow state, Git writes, or external mutations. Inherit host configuration for every agent.

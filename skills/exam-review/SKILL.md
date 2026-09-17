@@ -58,4 +58,8 @@ Default to two sets: A is consolidation, B is advanced. Source priority is prior
 
 ## Mary Workflow Contract
 
-For `/mw-exam`, one chapter, one whole-exam package, or one mock-exam package is a bounded Mary Workflow milestone. Preserve plan interview, explicit assumptions, run grant, lease, review evidence, stop/resume, debug, and cycle archive. A review deliverable is a relative local source note, local schedule record, or local Mistake Log record by default. Do not mark done until local placement, scope, labels, self-test, and evidence are checked.
+For `/mw-exam`, one chapter, one whole-exam package, or one mock-exam package is a bounded Mary Workflow milestone. Preserve plan interview, explicit assumptions, explicit run authorization bound to the frozen plan, worker and review evidence, stop/resume, debug, and cycle archive. A review deliverable is a relative local source note, local schedule record, or local Mistake Log record by default. Do not mark done until local placement, scope, labels, self-test, and evidence are checked.
+
+## Coordination
+
+Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.

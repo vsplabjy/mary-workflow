@@ -380,16 +380,11 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         manifest = json.loads((REPO_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
 
         self.assertIn("# /mw-paper", command)
-        self.assertIn("For `read <source>`", command)
-        self.assertIn("For `summarize [paper-id]`", command)
-        self.assertIn("summary-ledger.json", command)
-        self.assertIn("coherent article", command)
-        self.assertIn("For `slides [paper-id]`", command)
-        self.assertIn("complete-slides", command)
-        self.assertIn("For `quiz [paper-id]`", command)
-        self.assertIn("partially-supported", command)
-        self.assertIn("append-quiz-session", command)
-        self.assertIn("complete-quiz", command)
+        self.assertIn("skills/paper/SKILL.md", command)
+        for stage in ("read <source>", "summarize [paper-id]", "slides [paper-id]", "quiz [paper-id]"):
+            self.assertIn("/mw-paper " + stage, skill)
+        for check in ("complete-slides", "partially-supported", "append-quiz-session", "complete-quiz"):
+            self.assertIn(check, skill)
         self.assertIn("name: paper", skill)
         self.assertIn("blog-style article", skill)
         self.assertIn("summary-ledger.json", skill)
@@ -403,7 +398,7 @@ class PaperCliAndSurfaceTests(unittest.TestCase):
         self.assertIn("paper_state_schema", contract)
         self.assertIn("slides.tex", contract)
         self.assertIn("quiz-log.md", contract)
-        self.assertTrue(manifest["version"].startswith("2.2.0-alpha.7"))
+        self.assertEqual(manifest["version"], "3.0.0")
 
     def test_mw_init_reset_does_not_delete_paper_workspaces(self) -> None:
         self.run_cli(

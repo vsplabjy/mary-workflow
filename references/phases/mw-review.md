@@ -1,0 +1,24 @@
+# Mary Review Phase
+
+The main agent coordinates acceptance; a separate verifier checks the work. Verify `REVIEWING`, the current milestone, active run, frozen plan revision, execution records, and artifact baseline. Follow the pinned subagent and state contracts.
+
+Give the verifier the original requirement, exact acceptance, changed artifacts and relevant dependencies, and recorded validation. The implementer's narration may help navigation but is not evidence of correctness. Do not prefill the verifier's verdict. Use an agent distinct from the implementer when supported, inheriting the host settings. If only compatibility mode exists, explicitly record that independent-agent isolation was unavailable and submit `review_mode: same_agent` in the verifier result. The host selects `execution_mode: single_agent` at start; a review cannot change this mode to bypass its identity check.
+
+Protect product and workflow control files. A verifier may run appropriate validation with isolated temporary outputs; removing Edit/Write while allowing unrestricted shell is not enforced read-only access. Verify actual artifact content, baseline-relative changes including staged/untracked files, validation freshness, and applicable source/render/read-back rules. Review scope must include enough surrounding code or source evidence to assess correctness.
+
+Submit the verifier result with `submit_worker_result`. Keep execution, review, and retry evidence separately. The main agent checks the verifier's evidence and decides whether to accept, return to legal planning, or record an error. `update_state` and product edits are forbidden in `REVIEWING`; diagnosis/repair follows the legal state route.
+
+For acceptance use the current verifier task ID:
+
+```json
+{
+  "action":"set_phase",
+  "data":{
+    "phase":"EXECUTING",
+    "decision":"accepted-next",
+    "verifier_task_id":"<accepted verifier task id>"
+  }
+}
+```
+
+Use `FINISHED` only after all milestones and required review are accepted. Failed acceptance uses `record_error`, preserving the actual command/output. A need to revise scope uses the state contract's legal return to `PLANNING`, not an invented `reopen_plan` in this phase. Continue the automatic run for the next milestone when allowed. Report findings and evidence, not an unverified claim of success.

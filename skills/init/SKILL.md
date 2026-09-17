@@ -1,31 +1,16 @@
 ---
 name: init
-description: Initialize or reset Mary Workflow v2.1 in the current project. Use when the user invokes /mw-init or asks to initialize Mary workflow.
+description: Initialize or refresh a model-independent Mary Workflow project with inventory coverage and a persisted project brief. Use for /mw-init.
 ---
 
 # Mary Workflow: Init
 
-Initialize the project-local `.mary-workflow/` workspace.
+Work from the project root. Run `python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py init`, then render `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-init`. Follow the pinned init phase and [memory contract](../../references/memory-contract.md).
 
-## Procedure
+Use direct reading for small projects, module summaries for medium projects, and independent explorer shards for large projects when available. Retain a machine inventory and fingerprints; require computed coverage of the relevant inventory, not prose fields for every file. Include boundaries, uncertainties, and honest validation evidence. Workers write task scratch; the main agent submits the brief.
 
-1. Work from the user's current project root.
-2. Run:
+Apply `config.yaml` `init.ignore` and project-root `.maryignore`. Run only appropriate authorized validation; mark unavailable checks skipped with a specific reason. Present the resulting project understanding and unresolved points with a link to the complete brief. Apply supported corrections through `update_project` or `submit_brief`.
 
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py init
-   ```
+Existing projects preserve state and their pinned runtime/prompt bundle. If migration is needed, preview `mary_workflow.py migrate`; apply `migrate --apply` only within the user's upgrade authorization. Do not use reset for migration. `init --reset` is only for an explicit user request to delete and recreate workflow state. During active execution, report deferred brief refresh and continue the existing lifecycle.
 
-3. If the user passes `--reset`, run `init --reset`.
-4. Render init understanding context:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-init
-   ```
-
-5. Follow `mw-init.md`: complete the full three-pass read, execute safe build/test/run validation, write the full envelope to `.mary-workflow/analysis/submit-brief.json`, and apply the machine-validated `submit_brief` with `--file`.
-6. Present the entire `.mary-workflow/project-brief.md` to the user, then ask for factual corrections and `zh`/`auto`/`en` preference.
-7. Apply `config.yaml` `init.ignore` and project-root `.maryignore` before treating the remaining inventory as exhaustive.
-8. On an existing v2.1 project, preserve state and refresh prompts. Detect drift only in `PLANNING`, `PLANNED`, or `FINISHED`; in active execution phases report that the brief check was skipped. Earlier contracts require `--reset`.
-9. Seed `.mary-research/reading-profile.md` from the versioned workflow default `defaults/reading-profile.md` only when it is absent. The project copy is a visible, user-editable Markdown file for paper-reading language, prerequisite, explanation-depth, evidence, and open-question preferences; preserve it on later init runs. It is intentionally Git-trackable while other `.mary-research/` artifacts stay ignored.
-10. Do not hand off to `/mw-plan` until `project_brief_status: complete`.
+Seed `.mary-research/reading-profile.md` from `defaults/reading-profile.md` only when absent. Preserve this visible, user-editable, Git-trackable reading preference file on later init runs. Paper state remains independent. Init does not install shell commands or modify host settings. Begin planning only after the project brief is complete.

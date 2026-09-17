@@ -1,0 +1,15 @@
+# Mary Plan Phase
+
+Read current state and the project brief. Planning requires a complete brief and `PLANNING`, or a revision/read-only entry from `PLANNED`. Reuse prior context, actual answers, and evidence. A disputed brief is corrected through the appropriate state action after checking sources.
+
+`/mw-plan` does not execute product work. Do not edit product code. Do not run milestone acceptance commands. Do not render `/mw-run` context. Do not emit `start_execution`. An explicit `/mw-run` confirms and starts the frozen plan; discussion agreement alone is not an execution signal.
+
+In `PLANNED`, user-requested changes use `reopen_plan` with actual feedback. Otherwise show the frozen plan and available start action without mutating it.
+
+Split by dependencies and independently verifiable results. Every milestone includes `id`, `title`, file-level `deliverables`, executable `acceptance`, reporting-only `estimated_scope`, and `gate: auto|confirm`. There is no fixed file count or milestone cap. Preserve scene-specific source, rendering, or external read-back checks alongside executable checks. Do not invent executable proof of semantic correctness.
+
+Ask only material unresolved questions. Structured questions are optional; plain text works. Zero extra rounds is valid when the request and existing context are sufficient. Record real answers, meaningful assumptions, and their sources. Silence, timeout, default selections, or acknowledgment of understanding are not authorization. Do not manufacture questions or require confirmation of routine implementation choices already within scope.
+
+Use `update_interview` for actual questions/answers and the documented no-question planning path when information is sufficient; see the state contract for payloads. If genuinely required answers are absent, preserve the pending question and do independent read-only work where useful. Do not invent answers. `update_state` freezes the inspectable plan in `PLANNED` once its scope and acceptance are grounded. Display the final plan and material assumptions; a planning-only task ends here.
+
+Natural-language output and logs follow the configured language. Machine fields remain English. A native TodoList may mirror the plan but cannot rewrite its authority.

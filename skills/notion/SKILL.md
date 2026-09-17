@@ -82,3 +82,7 @@ slides, screenshots, study notes, deadlines, or another matching specialist prof
 Do not declare completion until the read-back proves that the requested content and
 properties exist, protected structures remain, and the applicable checklist in
 `references/notion-page-craft.md` passes.
+
+## Coordination
+
+Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.

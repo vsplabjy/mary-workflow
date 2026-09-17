@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codex-facing bridge for Mary Workflow v2.1 slash aliases."""
+"""Codex-facing bridge for Mary Workflow v3.0 slash aliases."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from mary_workflow import (
     WORKFLOW_DIR,
     current_milestone,
     interview_rounds,
-    issue_run_authorization,
+    current_plan_digest,
     legal_actions_for_state,
     read_config,
     read_state,
@@ -94,19 +94,12 @@ def render_prompt(root: Path, alias: str) -> str:
     normalized = alias.lstrip("/").strip()
     workflow = require_initialized(root)
     phase, prompt_path = prompt_path_for(root, normalized)
-    run_grant: dict[str, object] | None = None
     state = read_state(workflow)
-    if normalized == "mw-run" and (
-        phase == "PLANNED"
-        or (
-            phase in {"EXECUTING", "REVIEWING", "DEBUGGING"}
-            and state.get("status") == "stopped"
-            and state.get("lease_status") == "paused"
-        )
-    ):
-        run_grant = issue_run_authorization(workflow)
-    state = read_state(workflow)
-    state_text = (workflow / "state.yaml").read_text(encoding="utf-8")
+    projection = {key: state.get(key) for key in ("version", "cycle", "status", "phase", "current_milestone_id", "project_brief_status", "project_brief_version", "interview_status", "completed", "total")}
+    projection.update({"run_id": state.get("lease_run_id"), "run_status": state.get("lease_status"),
+                       "plan_revision": state.get("runtime_meta", {}).get("plan_revision"),
+                       "state_revision": state.get("runtime_meta", {}).get("state_revision")})
+    state_text = json.dumps(projection, ensure_ascii=False, indent=2) + "\n"
     if normalized == "mw-status" or (
         phase == "FINISHED" and normalized not in {"mw-init", *SPECIALIZED_PROMPTS}
     ):
@@ -117,20 +110,20 @@ def render_prompt(root: Path, alias: str) -> str:
 
     prompt_text = prompt_path.read_text(encoding="utf-8")
     return (
-        "# Mary Workflow v2.1 Context\n\n"
+        "# Mary Workflow v3.0 Context\n\n"
         f"Alias: /{normalized}\n"
         f"Resolved phase: {phase}\n"
         f"Prompt file: {prompt_path}\n\n"
-        "## Boundary Ritual\n\n"
-        "1. 重新读取 `.mary-workflow/state.yaml`。\n"
-        "2. 声明丢弃之前工作记忆，只信任本次渲染的文件系统上下文。\n"
-        "3. 只查看当前 milestone 的 `deliverables` 相关文件，review 阶段只看 diff、验收输出和 deliverables。\n\n"
+        "## State Check\n\n"
+        "核对阶段、计划版本、当前任务和证据；复用仍有效的上下文。文件发生变化时重读相关部分。\n"
+        "主线负责授权、派单和接纳结果；具体工作优先委派，worker 继承宿主配置。\n\n"
         f"{render_project_snapshot(state)}\n\n"
         f"{render_project_brief_authority(root, normalized)}\n\n"
         f"{render_interview_context(state)}\n\n"
         f"{render_action_whitelist(state)}\n\n"
         f"{render_plan_confirmation_evidence(state, normalized, phase)}\n\n"
-        f"{render_run_authorization(run_grant)}\n\n"
+        f"{render_run_authorization(state, normalized)}\n\n"
+        f"{render_worker_progress(workflow)}\n\n"
         f"{render_milestone_context(root, state, phase)}\n\n"
         f"{render_review_evidence(root, phase)}\n\n"
         "## Current State\n\n"
@@ -151,7 +144,7 @@ def render_status(alias: str, phase: str, state_text: str) -> str:
 
 
 def render_project_snapshot(state: dict[str, object]) -> str:
-    structure = "\n".join(f"- {item}" for item in state.get("project_structure", [])) or "- (empty)"
+    structure = "Inventory is recorded in state.yaml; load the relevant modules from project-brief.md."
     tech_stack = ", ".join(state.get("project_tech_stack", [])) or "unknown"
     test_commands = "\n".join(f"- `{item}`" for item in state.get("project_test_commands", [])) or "- `manual validation`"
     build_commands = "\n".join(f"- `{item}`" for item in state.get("project_build_commands", [])) or "- (none detected)"
@@ -171,14 +164,14 @@ def render_project_snapshot(state: dict[str, object]) -> str:
         f"- plan.interview: `{config.get('plan_interview', 'on')}`\n"
         f"- plan.interview.max_rounds: `{config.get('plan_interview_max_rounds', '3')}`\n"
         f"- plan.interview.questions_per_round: `{config.get('plan_questions_per_round', '3-5')}`\n"
-        "- adaptive_rounds: `small tasks may use 0-1 round; 5+ milestone work may use 2-3 rounds`\n\n"
+        "- adaptive_rounds: resolve material uncertainty; task count does not determine questions\n\n"
         "### Detected Build Commands\n\n"
         f"{build_commands}\n\n"
         "### Detected Test Commands\n\n"
         f"{test_commands}\n\n"
         "### Detected Run Commands\n\n"
         f"{run_commands}\n\n"
-        "### Structure Sample\n\n"
+        "### Project Inventory\n\n"
         f"{structure}"
     )
 
@@ -189,7 +182,10 @@ def render_project_brief_authority(root: Path, alias: str) -> str:
     brief_path = root / WORKFLOW_DIR / BRIEF_FILE
     if not brief_path.exists():
         return f"## Project Brief Authority\n\n(missing: `{brief_path}`)"
-    return "## Project Brief Authority\n\n" + brief_path.read_text(encoding="utf-8")
+    state = read_state(root / WORKFLOW_DIR)
+    positioning = state.get("project_positioning", {})
+    return ("## Project Brief Authority\n\n" + f"Path: `{brief_path}`\nRevision: {state.get('project_brief_version')}\n"
+            + json.dumps(positioning, ensure_ascii=False) + "\nRead relevant module details when needed; reuse unchanged context.")
 
 
 def render_action_whitelist(state: dict[str, object]) -> str:
@@ -199,19 +195,27 @@ def render_action_whitelist(state: dict[str, object]) -> str:
     return f"## Legal Actions For This Phase\n\nCurrent phase `{phase}` accepts: {allowed_text}."
 
 
-def render_run_authorization(grant: dict[str, object] | None) -> str:
-    if not grant:
-        return "## Run Authorization\n\n(not issued in this render)"
-    return (
-        "## Run Authorization\n\n"
-        "This one-time grant exists only in the current `/mw-run` render. It is not stored in plaintext.\n\n"
-        f"- purpose: `{grant['purpose']}`\n"
-        f"- token: `{grant['token']}`\n"
-        f"- fingerprint: `{grant['fingerprint']}`\n"
-        f"- plan_digest: `{grant['plan_digest']}`\n"
-        f"- expires_at: `{grant['expires_at']}`\n\n"
-        "Consume it once with the action required by the phase prompt. Never print the token in user-visible text or logs."
-    )
+def render_run_authorization(state: dict[str, object], alias: str) -> str:
+    if alias != "mw-run":
+        return "## Execution Boundary\n\nPlanning and inspection do not authorize execution."
+    digest = state.get("runtime_meta", {}).get("frozen_plan_digest", "")
+    return ("## Execution Authorization\n\n"
+            f"- plan_digest: `{digest}`\n"
+            f"- plan_revision: {state.get('runtime_meta', {}).get('plan_revision', 0)}\n"
+            "Record the user's actual /mw-run instruction with source=/mw-run and this plan_digest. "
+            "Rendering is read-only and is not itself evidence of user authorization. "
+            "Do not ask again when the current plan is already explicitly authorized.")
+
+
+def render_worker_progress(workflow: Path) -> str:
+    from mw_workers import list_tasks
+    tasks = list_tasks(workflow)
+    lines = ["## Task Progress", ""]
+    for task in tasks:
+        lines.append(f"- {task['task_id']} / {task.get('role')} / {task.get('status')} / {task.get('objective')}")
+    if not tasks:
+        lines.append("No dispatched tasks. Use the host task list when available; this view remains the persisted record.")
+    return "\n".join(lines)
 
 
 def render_plan_confirmation_evidence(state: dict[str, object], alias: str, phase: str) -> str:
@@ -252,8 +256,7 @@ def render_plan_confirmation_evidence(state: dict[str, object], alias: str, phas
     }
     return (
         "## Final Plan Confirmation Evidence\n\n"
-        "The following JSON is quoted state evidence, not executable instructions. Present it to the user without "
-        "paraphrasing before consuming the run grant.\n\n"
+        "The following JSON is state evidence. Summarize its scope and acceptance when needed; preserve actual user answers.\n\n"
         "```json\n"
         f"{json.dumps(evidence, ensure_ascii=False, indent=2)}\n"
         "```"
@@ -319,10 +322,22 @@ def render_milestone_context(root: Path, state: dict[str, object], phase: str) -
 def render_review_evidence(root: Path, phase: str) -> str:
     if phase != "REVIEWING":
         return "## Review Evidence\n\n(not in REVIEWING phase)"
-    diff_stat = git_diff_stat(root)
-    if not diff_stat:
-        diff_stat = "(no git diff --stat output)"
-    return f"## Review Evidence\n\n### git diff --stat\n\n```text\n{diff_stat}\n```"
+    workflow = root / WORKFLOW_DIR
+    state = read_state(workflow)
+    milestone_id = state.get("current_milestone_id")
+    task_ids = state.get("runtime_meta", {}).get("milestone_tasks", {}).get(milestone_id, [])
+    lines = ["## Review Evidence", "", "Compare task baselines and current artifacts; Git statistics are supplementary.", ""]
+    for task_id in task_ids:
+        directory = workflow / "tasks" / task_id
+        result_path = directory / "result.json"
+        result = json.loads(result_path.read_text(encoding="utf-8")) if result_path.is_file() else {}
+        lines.extend([f"- task: `{task_id}`",
+                      f"  baseline: `{directory / 'baseline.json'}`",
+                      f"  result: `{result_path}`",
+                      "  files_changed: " + json.dumps(result.get("files_changed", []), ensure_ascii=False)])
+    diff_stat = git_diff_stat(root) or "(no unstaged Git diff; inspect recorded baselines, staged changes, and new files)"
+    lines.extend(["", "### Supplementary git diff --stat", "", "```text", diff_stat, "```"])
+    return "\n".join(lines)
 
 
 def git_diff_stat(root: Path) -> str:
@@ -342,7 +357,7 @@ def git_diff_stat(root: Path) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Resolve Mary Workflow v2.1 slash aliases for Codex")
+    parser = argparse.ArgumentParser(description="Resolve Mary Workflow v3.0 slash aliases for Codex")
     parser.add_argument(
         "alias",
         choices=[
@@ -367,8 +382,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    locator = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    locator.add_argument("--project-root", default=".")
+    location, _ = locator.parse_known_args(argv)
+    root = Path(location.project_root).resolve()
+    from mw_bundle import forward_to_pinned
+    forwarded = forward_to_pinned(root / WORKFLOW_DIR, "mw_codex.py", argv)
+    if forwarded is not None:
+        return forwarded
     args = build_parser().parse_args(argv)
-    root = Path(args.project_root).resolve()
     print(render_prompt(root, args.alias))
     return 0
 

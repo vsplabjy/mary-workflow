@@ -1,5 +1,21 @@
 # Mary Workflow Development Log
 
+## 2026-09-17 — Model-independent workflow 3.0
+
+- Replaced token transport with a frozen plan digest and recorded explicit start/resume; retained run identity, writer locking, state revisions, scope-preserving repairs and legal replanning.
+- Added model-independent worker dispatch, real command evidence, independent review, scope/baseline checks, interrupted-run recovery and honest single-agent fallback. Host configuration is inherited; the old model-setting command is retired without editing user settings.
+- Replaced forced memory discard and per-file prose with module coverage, incremental brief refresh and durable superseding records. Removed artificial milestone/file/interview quotas.
+- Made commands and phase prompts generated surfaces; pinned runtime and instructions together, with explicit preview/backup/migration/upgrade. Added optional read-only host hooks; paper and Notion states remain independent.
+- Kept execution/review attempts and error output as separate evidence. Added regressions for review pauses, stopped understanding, confirmation inheritance, stale revisions, parallel writers, cycle refresh routing and crashed validation receipts.
+
+Validation:
+
+- Baseline before implementation: 155 tests passed.
+- Final `python -m unittest discover -s tests -v`: 257 tests passed in 37.470 s.
+- `python scripts/mw_surfaces.py --check`, compilation of every Python script, validation of 14 skills, and `git diff --check`: passed.
+- Native-agent forward test in an isolated parser repository: plan-only request stayed PLANNED; explicit `/mw-run` delegated implementation and separate verification, executed 6 unittest tests with exit 0, and reached FINISHED 1/1 with no rejected actions. No model setting was changed. That project retained its intermediate pinned bundle while the source evolved; friction found in the forward test was covered by subsequent source regressions.
+- External-service writes, global hook registration and cross-provider/model benchmark runs were not performed. Optional hooks remain generated, opt-in configuration; portability is checked through explicit capabilities and the single-agent fallback.
+
 本日志按 git 提交顺序记录 Mary Workflow 的开发过程。时间使用仓库提交时间，时区为 `+08:00`。
 
 ## 2026-08-12 P5.1 paper figure embedding and closing-page hardening
