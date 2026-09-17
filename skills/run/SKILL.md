@@ -1,27 +1,21 @@
 ---
 name: run
-description: Run or resume Mary Workflow automatic milestone execution. Use when the user invokes /mw-run.
+description: Run or resume Mary Workflow by coordinating workers, recorded validation, and independent review. Use for /mw-run.
 ---
 
 # Mary Workflow: Run
 
-Run the current Mary Workflow phase. This replaces `/mw-next`, `/mw-resume`, and `/mw-review`.
+Run `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-run` from the project root. Use its pinned phase together with [subagent contract](../../references/subagent-contract.md), [state contract](../../references/state-contract.md), and [host contract](../../references/host-contract.md).
 
-## Procedure
+- `PLANNED`: inspect the frozen plan and evidence. Explicit `/mw-run` is its start signal; apply `start_execution` with the displayed plan digest and actual user confirmation, without another ritual approval. If the user disputes the plan, return to planning.
+- Stopped active phase: reconcile residual worker changes, then `resume_execution` with the current digest and actual resume instruction. Preserve phase, run identity, and pending work.
+- `EXECUTING`: dispatch bounded work with `delegate_task`, capture actual acceptance with `run_validation`, and record `submit_worker_result`. Check task identity, baseline changes, scope, artifacts, and required evidence before `mark_task_done` with the accepted task IDs. The main agent coordinates; workers implement. Do not redo the worker's entire task simply to claim oversight.
+- `REVIEWING`: use a separate verifier with the original requirements and actual artifacts. Submit its evidence; only the main agent accepts with `set_phase`. Preserve execution and review records separately. Failed validation goes through `record_error`.
+- `DEBUGGING`: diagnose and `enqueue_fix_task`; product repair runs only after returning to `EXECUTING`.
+- `PLANNING`: complete the planning contract before execution.
 
-1. Work from the user's current project root.
-2. Render current run context:
+Milestones are sequential. Parallelize independent tasks within the current milestone or initialization only after checking shared files, interfaces, resources, generated outputs, and dependencies. Use isolation when appropriate. A stopped, outdated, or duplicate worker result cannot advance the plan.
 
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-run
-   ```
+At a `gate: confirm`, use an already applicable explicit confirmation or obtain the required user decision, then record `confirm_milestone` before dispatch. Keep task progress visible. Continue until finished, stopped, materially blocked, or awaiting a genuinely required user answer. On stop, cancel/intercept workers and wait for writes to stabilize before finalizing pause. Never delegate workflow state, authorization decisions, Git writes, or external mutations.
 
-3. Treat the rendered output as active instruction context.
-4. Execute the loaded phase:
-   - `PLANNED`: present `Final Plan Confirmation Evidence` exactly as recorded, then copy the plaintext token from `Run Authorization`, apply `start_execution`, rerender, and continue. This confirms the inspected plan and acquires the run lease.
-   - stopped active phase: apply `resume_execution` with the rendered resume token, then rerender the preserved phase.
-   - `EXECUTING`: implement current milestone and apply `mark_task_done` or `record_error`.
-   - `REVIEWING`: review diff and acceptance evidence, then apply `set_phase` or `record_error`.
-   - `DEBUGGING`: enqueue a fix milestone with `enqueue_fix_task`.
-   - `PLANNING`: stop and require completion of `/mw-plan`; do not bypass the interview.
-5. Continue until `FINISHED`, blocked, stopped, or a `gate: confirm` milestone requires the user.
+If workers are unavailable, follow the explicit compatibility route in the contracts: start with `execution_mode: single_agent`, perform a separate review pass, and submit its `review_mode: same_agent`. Report the lack of independent-agent review; never pretend a second agent ran. In every route, inherit host configuration without selecting a model or reasoning level.

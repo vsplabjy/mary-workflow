@@ -20,7 +20,7 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - `slides` depends on `summary`;
    - `quiz` depends on `read` and `summary`, not `slides`.
 7. Let source changes and stage resets mark already-started downstream stages `stale`; leave never-started stages `pending`.
-8. Do not run milestone grants or leases. Paper state is independent from `.mary-workflow/` and survives `/mw-init --reset`.
+8. Do not require milestone run authorization for paper work. Paper state is independent from `.mary-workflow/` and survives workflow migration and cycle archive.
 9. Before producing learner-facing notes, read `references/paper-reading-contract.md` and `.mary-research/reading-profile.md` (create the profile through `/mw-init` or `ensure_reading_profile` if absent).
 10. For `/mw-paper read <source>`:
    - accept a paper folder as well as an arXiv URL, HTML, or PDF; run `prepare-read --source <source>` (and `--paper-id` when needed);
@@ -70,3 +70,7 @@ Manage independent paper states, close reading, grounded summaries, research sli
    - after the user ends Q&A, run `lint-quiz` and `complete-quiz` once at least one Method anchor is covered plus one scientific Uxx when that catalog is non-empty; parse-quality-only papers complete method-only.
 
 Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/beamer-assets-contract.md` for the offline presentation runtime.
+
+## Coordination
+
+Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.

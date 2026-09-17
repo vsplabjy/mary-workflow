@@ -1,125 +1,67 @@
+"""Behavioral v3 workflow tests with actual worker acceptance subprocesses.
+
+Native host spawning is outside this CPU integration fixture. File edits model
+bounded workers; validation executes the exact frozen command and uses the
+runtime's immutable evidence without mocked success or fabricated log records.
+"""
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
-import re
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
 from unittest import mock
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-
-from mary_workflow import (  # noqa: E402
-    apply_action,
-    default_state,
-    fingerprint_records,
-    legal_actions_for_state,
-    milestone_plan_signature,
-    read_config,
-    read_state,
-    remove_tree,
-    seed_core_prompts,
-    sync_prompt_for_phase,
-    update_config,
-    write_config,
-    write_state,
+from mary_workflow import (
+    apply_action, default_state, fingerprint_records, legal_actions_for_state,
+    milestone_plan_signature, read_config, read_state, remove_tree,
+    seed_core_prompts, sync_prompt_for_phase, update_config, write_config, write_state,
 )
-from mw_codex import prompt_path_for, render_prompt  # noqa: E402
+from mw_codex import prompt_path_for, render_prompt
 
 
-def milestone(index: int = 1) -> dict[str, object]:
+def milestone(index: int = 1, *, gate: str = "auto", command: str | None = None) -> dict:
+    filename = "product.txt" if index == 1 else f"product-{index}.txt"
+    program = f"from pathlib import Path; assert Path({filename!r}).read_text() == 'ready\\n'; print('validated product')"
     return {
-        "id": f"milestone-{index}",
-        "title": f"Milestone {index}",
-        "deliverables": [f"src/module_{index}.py"],
-        "acceptance": [f"python -m pytest tests/test_{index}.py"],
-        "estimated_scope": 1,
-        "gate": "auto",
+        "id": f"milestone-{index}", "title": f"Deliver product {index}",
+        "deliverables": [filename],
+        "acceptance": [command or shlex.join([sys.executable, "-B", "-c", program])],
+        "estimated_scope": 1, "gate": gate,
     }
 
 
-def brief_payload(
-    inventory: list[str], mode: str = "initial", changed_files: list[str] | None = None
-) -> dict[str, object]:
-    primary = inventory[0]
+def architecture(inventory: list[str]) -> dict:
     return {
-        "action": "submit_brief",
-        "data": {
-            "mode": mode,
-            "positioning": {
-                "purpose": "Exercise Mary Workflow boundaries.",
-                "audience": "Workflow developers.",
-                "problem": "Provide deterministic test fixtures.",
-                "differentiators": "Uses a complete machine-validated brief.",
-            },
-            "architecture": {
-                "modules": [
-                    {
-                        "name": "fixture",
-                        "responsibility": "Represent the complete test project.",
-                        "files": list(inventory),
-                    }
-                ],
-                "dependency_graph": ["fixture -> workflow tests: supplies state"],
-                "data_flow": ["Test input enters the fixture and is asserted by unittest."],
-                "state_management": ["state.yaml -> apply_action: serialized workflow state"],
-            },
-            "file_ledger": [
-                {
-                    "path": path,
-                    "purpose": f"Fixture file {path}.",
-                    "exports": ["(none discovered)"],
-                    "used_by": ["workflow boundary tests"],
-                }
-                for path in inventory
-            ],
-            "uncertainties": [
-                {
-                    "topic": "Fixture generality",
-                    "status": "inferred",
-                    "detail": "The fixture models protocol behavior rather than a production stack.",
-                }
-            ],
-            "validation": [
-                {
-                    "kind": kind,
-                    "command": f"skipped:no {kind} command in fixture",
-                    "status": "skipped",
-                    "summary": f"No safe {kind} command exists for the empty fixture.",
-                    "duration": "0s",
-                }
-                for kind in ("build", "test", "run")
-            ],
-            "analysis_evidence": {
-                "pass1_inventory_complete": True,
-                "pass2": {
-                    "entrypoints": [primary],
-                    "configuration": [primary],
-                    "core_modules": [primary],
-                    "tests": [primary],
-                },
-                "pass3": {
-                    "synthesis": "The fixture is a single complete module used by protocol tests.",
-                    "module_summaries": [
-                        {"module": "fixture", "summary": "Complete fixture project summary."}
-                    ],
-                    "reread_files": [primary],
-                },
-                "reviewed_changed_files": list(changed_files or []),
-            },
-        },
+        "modules": [{"name": "fixture", "responsibility": "Project inputs and outputs", "files": inventory}] if inventory else [],
+        "dependency_graph": [], "data_flow": ["Input specification -> product"],
+        "state_management": ["Workflow actions persist lifecycle state"],
     }
+
+
+def brief_payload(inventory: list[str], mode: str = "initial") -> dict:
+    return {"action": "submit_brief", "data": {
+        "mode": mode,
+        "positioning": {"purpose": "Exercise workflow contracts", "audience": "Maintainers", "problem": "Detect invalid delivery", "differentiators": "Actual recorded subprocess evidence"},
+        "architecture": architecture(inventory),
+        "coverage": {"modules": [{"id": "fixture", "summary": "Reviewed fixture inputs", "files": inventory, "read_files": inventory, "boundary_files": [], "depends_on": []}] if inventory else []},
+        "records": [{"id": "fact-1", "kind": "fact", "text": "The fixture has an explicit product requirement", "source": "spec.txt"}],
+        "uncertainties": [], "validation": [],
+    }}
 
 
 class WorkflowBoundaryTests(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.project = Path(self.tempdir.name)
+        (self.project / "spec.txt").write_text("Product must contain ready followed by a newline.\n")
         self.root = self.project / ".mary-workflow"
         (self.root / "prompts").mkdir(parents=True)
         write_config(self.root)
@@ -127,844 +69,453 @@ class WorkflowBoundaryTests(unittest.TestCase):
         state = default_state(self.project)
         sync_prompt_for_phase(state, self.root)
         write_state(self.root, state)
-        apply_action(self.root, brief_payload(list(state["project_inventory"])))
+        apply_action(self.root, brief_payload(state["project_inventory"]))
 
-    def tearDown(self) -> None:
+    def tearDown(self):
         remove_tree(self.root)
         self.tempdir.cleanup()
 
-    def assert_rejected(self, payload: dict[str, object]) -> str:
-        with self.assertRaises(SystemExit) as context:
-            apply_action(self.root, payload)
-        return str(context.exception)
+    def act(self, action: str, **data):
+        return apply_action(self.root, {"action": action, "data": data})
 
-    def open_round_one(self) -> None:
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "open",
-                    "round": 1,
-                    "anchor": "initial request",
-                    "uncertainty": "scope and acceptance",
-                    "questions": ["Scope?", "Acceptance?", "Tests?"],
-                    "defaults": [],
-                },
-            },
-        )
+    def rejected(self, action: str, **data):
+        with self.assertRaises(SystemExit) as failure:
+            self.act(action, **data)
+        return str(failure.exception)
 
-    def prepare_ready_plan(self, milestones: list[dict[str, object]] | None = None) -> dict[str, object]:
-        draft = milestones or [milestone()]
-        self.open_round_one()
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["The user answered scope, acceptance, and test boundaries."],
-                    "complete": True,
-                    "draft_milestones": draft,
-                },
-            },
-        )
+    def cli(self, *args, cwd=None, check=True):
+        return subprocess.run([sys.executable, "-B", str(REPO_ROOT / "scripts/mary_workflow.py"), *args], cwd=cwd or self.project, text=True, capture_output=True, check=check, timeout=20)
+
+    def freeze(self, milestones=None):
+        self.act("update_interview", mode="propose", clarifications=["User requested the stated product behavior"], draft_milestones=milestones or [milestone()])
         state = read_state(self.root)
-        return apply_action(
-            self.root,
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "clarifications": state["clarifications"],
-                    "milestones": milestone_plan_signature(state["draft_milestones"]),
-                },
-            },
-        )
+        return self.act("update_state", phase="PLANNED", clarifications=state["clarifications"], milestones=milestone_plan_signature(state["draft_milestones"]))
 
-    def render_grant(self) -> tuple[str, str]:
-        rendered = render_prompt(self.project, "mw-run")
-        match = re.search(r"^- token: `([^`]+)`$", rendered, flags=re.MULTILINE)
-        self.assertIsNotNone(match)
-        return rendered, match.group(1)
+    def start(self, milestones=None, **extra):
+        state = self.freeze(milestones)
+        return self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run", **extra)
 
-    def start_execution(self, milestones: list[dict[str, object]] | None = None) -> dict[str, object]:
-        self.prepare_ready_plan(milestones)
-        _, token = self.render_grant()
-        return apply_action(self.root, {"action": "start_execution", "data": {"token": token}})
+    def task(self, task_id):
+        return json.loads((self.root / "tasks" / task_id / "task.json").read_text())
 
-    def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts/mary_workflow.py"), *arguments],
-            cwd=self.project,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
+    def dispatch(self, task_id="implement-1", *, role="implementer", agent_id="worker-a", **extra):
+        data = {"task_id": task_id, "role": role, "agent_id": agent_id, "objective": "Deliver or verify the specified behavior", **extra}
+        if role != "implementer":
+            data.setdefault("write_scope", [])
+        self.act("delegate_task", **data)
+        return self.task(task_id)
 
-    def test_update_state_cannot_skip_interview(self) -> None:
-        message = self.assert_rejected(
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "clarifications": ["fabricated"],
-                    "milestones": [milestone()],
-                },
-            }
-        )
-        self.assertIn("completed interview", message)
-        self.assertEqual(read_state(self.root)["phase"], "PLANNING")
+    def validate(self, task):
+        state = self.act("run_validation", task_id=task["task_id"], attempt_id=task["attempt_id"], acceptance_id="check-1", timeout_seconds=5)
+        return state["runtime_meta"]["last_evidence"]
 
-    def test_incomplete_brief_blocks_planning_and_incomplete_ledger_is_rejected(self) -> None:
+    def submit(self, task, evidence=None, *, changed=None, **extra):
+        data = {
+            "task_id": task["task_id"], "attempt_id": task["attempt_id"], "status": "ready_for_review",
+            "summary": "Artifacts inspected against the required behavior", "files_changed": changed or [],
+            "validation": [evidence["evidence_id"]] if evidence else [],
+            "scope_deviations": [], "blockers": [], "uncertainties": [], **extra,
+        }
+        return self.act("submit_worker_result", **data)
+
+    def implementation(self, task_id="implement-1", *, file_change=True):
+        task = self.dispatch(task_id)
+        filename = read_state(self.root)["milestones"][0]["deliverables"][0]
+        if file_change:
+            (self.project / filename).write_text("ready\n")
+        evidence = self.validate(task)
+        self.assertEqual(evidence["result"], "passed")
+        self.submit(task, evidence, changed=[filename] if file_change else [])
+        state = self.act("mark_task_done", id=task["milestone_id"], task_ids=[task_id])
+        self.assertEqual(state["phase"], "REVIEWING")
+        return task
+
+    def review(self, implementation, *, phase="FINISHED", agent_id="worker-b", **extra):
+        verifier = self.dispatch("verify-" + implementation["task_id"], role="verifier", agent_id=agent_id, reviews_task_ids=[implementation["task_id"]])
+        evidence = self.validate(verifier)
+        self.submit(verifier, evidence, decision="passed", findings=[], **extra)
+        return self.act("set_phase", phase=phase, decision="accepted" if phase == "FINISHED" else "accepted-next", verifier_task_id=verifier["task_id"])
+
+    def test_initial_brief_uses_computed_module_coverage_without_ledger(self):
+        state = read_state(self.root)
+        self.assertEqual(state["version"], "3.0")
+        self.assertEqual(state["project_brief_status"], "complete")
+        self.assertEqual(state["project_file_ledger"], [])
+        self.assertTrue(state["runtime_meta"]["brief"]["coverage"]["complete"])
+        self.assertIn("Exercise workflow contracts", render_prompt(self.project, "mw-plan"))
+
+    def test_empty_repository_can_submit_empty_coverage(self):
+        (self.project / "spec.txt").unlink()
+        state = default_state(self.project)
+        write_state(self.root, state)
+        self.assertEqual(state["project_inventory"], [])
+        payload = brief_payload([])
+        payload["data"]["records"] = []
+        accepted = apply_action(self.root, payload)
+        self.assertEqual(accepted["runtime_meta"]["brief"]["coverage"]["covered_count"], 0)
+
+    def test_unread_claim_cannot_override_actual_module_coverage(self):
+        payload = brief_payload(["spec.txt"], "correction")
+        payload["data"]["coverage"]["modules"][0]["read_files"] = []
+        payload["data"]["coverage"]["unread_files"] = []
+        with self.assertRaises(SystemExit):
+            apply_action(self.root, payload)
+        self.assertEqual(read_state(self.root)["project_brief_version"], 1)
+
+    def test_incomplete_brief_blocks_planning(self):
         state = read_state(self.root)
         state["project_brief_status"] = "machine_detected"
         write_state(self.root, state)
+        self.assertNotIn("update_interview", legal_actions_for_state(state))
+        self.rejected("update_interview", mode="propose", clarifications=["Known"], draft_milestones=[milestone()])
 
-        message = self.assert_rejected(
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "open",
-                    "round": 1,
-                    "anchor": "request",
-                    "uncertainty": "scope",
-                    "questions": ["Q1?", "Q2?", "Q3?"],
-                    "defaults": [],
-                },
-            }
-        )
-        self.assertIn("Legal actions: submit_brief, update_project", message)
+    def test_complete_request_needs_no_extra_interview_or_artificial_scope_caps(self):
+        tasks = [milestone(index) for index in range(1, 10)]
+        tasks[0]["estimated_scope"] = 12
+        tasks[0]["deliverables"] = [f"module-{index}.txt" for index in range(12)]
+        state = self.freeze(tasks)
+        self.assertEqual(state["phase"], "PLANNED")
+        self.assertEqual(len(state["milestones"]), 9)
+        self.assertEqual(state["milestones"][0]["estimated_scope"], 12)
+        self.assertFalse(state["final_plan_confirmed"])
+        self.assertEqual(state["runtime_meta"]["plan_revision"], 1)
+        self.assertRegex(state["runtime_meta"]["frozen_plan_digest"], r"^[a-f0-9]{64}$")
 
-        payload = brief_payload(list(state["project_inventory"]))
-        payload["data"]["file_ledger"] = []
-        message = self.assert_rejected(payload)
-        self.assertIn("file_ledger must be a non-empty list", message)
-        self.assertEqual(read_state(self.root)["project_brief_status"], "machine_detected")
+    def test_pending_real_question_blocks_proposal_and_freeze(self):
+        self.act("update_interview", mode="open", round=1, anchor="user request", uncertainty="required output", questions=["Which output format?"], defaults=[])
+        self.rejected("update_interview", mode="propose", clarifications=["Invented answer"], draft_milestones=[milestone()])
+        self.rejected("update_state", phase="PLANNED", clarifications=[], milestones=[milestone()])
+        self.assertEqual(read_state(self.root)["interview_status"], "awaiting_answers")
+        self.act("update_interview", mode="resolve", round=1, answers=["Plain text"], complete=True, draft_milestones=[milestone()])
+        self.assertEqual(read_state(self.root)["interview_status"], "draft_ready")
 
-    def test_complete_brief_has_five_layers_and_is_loaded_by_plan(self) -> None:
-        brief = (self.root / "project-brief.md").read_text(encoding="utf-8")
-        for heading in (
-            "## 1. 机器探测区",
-            "## 2. 项目定位",
-            "## 3. 架构全景",
-            "## 4. 文件级账本",
-            "## 5. 不确定性清单",
-        ):
-            self.assertIn(heading, brief)
-        self.assertIn("构建、测试与运行复现", brief)
-        self.assertIn("`(empty repository)`", brief)
+    def test_answers_cannot_retroactively_introduce_defaults(self):
+        self.act("update_interview", mode="open", round=1, anchor="user request", uncertainty="format", questions=["Which format?"], defaults=[])
+        self.rejected("update_interview", mode="resolve", round=1, answers=["Plain text"], defaults=["Also publish externally"], complete=True, draft_milestones=[milestone()])
+        self.assertEqual(read_state(self.root)["interview_rounds"][0]["answers"], [])
 
-        rendered = render_prompt(self.project, "mw-plan")
-        self.assertIn("## Project Brief Authority", rendered)
-        self.assertIn("## 4. 文件级账本", rendered)
-        self.assertIn("Fixture file (empty repository).", rendered)
-
-    def test_agent_cannot_declare_plan_confirmation(self) -> None:
-        self.open_round_one()
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["Answered."],
-                    "complete": True,
-                    "draft_milestones": [milestone()],
-                },
-            },
-        )
+    def test_plan_action_cannot_claim_authorization_or_execute(self):
+        self.act("update_interview", mode="propose", clarifications=["Specified behavior"], draft_milestones=[milestone()])
         state = read_state(self.root)
-        message = self.assert_rejected(
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "confirmed": True,
-                    "confirmation": "Agent claims the user confirmed.",
-                    "clarifications": state["clarifications"],
-                    "milestones": milestone_plan_signature(state["draft_milestones"]),
-                },
-            }
-        )
-        self.assertIn("must not declare plan confirmation", message)
+        data = {"clarifications": state["clarifications"], "milestones": milestone_plan_signature(state["draft_milestones"])}
+        self.rejected("update_state", phase="EXECUTING", **data)
+        self.rejected("update_state", phase="PLANNED", confirmation="yes", **data)
+        self.assertFalse(read_state(self.root)["final_plan_confirmed"])
+
+    def test_run_rendering_is_read_only_and_digest_bound(self):
+        state = self.freeze()
+        before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        rendered = render_prompt(self.project, "mw-run")
+        self.assertIn(state["runtime_meta"]["frozen_plan_digest"], rendered)
+        self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+        running = self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+        self.assertEqual(running["phase"], "EXECUTING")
+        self.assertTrue(running["final_plan_confirmed"])
+        self.assertTrue(running["lease_run_id"])
+        self.rejected("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+
+    def test_start_rejects_wrong_digest_and_absent_confirmation(self):
+        state = self.freeze()
+        digest = state["runtime_meta"]["frozen_plan_digest"]
+        self.rejected("start_execution", plan_digest="0" * 64, confirmation="/mw-run", source="/mw-run")
+        self.rejected("start_execution", plan_digest=digest, confirmation="", source="/mw-run")
+        self.rejected("start_execution", plan_digest=digest, confirmation="/mw-plan", source="/mw-plan")
+        self.assertEqual(read_state(self.root)["phase"], "PLANNED")
+
+    def test_frozen_plan_tampering_is_detected(self):
+        state = self.freeze()
+        digest = state["runtime_meta"]["frozen_plan_digest"]
+        state["milestones"][0]["title"] = "Different unapproved task"
+        write_state(self.root, state)
+        self.rejected("start_execution", plan_digest=digest, confirmation="/mw-run", source="/mw-run")
+
+    def test_reopen_requires_refreeze_and_new_revision(self):
+        initial = self.freeze()
+        self.act("reopen_plan", feedback=["User requests another output"])
+        state = read_state(self.root)
+        self.assertEqual(state["phase"], "PLANNING")
+        self.assertFalse(state["runtime_meta"]["frozen_plan_digest"])
+        changed = milestone()
+        changed["title"] = "Revised product title"
+        self.act("update_interview", mode="revise", feedback=["Updated title"], draft_milestones=[changed])
+        state = read_state(self.root)
+        frozen = self.act("update_state", phase="PLANNED", clarifications=state["clarifications"], milestones=milestone_plan_signature(state["draft_milestones"]))
+        self.assertEqual(frozen["runtime_meta"]["plan_revision"], 2)
+        self.assertNotEqual(frozen["runtime_meta"]["frozen_plan_digest"], initial["runtime_meta"]["frozen_plan_digest"])
+
+    def test_actual_implementation_validation_review_and_finish(self):
+        self.start()
+        task = self.implementation()
+        state = read_state(self.root)
+        self.assertEqual(state["completed"], 0)
+        self.assertEqual(state["milestones"][0]["review"], "pending")
+        evidence_id = self.task(task["task_id"])["validation"][0]
+        directory = self.root / "tasks" / task["task_id"]
+        evidence = json.loads((directory / f"{evidence_id}.json").read_text())
+        self.assertEqual(evidence["exit_code"], 0)
+        self.assertIn("validated product", (directory / evidence["stdout"]).read_text())
+        self.assertGreaterEqual(evidence["duration_ms"], 0)
+        accepted = self.review(task)
+        self.assertEqual(accepted["phase"], "FINISHED")
+        self.assertEqual(accepted["completed"], 1)
+        reports = self.root / "reports/C0"
+        self.assertEqual(len(list(reports.glob("milestone-1.execution.*.md"))), 1)
+        self.assertEqual(len(list(reports.glob("milestone-1.review.*.md"))), 1)
+        aggregate = (reports / "milestone-1.md").read_text()
+        self.assertIn("kind: execution", aggregate)
+        self.assertIn("kind: review", aggregate)
+        self.assertEqual(self.task(task["task_id"])["status"], "accepted")
+
+    def test_completion_requires_current_task_and_actual_evidence(self):
+        self.start()
+        self.rejected("mark_task_done", id="milestone-1")
+        self.rejected("mark_task_done", id="milestone-9", task_ids=["invented"])
+        self.rejected("mark_task_done", id="milestone-1", task_ids=["invented"])
+        task = self.dispatch()
+        (self.project / "product.txt").write_text("ready\n")
+        self.submit(task, changed=["product.txt"])
+        self.rejected("mark_task_done", id="milestone-1", task_ids=[task["task_id"]])
+        self.assertEqual(read_state(self.root)["phase"], "EXECUTING")
+
+    def test_failed_actual_validation_cannot_complete(self):
+        failing = shlex.join([sys.executable, "-B", "-c", "raise SystemExit(7)"])
+        self.start([milestone(command=failing)])
+        task = self.dispatch()
+        (self.project / "product.txt").write_text("ready\n")
+        evidence = self.validate(task)
+        self.assertEqual(evidence["exit_code"], 7)
+        self.assertEqual(evidence["result"], "failed")
+        self.submit(task, evidence, changed=["product.txt"])
+        self.rejected("mark_task_done", id="milestone-1", task_ids=[task["task_id"]])
+
+    def test_product_change_invalidates_validation_evidence(self):
+        self.start()
+        task = self.dispatch()
+        (self.project / "product.txt").write_text("ready\n")
+        evidence = self.validate(task)
+        (self.project / "product.txt").write_text("broken\n")
+        with self.assertRaises(SystemExit):
+            self.submit(task, evidence, changed=["product.txt"])
+        self.assertEqual(self.task(task["task_id"])["status"], "running")
+
+    def test_undeclared_file_change_is_not_hidden_by_files_changed(self):
+        self.start()
+        task = self.dispatch()
+        (self.project / "product.txt").write_text("ready\n")
+        (self.project / "unrelated.txt").write_text("unexpected\n")
+        with self.assertRaises(SystemExit):
+            self.submit(task, changed=["product.txt"])
+        self.assertEqual(self.task(task["task_id"])["status"], "running")
+
+    def test_review_requires_distinct_worker_and_cannot_change_plan(self):
+        self.start()
+        task = self.implementation()
+        self.rejected("delegate_task", task_id="self-review", role="verifier", agent_id=task["agent_id"], objective="Self certify", write_scope=[], reviews_task_ids=[task["task_id"]])
+        self.rejected("set_phase", phase="FINISHED", decision="accepted")
+        self.rejected("update_state", phase="PLANNED", clarifications=[], milestones=[milestone()])
+        self.assertEqual(read_state(self.root)["phase"], "REVIEWING")
+
+    def test_single_agent_fallback_exposes_lack_of_independence(self):
+        self.start(execution_mode="single_agent")
+        task = self.implementation()
+        accepted = self.review(task, agent_id=task["agent_id"], review_mode="same_agent")
+        self.assertEqual(accepted["phase"], "FINISHED")
+        report = (self.root / "reports/C0/milestone-1.review.0001.md").read_text()
+        self.assertIn('"independent_review": false', report)
+
+    def test_review_can_return_to_planning_only_with_findings(self):
+        self.start()
+        self.implementation()
+        self.rejected("set_phase", phase="PLANNING", findings=[])
+        state = self.act("set_phase", phase="PLANNING", findings=["User-required format is incompatible with current acceptance"])
+        self.assertEqual(state["phase"], "PLANNING")
+        self.assertEqual(state["milestones"], [])
+        self.assertFalse(state["runtime_meta"]["frozen_plan_digest"])
+
+    def test_debug_only_queues_scoped_repair_and_preserves_frozen_digest(self):
+        initial = self.start()
+        command = initial["milestones"][0]["acceptance"]
+        self.act("record_error", command=command[0], stderr="Expected file missing", returncode="1")
+        self.rejected("delegate_task", task_id="premature-fix", role="implementer", agent_id="worker-fix", objective="Fix now", write_scope=["product.txt"])
+        self.rejected("enqueue_fix_task", title="Overbroad fix", source_error="Missing file", deliverables=["unrelated.txt"], acceptance=command, estimated_scope=1)
+        self.rejected("enqueue_fix_task", title="Weaken check", source_error="Missing file", deliverables=["product.txt"], acceptance=["true"], estimated_scope=1)
+        repaired = self.act("enqueue_fix_task", title="Create required output", source_error="Expected file missing", deliverables=["product.txt"], acceptance=command, estimated_scope=1)
+        self.assertEqual(repaired["phase"], "EXECUTING")
+        self.assertEqual(repaired["runtime_meta"]["frozen_plan_digest"], initial["runtime_meta"]["frozen_plan_digest"])
+        current = next(m for m in repaired["milestones"] if m["id"] == repaired["current_milestone_id"])
+        self.assertEqual(current["repair_of"], "milestone-1")
+        self.assertEqual(current["acceptance"], command)
+        self.assertEqual(current["write_scope"], ["product.txt"])
+
+    def test_stop_preserves_run_rejects_late_result_and_requires_quiescence(self):
+        started = self.start()
+        task = self.dispatch()
+        (self.project / "product.txt").write_text("ready\n")
+        self.cli("stop")
+        state = read_state(self.root)
+        self.assertEqual(state["status"], "stopped")
+        self.assertEqual(state["phase"], "EXECUTING")
+        self.assertEqual(self.task(task["task_id"])["status"], "cancelled")
+        with self.assertRaises(SystemExit):
+            self.submit(task, changed=["product.txt"])
+        data = {"plan_digest": state["runtime_meta"]["frozen_plan_digest"], "confirmation": "/mw-run", "source": "/mw-run"}
+        self.rejected("resume_execution", **data)
+        resumed = self.act("resume_execution", workers_quiescent=True, **data)
+        self.assertEqual(resumed["lease_run_id"], started["lease_run_id"])
+        self.assertEqual(resumed["phase"], "EXECUTING")
+        self.rejected("delegate_task", task_id=task["task_id"], role="implementer", agent_id="worker-a", objective="Reuse stale identity")
+        fresh = self.implementation("implement-after-resume", file_change=False)
+        self.assertEqual(self.review(fresh)["phase"], "FINISHED")
+
+    def test_confirm_gate_records_user_decision_before_dispatch(self):
+        state = self.start([milestone(gate="confirm")])
+        self.rejected("delegate_task", task_id="unconfirmed", role="implementer", agent_id="worker-a", objective="Premature work")
+        self.act("confirm_milestone", id="milestone-1", confirmation="Execute this gate's work", plan_digest=state["runtime_meta"]["frozen_plan_digest"])
+        self.assertEqual(self.dispatch()["milestone_id"], "milestone-1")
+
+    def test_cycle_refresh_merges_delta_then_archives_task_evidence(self):
+        self.start()
+        task = self.implementation()
+        self.review(task)
+        self.cli("cycle")
+        state = read_state(self.root)
+        self.assertEqual(state["project_brief_status"], "refresh_required")
+        self.assertEqual(state["project_changed_files"], ["added:product.txt"])
+        brief = state["runtime_meta"]["brief"]
+        update = {
+            "base_version": brief["version"], "reviewed_changed_files": state["project_changed_files"],
+            "updated_modules": [{"id": "output", "summary": "Completed verified product", "files": ["product.txt"], "read_files": ["product.txt"], "boundary_files": [], "depends_on": [], "reread_files": ["product.txt"], "review_evidence": "Read actual product and recorded acceptance"}],
+            "deleted_modules": [], "retained_modules": [{"id": "fixture", "evidence": "spec.txt fingerprint unchanged and requirement remains valid"}],
+            "architecture": architecture(["spec.txt", "product.txt"]),
+        }
+        self.act("submit_brief", mode="cycle_refresh", update=update)
+        refreshed = read_state(self.root)
+        self.assertEqual(refreshed["project_brief_version"], 2)
+        self.cli("cycle")
+        reset = read_state(self.root)
+        self.assertEqual(reset["cycle"], "C1")
+        self.assertEqual(reset["phase"], "PLANNING")
+        self.assertEqual(reset["milestones"], [])
+        self.assertFalse(reset["runtime_meta"]["frozen_plan_digest"])
+        archive = self.root / "cycles/C0"
+        self.assertTrue((archive / "tasks" / task["task_id"] / "result.json").is_file())
+        self.assertTrue((archive / "reports/milestone-1.review.0001.md").is_file())
+        self.assertEqual(reset["runtime_meta"]["brief"]["records"], brief["records"])
+
+    def test_cycle_cannot_archive_actively_running_work(self):
+        self.start()
+        result = self.cli("cycle", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(read_state(self.root)["phase"], "EXECUTING")
+        self.assertFalse((self.root / "cycles/C0").exists())
+
+    def test_run_refuses_unfrozen_planning(self):
+        with self.assertRaises(SystemExit):
+            prompt_path_for(self.project, "mw-run")
         self.assertEqual(read_state(self.root)["phase"], "PLANNING")
 
-    def test_frozen_plan_waits_unconfirmed_without_a_lease(self) -> None:
-        state = self.prepare_ready_plan()
-        self.assertEqual(state["phase"], "PLANNED")
-        self.assertEqual(state["status"], "ready")
-        self.assertEqual(state["interview_status"], "plan_ready")
-        self.assertFalse(state["final_plan_confirmed"])
-        self.assertEqual(state["lease_status"], "none")
-        self.assertEqual(state["started_at"], "")
+    def test_unsupported_state_versions_require_migration_not_silent_reset(self):
+        path = self.root / "state.yaml"
+        before = path.read_text()
+        for replacement in (before.replace("version: 3.0", "version: 2.1", 1), "\n".join(before.splitlines()[1:]) + "\n"):
+            path.write_text(replacement)
+            with self.assertRaises(SystemExit):
+                read_state(self.root)
+            self.assertEqual(path.read_text(), replacement)
 
-        message = self.assert_rejected({"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        self.assertIn("Legal actions: reopen_plan, start_execution", message)
-
-        phase, prompt = prompt_path_for(self.project, "mw-run")
-        self.assertEqual(phase, "PLANNED")
-        self.assertEqual(prompt.name, "mw-ready.md")
-        self.assertEqual(read_state(self.root)["run_grant_digest"], "")
-
-    def test_start_grant_is_private_and_start_is_atomic(self) -> None:
-        self.prepare_ready_plan()
-        rendered, token = self.render_grant()
-        issued = read_state(self.root)
-        state_text = (self.root / "state.yaml").read_text(encoding="utf-8")
-
-        self.assertIn(token, rendered)
-        self.assertNotIn(token, state_text)
-        self.assertTrue(issued["run_grant_digest"])
-        self.assertEqual(issued["run_grant_purpose"], "start")
-        self.assertNotIn(token, render_prompt(self.project, "mw-status"))
-        self.assertNotIn(token, render_prompt(self.project, "mw-plan"))
-
-        evidence_match = re.search(
-            r"## Final Plan Confirmation Evidence.*?```json\n(.*?)\n```",
-            rendered,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(evidence_match)
-        evidence = json.loads(evidence_match.group(1))
-        self.assertEqual(evidence["interview_rounds"][0]["questions"], ["Scope?", "Acceptance?", "Tests?"])
-        self.assertEqual(
-            evidence["interview_rounds"][0]["recorded_answers"],
-            ["The user answered scope, acceptance, and test boundaries."],
-        )
-        self.assertEqual(evidence["interview_rounds"][0]["defaults"], [])
-        self.assertEqual(evidence["frozen_milestones"][0]["id"], "milestone-1")
-        self.assertEqual(evidence["frozen_milestones"][0]["deliverables"], ["src/module_1.py"])
-
-        state = apply_action(self.root, {"action": "start_execution", "data": {"token": token}})
-        self.assertEqual(state["phase"], "EXECUTING")
-        self.assertTrue(state["final_plan_confirmed"])
-        self.assertEqual(state["interview_status"], "complete")
-        self.assertEqual(state["lease_status"], "active")
-        self.assertTrue(state["lease_run_id"])
-        self.assertTrue(state["started_at"])
-        self.assertEqual(state["run_grant_digest"], "")
-
-    def test_forged_rotated_and_replayed_grants_are_rejected(self) -> None:
-        self.prepare_ready_plan()
-        message = self.assert_rejected({"action": "start_execution", "data": {"token": "forged"}})
-        self.assertIn("missing, invalid, or already consumed", message)
-
-        _, first_token = self.render_grant()
-        _, second_token = self.render_grant()
-        self.assertNotEqual(first_token, second_token)
-        message = self.assert_rejected({"action": "start_execution", "data": {"token": first_token}})
-        self.assertIn("missing, invalid, or already consumed", message)
-
-        apply_action(self.root, {"action": "start_execution", "data": {"token": second_token}})
-        message = self.assert_rejected({"action": "start_execution", "data": {"token": second_token}})
-        self.assertIn("Illegal action for phase EXECUTING", message)
-
-    def test_reopen_plan_invalidates_grant_and_allows_revision(self) -> None:
-        self.prepare_ready_plan()
-        _, stale_token = self.render_grant()
-        state = apply_action(
-            self.root,
-            {"action": "reopen_plan", "data": {"feedback": ["Rename the milestone."]}},
-        )
-        self.assertEqual(state["phase"], "PLANNING")
-        self.assertEqual(state["interview_status"], "draft_ready")
-        self.assertEqual(state["run_grant_digest"], "")
-
-        revised = {**milestone(), "title": "Revised milestone"}
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "revise",
-                    "feedback": ["Rename the milestone."],
-                    "draft_milestones": [revised],
-                },
-            },
-        )
-        state = read_state(self.root)
-        state = apply_action(
-            self.root,
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "clarifications": state["clarifications"],
-                    "milestones": milestone_plan_signature(state["draft_milestones"]),
-                },
-            },
-        )
-        self.assertEqual(state["milestones"][0]["title"], "Revised milestone")
-        message = self.assert_rejected({"action": "start_execution", "data": {"token": stale_token}})
-        self.assertIn("missing, invalid, or already consumed", message)
-
-    def test_stop_and_resume_preserve_the_run_lease(self) -> None:
-        state = self.start_execution()
-        run_id = state["lease_run_id"]
-        self.run_cli("stop")
-        stopped = read_state(self.root)
-        self.assertEqual(stopped["status"], "stopped")
-        self.assertEqual(stopped["lease_status"], "paused")
-        self.assertEqual(stopped["lease_run_id"], run_id)
-
-        message = self.assert_rejected({"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        self.assertIn("Legal actions: resume_execution", message)
-        phase, prompt = prompt_path_for(self.project, "mw-run")
-        self.assertEqual(phase, "EXECUTING")
-        self.assertEqual(prompt.name, "mw-resume.md")
-
-        _, token = self.render_grant()
-        resumed = apply_action(self.root, {"action": "resume_execution", "data": {"token": token}})
-        self.assertEqual(resumed["phase"], "EXECUTING")
-        self.assertEqual(resumed["status"], "running")
-        self.assertEqual(resumed["lease_status"], "active")
-        self.assertEqual(resumed["lease_run_id"], run_id)
-
-    def test_debug_and_review_keep_one_active_run_lease(self) -> None:
-        state = self.start_execution([milestone(1), milestone(2)])
-        run_id = state["lease_run_id"]
-        original_plan_digest = state["lease_plan_digest"]
-        state = apply_action(
-            self.root,
-            {"action": "record_error", "data": {"command": "pytest", "stderr": "failed", "returncode": "1"}},
-        )
-        self.assertEqual(state["phase"], "DEBUGGING")
-        self.assertEqual(state["lease_run_id"], run_id)
-        self.assertEqual(state["lease_status"], "active")
-
-        state = apply_action(
-            self.root,
-            {"action": "enqueue_fix_task", "data": {"title": "Fix failure", "estimated_scope": 1}},
-        )
-        fix_id = state["current_milestone_id"]
-        self.assertEqual(state["phase"], "EXECUTING")
-        self.assertEqual(state["lease_run_id"], run_id)
-        self.assertNotEqual(state["lease_plan_digest"], original_plan_digest)
-
-        state = apply_action(self.root, {"action": "mark_task_done", "data": {"id": fix_id}})
-        self.assertEqual(state["phase"], "REVIEWING")
-        self.assertEqual(state["lease_run_id"], run_id)
-        state = apply_action(
-            self.root,
-            {"action": "set_phase", "data": {"phase": "EXECUTING", "decision": "accepted-next"}},
-        )
-        self.assertEqual(state["phase"], "EXECUTING")
-        self.assertEqual(state["lease_run_id"], run_id)
-        self.assertEqual(state["current_milestone_id"], "milestone-1")
-
-    def test_finished_and_replanning_release_the_lease(self) -> None:
-        self.start_execution()
-        apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        state = apply_action(
-            self.root,
-            {"action": "set_phase", "data": {"phase": "FINISHED", "decision": "accepted"}},
-        )
-        self.assertEqual(state["phase"], "FINISHED")
-        self.assertEqual(state["lease_status"], "released")
-        self.assertIn("PLANNING -> PLANNED (envelope: update_state; plan ready)", state["phase_history"])
-        self.assertIn("PLANNED -> EXECUTING (/mw-run: start_execution)", state["phase_history"])
-
-        self.run_cli("cycle")
-        state = read_state(self.root)
-        self.assertEqual(state["version"], "2.1")
-        self.assertEqual(state["cycle"], "C1")
-        self.assertEqual(state["phase"], "PLANNING")
-        self.assertEqual(state["lease_status"], "none")
-        self.assertEqual(state["run_grant_digest"], "")
-
-    def test_cycle_requires_incremental_brief_refresh_before_archive(self) -> None:
-        state = read_state(self.root)
-        state["phase"] = "FINISHED"
-        state["status"] = "completed"
-        write_state(self.root, state)
-        (self.project / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
-        first = self.run_cli("cycle")
-        state = read_state(self.root)
-        self.assertEqual(state["cycle"], "C0")
-        self.assertEqual(state["project_brief_status"], "refresh_required")
-        self.assertEqual(state["project_changed_files"], ["added:app.py"])
-        self.assertIn("归档已暂停", first.stdout)
-        self.assertFalse((self.root / "cycles/C0").exists())
-        refresh_context = render_prompt(self.project, "mw-init")
-        self.assertIn("# Mary Init Understanding Phase", refresh_context)
-        self.assertIn("added:app.py", refresh_context)
-
-        state = apply_action(
-            self.root,
-            brief_payload(["app.py"], mode="cycle_refresh", changed_files=["added:app.py"]),
-        )
-        self.assertEqual(state["project_brief_status"], "complete")
-        self.assertEqual(state["project_brief_version"], 2)
-        self.assertEqual(state["project_file_ledger"][0]["path"], "app.py")
-        (self.root / "analysis").mkdir(exist_ok=True)
-        (self.root / "analysis/submit-brief.json").write_text("{}\n", encoding="utf-8")
-
-        second = self.run_cli("cycle")
-        state = read_state(self.root)
-        self.assertEqual(state["cycle"], "C1")
-        self.assertEqual(state["project_brief_status"], "complete")
-        self.assertTrue((self.root / "cycles/C0/state.yaml").exists())
-        self.assertTrue((self.root / "cycles/C0/project-brief.md").exists())
-        self.assertTrue((self.root / "cycles/C0/analysis/submit-brief.json").exists())
-        self.assertIn("已归档 C0", second.stdout)
-
-    def test_submit_brief_cli_displays_the_full_document(self) -> None:
-        payload = brief_payload(["(empty repository)"], mode="correction")
-        result = self.run_cli("apply-action", "--json", json.dumps(payload, ensure_ascii=False))
-        self.assertIn("# 项目理解简报", result.stdout)
-        self.assertIn("## 1. 机器探测区", result.stdout)
-        self.assertIn("## 5. 不确定性清单", result.stdout)
-        self.assertIn("Fixture file (empty repository).", result.stdout)
-
-    def test_review_can_return_to_clean_planning(self) -> None:
-        self.start_execution()
-        apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        state = apply_action(
-            self.root,
-            {"action": "set_phase", "data": {"phase": "PLANNING", "decision": "replan"}},
-        )
-        self.assertEqual(state["phase"], "PLANNING")
-        self.assertEqual(state["lease_status"], "released")
-        self.assertEqual(state["milestones"], [])
-        self.assertFalse(state["final_plan_confirmed"])
-
-    def test_large_plan_requires_two_answered_rounds(self) -> None:
-        self.open_round_one()
-        message = self.assert_rejected(
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["One round."],
-                    "complete": True,
-                    "draft_milestones": [milestone(index) for index in range(1, 6)],
-                },
-            }
-        )
-        self.assertIn("at least 2 answered interview rounds", message)
-
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["First-round answers."],
-                    "complete": False,
-                    "next_round": {
-                        "round": 2,
-                        "anchor": "the acceptance answer",
-                        "uncertainty": "five delivery boundaries",
-                        "questions": ["Boundary 1?", "Boundary 2?", "Boundary 3?"],
-                        "defaults": [],
-                    },
-                },
-            },
-        )
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 2,
-                    "answers": ["Second-round answers."],
-                    "complete": True,
-                    "draft_milestones": [milestone(index) for index in range(1, 6)],
-                },
-            },
-        )
-        self.assertEqual(read_state(self.root)["interview_status"], "draft_ready")
-
-    def test_round_zero_requires_explicit_default_confirmation(self) -> None:
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "open",
-                    "round": 0,
-                    "questions": ["Do you accept these defaults?"],
-                    "defaults": ["Use pytest and change one module."],
-                },
-            },
-        )
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 0,
-                    "answers": ["The user accepts the defaults."],
-                    "complete": True,
-                    "draft_milestones": [milestone()],
-                },
-            },
-        )
-        self.assertEqual(read_state(self.root)["interview_status"], "draft_ready")
-
-    def test_followup_round_requires_anchor_and_uncertainty(self) -> None:
-        self.open_round_one()
-        message = self.assert_rejected(
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["First-round answers."],
-                    "complete": False,
-                    "next_round": {
-                        "round": 2,
-                        "questions": ["Q1?", "Q2?", "Q3?"],
-                        "defaults": [],
-                    },
-                },
-            }
-        )
-        self.assertIn("require data.anchor and data.uncertainty", message)
-
-    def test_interview_off_assumptions_still_wait_for_confirmation(self) -> None:
-        update_config(self.root, plan_interview="off")
-        message = self.assert_rejected(
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "propose",
-                    "clarifications": ["Use pytest."],
-                    "draft_milestones": [milestone()],
-                },
-            }
-        )
-        self.assertIn("exactly one explicit confirmation question", message)
-
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "propose",
-                    "clarifications": ["Use pytest.", "Change only one module."],
-                    "questions": ["Do you explicitly accept every listed assumption?"],
-                    "draft_milestones": [milestone()],
-                },
-            },
-        )
-        state = read_state(self.root)
-        self.assertEqual(state["interview_status"], "awaiting_answers")
-        self.assertEqual(state["interview_rounds"][0]["status"], "awaiting_answer")
-        rendered = render_prompt(self.project, "mw-plan")
-        self.assertIn("Pending Defaults Requiring Confirmation", rendered)
-        self.assertIn("Use pytest.", rendered)
-        self.assertIn("Change only one module.", rendered)
-        message = self.assert_rejected(
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "clarifications": state["clarifications"],
-                    "milestones": milestone_plan_signature(state["draft_milestones"]),
-                },
-            }
-        )
-        self.assertIn("draft plan ready to freeze", message)
-
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 0,
-                    "answers": ["The user explicitly accepts both assumptions."],
-                    "complete": True,
-                    "draft_milestones": [milestone()],
-                },
-            },
-        )
-        state = read_state(self.root)
-        self.assertEqual(state["interview_status"], "draft_ready")
-        state = apply_action(
-            self.root,
-            {
-                "action": "update_state",
-                "data": {
-                    "phase": "PLANNED",
-                    "clarifications": state["clarifications"],
-                    "milestones": milestone_plan_signature(state["draft_milestones"]),
-                },
-            },
-        )
-        self.assertEqual(state["phase"], "PLANNED")
-        rendered, _ = self.render_grant()
-        evidence_match = re.search(
-            r"## Final Plan Confirmation Evidence.*?```json\n(.*?)\n```",
-            rendered,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(evidence_match)
-        evidence = json.loads(evidence_match.group(1))
-        self.assertEqual(evidence["interview_rounds"][0]["defaults"], ["Use pytest.", "Change only one module."])
-        self.assertEqual(
-            evidence["interview_rounds"][0]["recorded_answers"],
-            ["The user explicitly accepts both assumptions."],
-        )
-
-    def test_defaults_cannot_be_injected_after_the_user_answers(self) -> None:
-        self.open_round_one()
-        message = self.assert_rejected(
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["The user's actual answer."],
-                    "defaults": ["An assumption the user never saw."],
-                    "complete": True,
-                    "draft_milestones": [milestone()],
-                },
-            }
-        )
-        self.assertIn("cannot introduce new defaults", message)
-        self.assertEqual(read_state(self.root)["interview_status"], "awaiting_answers")
-
-    def test_plan_prompts_have_no_default_value_escape_hatch(self) -> None:
-        plan_prompt = (REPO_ROOT / ".mary-workflow/prompts/mw-plan.md").read_text(encoding="utf-8")
-        ready_prompt = (REPO_ROOT / ".mary-workflow/prompts/mw-ready.md").read_text(encoding="utf-8")
-        plan_skill = (REPO_ROOT / "skills/plan/SKILL.md").read_text(encoding="utf-8")
-        combined = "\n".join((plan_prompt, ready_prompt, plan_skill)).lower()
-
-        self.assertIn("must show defaults and wait for explicit confirmation", combined)
-        self.assertIn("do not freeze the draft in the same response", combined)
-        self.assertIn("including with interview disabled", combined)
-        for forbidden in (
-            "if the user does not answer, proceed",
-            "if there is no response, proceed",
-            "assume the user accepts",
-            "silence means confirmation",
-            "reasonable defaults and continue",
-        ):
-            self.assertNotIn(forbidden, combined)
-
-    def test_update_interview_is_prelogged_and_counted(self) -> None:
-        self.open_round_one()
-        state = read_state(self.root)
-        self.assertEqual(state["action_counts"]["update_interview"], 1)
-
-        apply_action(
-            self.root,
-            {
-                "action": "update_interview",
-                "data": {
-                    "mode": "resolve",
-                    "round": 1,
-                    "answers": ["Recorded user answer."],
-                    "complete": True,
-                    "draft_milestones": [milestone()],
-                },
-            },
-        )
-        state = read_state(self.root)
-        self.assertEqual(state["action_counts"]["update_interview"], 2)
-
-        log_lines = (self.root / "log.md").read_text(encoding="utf-8").splitlines()
-        open_action = next(i for i, line in enumerate(log_lines) if "action update_interview mode=open round=1" in line)
-        open_done = next(i for i, line in enumerate(log_lines) if "updated interview mode=open" in line)
-        resolve_action = next(
-            i for i, line in enumerate(log_lines) if "action update_interview mode=resolve round=1" in line
-        )
-        resolve_done = next(i for i, line in enumerate(log_lines) if "updated interview mode=resolve" in line)
-        self.assertLess(open_action, open_done)
-        self.assertLess(open_done, resolve_action)
-        self.assertLess(resolve_action, resolve_done)
-
-    def test_run_refuses_planning_and_plan_prompt_has_hard_stop(self) -> None:
-        with self.assertRaises(SystemExit) as context:
-            prompt_path_for(self.project, "mw-run")
-        self.assertIn("Complete /mw-plan", str(context.exception))
-
-        prompt = (REPO_ROOT / ".mary-workflow/prompts/mw-plan.md").read_text(encoding="utf-8")
-        self.assertIn("Do not render `/mw-run` context", prompt)
-        self.assertIn("Do not emit `start_execution`", prompt)
-        self.assertIn("/mw-run` confirms and starts", prompt)
-
-    def test_earlier_and_missing_versions_are_rejected(self) -> None:
-        state_path = self.root / "state.yaml"
-        state_text = state_path.read_text(encoding="utf-8")
-        state_path.write_text(state_text.replace("version: 2.1", "version: 2.0", 1), encoding="utf-8")
-        with self.assertRaises(SystemExit) as context:
-            read_state(self.root)
-        self.assertIn("Earlier state contracts", str(context.exception))
-
-        state_path.write_text("\n".join(state_text.splitlines()[1:]) + "\n", encoding="utf-8")
-        with self.assertRaises(SystemExit):
-            read_state(self.root)
-
-    def test_prompt_refresh_preserves_state_file(self) -> None:
-        state_before = (self.root / "state.yaml").read_bytes()
+    def test_prompt_seeding_preserves_existing_snapshot_by_default(self):
+        before = (self.root / "state.yaml").read_bytes()
         target = self.root / "prompts/mw-plan.md"
-        target.write_text("stale prompt\n", encoding="utf-8")
-        refreshed = seed_core_prompts(self.root, overwrite=True)
-        self.assertEqual(refreshed, 10)
-        self.assertIn("Non-Negotiable Boundary", target.read_text(encoding="utf-8"))
-        self.assertTrue((self.root / "prompts/mw-resume.md").exists())
-        self.assertEqual((self.root / "state.yaml").read_bytes(), state_before)
+        target.write_text("Pinned old phase\n")
+        self.assertEqual(seed_core_prompts(self.root), 0)
+        self.assertEqual(target.read_text(), "Pinned old phase\n")
+        self.assertEqual((self.root / "state.yaml").read_bytes(), before)
 
-    def test_existing_state_read_does_not_scan_the_project(self) -> None:
+    def test_existing_state_read_does_not_scan_the_project(self):
         with mock.patch("mary_workflow.detect_project", side_effect=AssertionError("unexpected scan")):
             state = read_state(self.root)
         self.assertEqual(state["project_brief_status"], "complete")
 
-    def test_fingerprints_stream_files_without_read_bytes(self) -> None:
+    def test_fingerprints_stream_files_without_whole_file_read(self):
         source = self.project / "streamed.txt"
-        source.write_bytes((b"mary-workflow\n" * 100_000) + b"end")
+        source.write_bytes(b"mary-workflow\n" * 100_000 + b"end")
         expected = hashlib.sha256(source.read_bytes()).hexdigest()
-        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("whole-file read")):
+        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("whole file read")):
             records = fingerprint_records(self.project, [source])
         self.assertEqual(records, [{"path": "streamed.txt", "sha256": expected}])
 
-    def test_init_ignore_can_be_explicitly_empty(self) -> None:
+    def test_ignore_can_be_explicitly_empty_and_language_can_change(self):
         project = self.project / "no-default-ignore"
         root = project / ".mary-workflow"
         root.mkdir(parents=True)
-        (root / "config.yaml").write_text("init:\n  ignore: []\n", encoding="utf-8")
+        (root / "config.yaml").write_text("init:\n  ignore: []\n")
         (project / "output").mkdir()
-        (project / "output/source.csv").write_text("kept\n", encoding="utf-8")
-        state = default_state(project)
+        (project / "output/source.csv").write_text("kept\n")
         self.assertEqual(read_config(root)["init_ignore"], [])
-        self.assertIn("output/source.csv", state["project_inventory"])
+        self.assertIn("output/source.csv", default_state(project)["project_inventory"])
+        update_config(root, language="auto")
+        self.assertEqual(read_config(root)["language"], "auto")
+        self.assertEqual(read_config(root)["init_ignore"], [])
 
-    def test_init_during_execution_skips_drift_and_preserves_execution(self) -> None:
-        self.start_execution()
-        (self.project / "runtime-change.txt").write_text("in progress\n", encoding="utf-8")
-        result = self.run_cli("init")
+    def test_init_during_execution_preserves_phase_plan_and_existing_prompts(self):
+        initial = self.start()
+        (self.project / "runtime-change.txt").write_text("in progress\n")
+        target = self.root / "prompts/mw-plan.md"
+        original = target.read_bytes()
+        self.cli("init")
         state = read_state(self.root)
         self.assertEqual(state["phase"], "EXECUTING")
         self.assertEqual(state["project_brief_status"], "complete")
-        self.assertIn("运行中，跳过简报漂移检查", result.stdout)
+        self.assertEqual(state["runtime_meta"]["frozen_plan_digest"], initial["runtime_meta"]["frozen_plan_digest"])
+        self.assertEqual(target.read_bytes(), original)
 
-        state["project_brief_status"] = "refresh_required"
-        state["project_changed_files"] = ["added:runtime-change.txt"]
-        write_state(self.root, state)
-        self.assertEqual(legal_actions_for_state(state), {"mark_task_done", "record_error"})
-        completed = apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        self.assertEqual(completed["phase"], "REVIEWING")
+    def test_fresh_cli_init_scans_all_text_and_pins_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            for index in range(105):
+                (project / f"file_{index:03d}.txt").write_text(f"file {index}\n")
+            (project / "image.bin").write_bytes(b"\x00\x01binary")
+            for folder, name in (("node_modules", "ignored.js"), ("output", "metrics.csv"), ("scratch", "debug.json")):
+                (project / folder).mkdir()
+                (project / folder / name).write_text("ignored\n")
+            (project / "weights.ckpt").write_bytes(b"checkpoint")
+            (project / ".maryignore").write_text("scratch/**\n")
+            self.cli("init", cwd=project)
+            workflow = project / ".mary-workflow"
+            state = read_state(workflow)
+            self.assertEqual(state["version"], "3.0")
+            self.assertEqual(state["phase"], "PLANNING")
+            self.assertEqual(len(state["project_inventory"]), 106)
+            self.assertIn("file_104.txt", state["project_inventory"])
+            for excluded in ("image.bin", "weights.ckpt", "node_modules/ignored.js", "output/metrics.csv", "scratch/debug.json"):
+                self.assertNotIn(excluded, state["project_inventory"])
+            self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
+            self.assertTrue((workflow / "runtime/scripts/mary_workflow.py").is_file())
+            self.assertTrue((project / ".mary-research/reading-profile.md").is_file())
+            before = (workflow / "state.yaml").read_bytes()
+            self.cli("status", cwd=project)
+            self.assertEqual((workflow / "state.yaml").read_bytes(), before)
+            remove_tree(workflow)
 
-    def test_fresh_init_cli_creates_v21_workspace(self) -> None:
-        fresh = self.project / "fresh"
-        fresh.mkdir()
-        for index in range(105):
-            (fresh / f"file_{index:03d}.txt").write_text(f"file {index}\n", encoding="utf-8")
-        (fresh / "image.bin").write_bytes(b"\x00\x01binary")
-        (fresh / "node_modules").mkdir()
-        (fresh / "node_modules/ignored.js").write_text("ignored\n", encoding="utf-8")
-        (fresh / "output").mkdir()
-        (fresh / "output/metrics.csv").write_text("loss\n0.1\n", encoding="utf-8")
-        (fresh / "model.ckpt").write_bytes(b"checkpoint")
-        (fresh / "scratch").mkdir()
-        (fresh / "scratch/debug.json").write_text("{}\n", encoding="utf-8")
-        (fresh / ".maryignore").write_text("scratch/**\n", encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts/mary_workflow.py"), "init"],
-            cwd=fresh,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
-        workflow = fresh / ".mary-workflow"
-        state = read_state(workflow)
-        self.assertEqual(state["version"], "2.1")
-        self.assertEqual(state["phase"], "PLANNING")
-        self.assertEqual(state["project_brief_status"], "machine_detected")
-        self.assertEqual(len(state["project_inventory"]), 106)
-        self.assertIn("file_104.txt", state["project_inventory"])
-        self.assertIn(".maryignore", state["project_inventory"])
-        self.assertNotIn("image.bin", state["project_inventory"])
-        self.assertNotIn("model.ckpt", state["project_inventory"])
-        self.assertNotIn("node_modules/ignored.js", state["project_inventory"])
-        self.assertNotIn("output/metrics.csv", state["project_inventory"])
-        self.assertNotIn("scratch/debug.json", state["project_inventory"])
-        config = read_config(workflow)
-        self.assertIn("output/**", config["init_ignore"])
-        self.assertEqual(len(list((workflow / "prompts").glob("*.md"))), 10)
-        self.assertTrue((workflow / "prompts/slide-learning.md").is_file())
-        self.assertFalse((workflow / "prompts/mw-slide.md").exists())
-        self.assertTrue((workflow / "analysis").is_dir())
-        reading_profile = fresh / ".mary-research/reading-profile.md"
-        self.assertTrue(reading_profile.is_file())
-        self.assertIn("<!-- mary-reading-profile:v1 -->", reading_profile.read_text(encoding="utf-8"))
-        self.assertIn("继续 /mw-init 理解流程", result.stdout)
-        init_context = render_prompt(fresh, "mw-init")
-        self.assertIn("# Mary Init Understanding Phase", init_context)
-        self.assertIn("file_104.txt", init_context)
-        self.assertIn(
-            "Local Delivery Contract",
-            (workflow / "prompts/mw-learn.md").read_text(encoding="utf-8"),
-        )
-        self.assertNotIn(
-            "notion",
-            (workflow / "prompts/mw-exam.md").read_text(encoding="utf-8").lower(),
-        )
-
-    def test_course_profiles_render_as_shared_mary_context(self) -> None:
-        for alias, prompt_name, marker in (
-            ("mw-learn", "mw-learn.md", "Course Learning Profile"),
-            ("mw-exam", "mw-exam.md", "ExamPass Profile"),
-            ("mw-review", "mw-exam.md", "ExamPass Profile"),
-            ("slide-learning", "slide-learning.md", "Slide Learning Profile"),
-        ):
+    def test_course_aliases_keep_local_scene_and_shared_phase_context(self):
+        for alias, expected, marker in (("mw-learn", "mw-learn.md", "Course Learning Profile"), ("mw-exam", "mw-exam.md", "ExamPass Profile"), ("mw-review", "mw-exam.md", "ExamPass Profile"), ("slide-learning", "slide-learning.md", "Slide Learning Profile")):
             phase, prompt = prompt_path_for(self.project, alias)
             self.assertEqual(phase, "PLANNING")
-            self.assertEqual(prompt.name, prompt_name)
-            rendered = render_prompt(self.project, alias)
-            self.assertIn(f"Alias: /{alias}", rendered)
-            self.assertIn(marker, rendered)
-            self.assertIn("Mary Workflow v2.1 Context", rendered)
+            self.assertEqual(prompt.name, expected)
+            self.assertIn(marker, render_prompt(self.project, alias))
+        for name in ("mw-learn", "mw-exam"):
+            source = (REPO_ROOT / "references/phases" / f"{name}.md").read_text()
+            self.assertIn("Local Delivery Contract", source)
+            self.assertIn("relative path", source)
+            self.assertNotIn("notion", source.lower())
 
-    def test_course_profiles_have_local_delivery_and_shared_phase_boundaries(self) -> None:
-        profile_files = {
-            "mw-learn": [
-                REPO_ROOT / ".mary-workflow/prompts/mw-learn.md",
-                REPO_ROOT / "commands/mw-learn.md",
-                REPO_ROOT / "skills/lecture-learning/SKILL.md",
-                REPO_ROOT / "skills/slide-to-lecture/SKILL.md",
-            ],
-            "mw-exam": [
-                REPO_ROOT / ".mary-workflow/prompts/mw-exam.md",
-                REPO_ROOT / "commands/mw-exam.md",
-                REPO_ROOT / "skills/exam-review/SKILL.md",
-            ],
-        }
-        for alias, paths in profile_files.items():
-            combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
-            lowered = combined.lower()
-            self.assertIn("local delivery contract", lowered)
-            self.assertIn(".mary-workflow/", combined)
-            for phase in ("PLANNING", "PLANNED", "EXECUTING", "REVIEWING", "DEBUGGING", "FINISHED"):
-                self.assertIn(f"`{phase}`", combined)
-            for action in ("mark_task_done", "record_error", "set_phase", "update_state"):
-                self.assertIn(action, combined)
-            self.assertNotIn("notion", lowered, msg=f"{alias} must not default to an external note system")
-            self.assertIn("relative local", lowered)
-            self.assertIn("do not silently", lowered)
-
-    def test_course_profiles_remain_available_after_finished_cycle(self) -> None:
-        self.start_execution()
-        apply_action(self.root, {"action": "mark_task_done", "data": {"id": "milestone-1"}})
-        apply_action(
-            self.root,
-            {"action": "set_phase", "data": {"phase": "FINISHED", "decision": "accepted"}},
-        )
-        rendered = render_prompt(self.project, "mw-exam")
-        self.assertIn("Resolved phase: FINISHED", rendered)
-        self.assertIn("ExamPass Profile", rendered)
+    def test_course_profile_is_available_after_finish(self):
+        self.start()
+        self.review(self.implementation())
+        phase, prompt = prompt_path_for(self.project, "mw-exam")
+        self.assertEqual(phase, "FINISHED")
+        self.assertEqual(prompt.name, "mw-exam.md")
+        self.assertIn("ExamPass Profile", render_prompt(self.project, "mw-exam"))
 
 
 if __name__ == "__main__":

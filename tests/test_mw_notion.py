@@ -23,7 +23,8 @@ class MwNotionCommandTests(unittest.TestCase):
 
         self.assertIn("# /mw-notion", self.command)
         self.assertIn("$ARGUMENTS", self.command)
-        self.assertIn("does not require or mutate", self.command)
+        self.assertIn("independent of", self.skill)
+        self.assertIn("or mutate Mary state", self.skill)
         self.assertIn("skills/notion/SKILL.md", self.command)
         self.assertIn("`/mw-notion`", self.root_skill)
         self.assertIn("skills/notion/SKILL.md", self.root_skill)

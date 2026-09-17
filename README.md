@@ -1,49 +1,25 @@
 # Mary Workflow
 
-Mary Workflow 是一套面向 Codex 的项目工作流。它会先完整理解项目，再通过需求访谈拆分里程碑，并按计划自动完成编码、检查和问题修复。
+Mary Workflow 3.0 是一套与模型无关的 agent 工作流，适用于代码开发、研究实验、课程学习、论文阅读和文档操作。主线负责理解需求、派单、核对证据和验收；子代理负责有明确边界的实现、调研和独立检查；Python 运行时验证阶段、计划身份、改动范围和交付证据。
 
-它适合需要让 Codex 持续处理一个完整任务，而不只是修改一两个文件的场景，也适合把课程 Lecture 学习和考试复习纳入同一套可暂停、可审计的流程。
+工作流不指定模型、供应商、推理档位、上下文大小或服务等级。主线和子代理继承用户的宿主设置，不根据模型名称选择流程，也不修改全局配置或 shell 启动文件。
 
-## 主要能力
+## 核心行为
 
-- **完整理解项目**：扫描项目文件，识别技术栈、目录结构、运行方式和关键模块，生成可确认的项目说明。
-- **需求访谈与规划**：在开始修改前确认目标、范围和约束，将任务拆分为 1～7 个可验收的里程碑。
-- **自动执行与检查**：按照已确认的计划逐个完成里程碑，并在每个阶段检查变更和验收结果。
-- **中断后继续**：随时暂停，之后可以从原来的阶段和里程碑继续执行。
-- **错误恢复**：执行失败时保留错误现场，并创建聚焦于当前问题的修复任务。
-- **多轮迭代**：完成一轮工作后归档本轮记录，再基于已有项目理解开始下一轮需求。
-- **课程自学**：ai辅助课程学习，完成Slide → Lecture，并处理课堂录音转写和课堂增量融合。
-- **考试复习**： 结合课程自学中的资料生成章节/总复习、错题本和模拟卷交付物。
-- **论文研读**：独立管理论文阅读状态，生成可追溯笔记、总结、VSP-Beamer 汇报和来源约束问答。
-- **Notion 操作**：通过 `/mw-notion` 搜索、读取、新建、修改、移动和整理页面/数据库，并按统一规范排版和回读校验。
+- **上下文复用**：保留已有探索成果，阶段边界核对状态与变化；项目说明和机器清单保存在项目内，不要求声明丢弃记忆。
+- **分级理解**：小项目直接阅读，中项目形成模块摘要，大项目可由 explorer 并行分片。运行时核算清单覆盖，无需为每个文件填写重复的用途、导出和消费者字段。
+- **必要访谈**：只问影响范围、验收或重要选择的问题，信息充分时不额外提问。里程碑按可独立验收边界划分，不限制文件数和里程碑数。
+- **明确执行起点**：计划冻结后，用户明确发出 `/mw-run` 即开始。记录计划哈希、确认来源和运行身份，不搬运一次性口令，也不重复请求已给出的授权。
+- **委派与独立审查**：worker 提交待审结果，主线核对任务身份、真实改动和实际验证。实现者不能自行接受交付；独立 verifier 审查之后，主线完成状态转换。
+- **可恢复执行**：停止时中断或通知 worker，保留现场；恢复时核对残留改动和计划版本，拒绝旧任务的迟到或重复结果。
+- **聚焦修复**：DEBUGGING 只诊断并排入修复任务，回到 EXECUTING 才修改产品文件；保留失败、执行、审查和重试证据。
+- **增量归档**：cycle 检测文件变化，更新受影响认知并列出仍有效条目，合并成完整项目说明后归档。
 
-## 适用场景
+文件哈希和动作白名单用于发现正常流程中的误操作，不能阻止拥有任意 shell 权限的 agent 绕开脚本。所谓只读 worker 也需要宿主实际权限支持；提示词本身不是文件系统隔离。
 
-Mary Workflow 可以用于：
+## 安装与运行
 
-- 接手陌生项目，快速建立完整的项目认知；
-- 开发跨多个文件或模块的新功能；
-- 进行重构、迁移、性能优化等复杂改造；
-- 将模糊需求整理成清晰、可验收的实施计划；
-- 处理需要多轮编码、检查和修复的长任务；
-- 在同一项目中连续完成多个独立需求，并保留每轮工作记录。
-
-对于只改一处文案、调整一个配置值等非常小的任务，直接与 Codex 对话通常更快捷。
-
-## 安装
-
-### 环境要求
-
-- 已安装并可正常使用 [Codex CLI](https://developers.openai.com/codex/cli/)
-- Git
-- Python 3.10 或更高版本
-- 使用 `/mw-notion` 时，需要在 Codex 中配置并授权 Notion MCP 连接
-
-Mary Workflow 不需要安装额外的 Python 依赖。
-
-### 安装到 Codex
-
-在终端执行：
+需要 Python 3.10 或更高版本、Git，以及能够读取技能和执行本地工具的 agent 宿主。核心运行时不依赖额外 Python 包。以下是 Codex 的安装示例；其他宿主可以使用相同脚本和契约，按实际工具能力适配。
 
 ```bash
 mkdir -p ~/.codex/skills
@@ -51,210 +27,93 @@ git clone https://github.com/reversevertin1999/mary-workflow.git \
   ~/.codex/skills/mary-workflow
 ```
 
-安装完成后，重新启动 Codex 或开启一个新的 Codex 会话。
-
-如果你已经在其他位置克隆了仓库，也可以创建软链接：
-
-```bash
-mkdir -p ~/.codex/skills
-ln -s /你的绝对路径/mary-workflow ~/.codex/skills/mary-workflow
-```
-
-### 更新
-
-```bash
-git -C ~/.codex/skills/mary-workflow pull
-```
-
-更新后重新启动 Codex 或开启一个新会话。
-
-## 快速开始
-
-所有命令都应在目标项目的根目录中使用。
-
-### 1. 打开项目
-
-```bash
-cd /你的项目路径
-codex
-```
-
-### 2. 初始化并理解项目
-
-在 Codex 中输入：
+在目标项目根目录开启宿主会话，依次使用：
 
 ```text
 /mw-init
+/mw-plan 为后台管理系统增加角色权限管理，并补充相应测试
+/mw-run
 ```
 
-Mary Workflow 会读取项目、进行必要的安全检查，并展示完整的项目说明。请确认说明是否准确，并按提示选择后续输出语言。
+`/mw-init` 建立项目说明；`/mw-plan` 保存真实需求、必要澄清、交付路径和验收条件并冻结计划；`/mw-run` 确认并执行这个计划。讨论中的“可以/对”必须按其回答的问题理解，不能把对方案的认可偷换成开始执行的授权。用户已有明确执行授权时，不再机械追问。
 
-如果项目中有不希望扫描的大型目录或文件，可以先在项目根目录创建 `.maryignore`，每行填写一个忽略规则，例如：
+项目根目录的 `.maryignore` 与 `.mary-workflow/config.yaml` 中 `init.ignore` 控制扫描排除项，例如：
 
 ```gitignore
 data/**
-models/**
 *.log
 ```
 
-### 3. 描述需求并生成计划
+排除规则会影响所声称的覆盖范围；覆盖记录不能证明语义理解。缺少数据、GPU 或工具时，如实保留未运行的验证，不能以 CPU 或格式检查冒充真实实验。
 
-```text
-/mw-plan 为后台管理系统增加角色权限管理，并补充相应测试
+## 命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `/mw-init` | 初始化、理解或刷新当前项目；保留已有固定版本 |
+| `/mw-plan [需求]` | 必要澄清与可验收计划，规划阶段不执行产品工作 |
+| `/mw-run` | 开始冻结计划或恢复暂停的运行 |
+| `/mw-status` | 查看阶段、worker、证据与阻塞，不修改状态 |
+| `/mw-stop` | 协调暂停、保留部分产物与恢复记录 |
+| `/mw-debug` | 诊断当前错误并排入聚焦修复 |
+| `/mw-cycle` | 刷新项目认知并归档当前周期 |
+| `/mw-learn` | Lecture 学习、slides、原始录音转写与课堂增量融合 |
+| `/mw-exam`、`/mw-review` | 章节/考试复习、错题本、自测与模拟卷 |
+| `/slide-learning` | 整理 Slide → Lecture 基础笔记 |
+| `/mw-paper` | 论文阅读、总结、汇报与基于来源的问答 |
+| `/mw-notion [请求]` | 读取或修改 Notion，检查 schema 并回读验证 |
+
+`/mw-init --reset` 仅用于用户明确要求删除并重建工作流数据的情况，不能用来代替升级。旧的模型设置命令已退出入口；`scripts/mw_model.py` 只保留不读写配置的兼容提示。既有用户 shell 配置不会被本次升级擅自删除或修改。
+
+## 委派、验证和并行
+
+每个 worker 任务包含身份与 attempt、计划版本、目标、交付物、允许写入范围、验收、改动基线和必要上下文。worker 返回 `ready_for_review`、真实文件变化、实际验证与证据路径，以及越界、阻塞和不确定性。执行与审查证据分别保存；旧证据不能在产物变化后继续作为通过依据。
+
+主线是控制状态的唯一写入者，使用 `mary_workflow.py apply-action`。它保留用户交互、最终判定、Git 写操作和已授权外部修改；worker 不直接修改正式状态、日志或报告。合法测试修订可以纳入范围，但删除断言或弱化验收以换取通过不可接受。
+
+第一版保持里程碑串行，支持当前里程碑内部的独立任务并行，以及 init 分片阅读。文件不相交还不够：共享接口、生成文件、数据库、端口和构建输出也可能冲突。紧耦合工作保留在同一个 worker 或串行处理，不为小任务制造派单仪式。
+
+宿主缺少子代理时，可以按契约运行明确标注的单 agent 兼容模式，不能声称已经完成独立 agent 审查。TodoList 是持久记录的进度视图；结构化提问、memory、goal 和 hooks 都是可选能力。辅助 hooks 应短时、幂等、失败不阻塞；没有它们，核心流程也必须工作。
+
+具体协议见 [子代理契约](references/subagent-contract.md)、[状态契约](references/state-contract.md)、[记忆契约](references/memory-contract.md) 和 [宿主能力契约](references/host-contract.md)。
+
+## 多场景边界
+
+课程学习和考试复习使用 milestone/cycle 生命周期，交付物放在项目已有课程或笔记目录；原始资料和录音转写保持完整。内容验收包含来源、范围、公式、图像和学习结果，不能仅检查文件存在。
+
+论文继续使用独立的 `paper_state_schema: 1` 和 `.mary-research/papers/<paper-id>/`，不要求 milestone init/run。来源定位、解析质量、下游失效、slide 编译与视觉检查、quiz 的追加哈希链保持原契约。原文与生成 JSON sidecar 放在 `artifacts/`；`slides.tex` 是可编辑汇报源。paper workspace 中 `make slide` 生成 `build/slides.pdf`，`make hypo-template` 保留独立模板对照。详见 [paper 技能](skills/paper/SKILL.md)。
+
+Notion 操作依赖已授权的实际连接，先读取目标与 schema、最小范围修改、再回读确认。worker 可准备内容和调研，主线执行已授权的外部写入。没有工具时报告具体依赖，不能声称已同步。详见 [Notion 技能](skills/notion/SKILL.md)。
+
+## 指令来源与升级
+
+维护源只有技能和共享契约：
+
+| 位置 | 角色 |
+| --- | --- |
+| `skills/*/SKILL.md` | 命令对应的维护入口 |
+| `references/phases/*.md` | 阶段指令的维护源 |
+| `commands/*.md` | 从技能生成的兼容路由，不手工维护行为 |
+| `.mary-workflow/prompts/*.md` | 从阶段源生成的版本副本 |
+| 项目 `.mary-workflow/runtime/` | 项目固定的运行时及其兼容契约 |
+
+更新技能代码不会在普通 init 中静默替换项目的运行时和提示。旧项目保持完整版本的一致行为；不能把旧提示词与新状态逻辑混用。
+
+从 2.1 升级时，先在目标项目根目录预览，再在已有升级授权范围内应用：
+
+```bash
+python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate
+python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate --apply
 ```
 
-Codex 会根据任务复杂度询问必要的问题，然后展示里程碑计划。确认范围、假设和验收条件后，计划会被固定下来，但此时还不会修改代码。
+同一状态版本的运行时/提示 bundle 更新使用 `upgrade` 预览和 `upgrade --apply`。迁移保留历史并创建备份；不要为了升级 reset。使用已授权任务实施升级时，无需再次请求相同授权。
 
-### 4. 执行计划
+维护者修改源后运行：
 
-```text
-/mw-run
+```bash
+python scripts/mw_surfaces.py
+python scripts/mw_surfaces.py --check
+python -m unittest discover -s tests
 ```
 
-Codex 会再次展示最终计划供你确认，然后自动执行各个里程碑并检查结果，直到任务完成、需要你确认，或遇到阻塞。
-
-### 5. 开始下一轮需求
-
-当前任务完成后输入：
-
-```text
-/mw-cycle
-```
-
-它会归档本轮工作并保留项目理解。接着使用 `/mw-plan` 规划下一项需求。
-
-## 命令说明
-
-| 命令                 | 用途                                                                |
-| -------------------- | ------------------------------------------------------------------- |
-| `/mw-init`         | 初始化当前项目，读取项目并生成项目说明                              |
-| `/mw-init --reset` | 清除当前 Mary Workflow 数据并重新初始化                             |
-| `/mw-plan [需求]`  | 通过需求访谈生成并确认里程碑计划                                    |
-| `/mw-run`          | 开始执行已确认的计划，或继续已暂停的任务                            |
-| `/mw-status`       | 查看当前阶段、里程碑和执行状态，不修改任何内容                      |
-| `/mw-stop`         | 暂停执行并保留当前进度                                              |
-| `/mw-debug`        | 在工作流进入调试阶段后，创建聚焦的修复任务                          |
-| `/mw-cycle`        | 归档已完成的一轮工作，并准备下一轮需求                              |
-| `/mw-learn`        | 启动或继续 Lecture 学习：Course Hub、slides、录音转写和课堂增量融合 |
-| `/mw-exam`         | 启动或继续考试复习：范围、模式、复习页、错题本和模拟卷              |
-| `/mw-review`       | `/mw-exam` 的兼容别名                                             |
-| `/slide-learning`  | 只执行 Slide → Lecture 基础整理                                    |
-| `/mw-paper`        | 研读论文、生成总结/幻灯片并运行来源约束问答                         |
-| `/mw-notion [请求]` | 读取或修改 Notion，并按页面规范排版和回读验证                      |
-| `/mw-model [操作]`  | 配置或切换 VSP 与 DeepSeek Responses API                            |
-
-论文 workspace 的源文件和生成 JSON sidecar 统一放在
-`.mary-research/papers/<paper-id>/artifacts/`；根目录只保留 `state.json`、日志、阅读稿、总结和 slide 源文件。对旧 workspace 可运行
-`mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile` 和 `.mary-research/Makefile` dispatcher；可在 paper workspace 运行 `make slide`，也可在 `.mary-research/` 根目录运行 `make slide`（多 paper 时使用 `make PAPER_ID=<paper-id> slide`），并用 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
-
-## 常用操作
-
-### 操作 Notion
-
-```text
-/mw-notion 把本周项目复盘整理到“项目记录”页面，保留现有子页面，并补充下一步待办
-```
-
-`/mw-notion` 使用和其他 Mary Workflow 命令相同的命名与加载方式，但不依赖 `/mw-init`。它会先确认当前 Notion MCP 工具和参数、搜索并读取目标，再执行最小范围修改；数据库写入前会读取真实 schema，修改后会回读页面或数据行确认结果。
-
-### 查看进度
-
-```text
-/mw-status
-```
-
-### 切换 Codex 模型
-
-首次使用先执行：
-
-```text
-/mw-model configure
-```
-
-这会创建完整 DeepSeek provider 结构并保持 VSP 为默认模型，不会自动填写 key。请手动在 DeepSeek 段加入 `# experimental_bearer_token = "sk-..."`；之后 Python 切换器会注释不用的 provider 段、解除目标段注释。
-
-```text
-/mw-model use deepseek
-/mw-model use vsp
-/mw-model status
-```
-
-DeepSeek 当前可用于 Codex 的模型是 `deepseek-v4-flash`。每次切换后重新启动 Codex 会话即可。
-
-`$mary-workflow:mw-model` 是 Codex 技能调用，不是热切换接口。正在运行的 Codex 会话不会改变模型；请退出当前会话，在 Fish 中切换后重新启动 Codex。
-
-Mary Workflow 第一次执行 `/mw-init` 时会检测 `$SHELL`，自动配置 `mw-model` 和补全：Fish 写入 `~/.config/fish/`，Bash 写入 `~/.bashrc`，Zsh 写入 `~/.zshrc`。后续 `/mw-init` 会幂等修复缺失配置。
-
-### 暂停和继续
-
-```text
-/mw-stop
-```
-
-需要继续时输入：
-
-```text
-/mw-run
-```
-
-工作流会从暂停前的阶段继续，不需要重新规划。
-
-### 处理执行错误
-
-如果任务执行失败，Mary Workflow 会保留错误信息并进入调试阶段。输入：
-
-```text
-/mw-debug
-```
-
-Codex 会根据最近一次错误创建修复任务。随后使用 `/mw-run` 继续执行。
-
-### 项目发生了较大变化
-
-再次运行：
-
-```text
-/mw-init
-```
-
-Mary Workflow 会检查项目变化并更新项目理解，同时尽可能保留现有工作记录。
-
-只有在确实需要丢弃当前工作流数据、从头开始时才使用：
-
-```text
-/mw-init --reset
-```
-
-## 使用建议
-
-- 在 `/mw-plan` 阶段把边界、限制和验收标准说清楚，后续执行会更稳定。
-- 执行复杂任务前先提交或备份现有改动，方便区分原有内容与本轮变更。
-- 使用 `/mw-status` 查看进度；它不会改变工作流状态。
-- 不要手动修改 `.mary-workflow/` 中的内容，应通过 `/mw-*` 命令操作。
-- `.mary-workflow/` 保存当前项目的工作记录。如不希望提交到 Git，可将它加入项目的 `.gitignore`。
-
-## 常见问题
-
-### 为什么 `/mw-plan` 不能使用？
-
-请先运行 `/mw-init`，并完成项目说明的确认。只有项目理解完成后才能开始规划。
-
-### 为什么 `/mw-run` 没有直接开始编码？
-
-`/mw-run` 会先展示最终计划并完成最后一次确认，以避免在需求范围不明确时修改代码。
-
-### `/mw-stop` 会丢失进度吗？
-
-不会。当前阶段、里程碑和工作记录都会保留，再次运行 `/mw-run` 即可继续。
-
-### `/mw-cycle` 会自动开始下一项任务吗？
-
-不会。它只归档当前一轮并准备新的周期。归档完成后，请使用 `/mw-plan` 描述下一项需求。
-
-### 可以在同一个项目里多次使用吗？
-
-可以。每完成一轮工作后使用 `/mw-cycle`，下一轮可以复用已有的项目理解，不必每次从头开始。
-
-### 课程学习和代码开发会共用状态吗？
-
-会。课程命令使用同一个 `.mary-workflow/state.yaml` 和 cycle 生命周期，但学习内容默认写入项目本地课程/笔记目录；本地资料路径、错题本和本地日程记录都可以作为交付物。一个 Lecture、一个考试章节或一套模拟卷应保持为边界清晰的 milestone；不要把学习内容伪装成本地代码改动。
+`--check` 只报告生成物漂移，不写入文件。核心运行时测试验证阶段和交付边界；真实宿主、远端连接和真实模型表现需要对应环境实测，不能由本地合成测试替代。

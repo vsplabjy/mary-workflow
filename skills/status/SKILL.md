@@ -1,20 +1,10 @@
 ---
 name: status
-description: Show Mary Workflow v2.1 status without mutating state. Use when the user invokes /mw-status.
+description: Show persisted Mary Workflow phase, current tasks, validation, and blockers without changing state. Use for /mw-status.
 ---
 
 # Mary Workflow: Status
 
-Show current Mary Workflow state.
+Run `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-status` from the project root. Report the project brief and refresh status, pinned contract version, current cycle and phase, frozen plan revision/digest, authorization, run status and identity, current milestone, worker attempts, validation, independent review, and blockers when those records are available.
 
-## Procedure
-
-1. Work from the user's current project root.
-2. Render status context:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-status
-   ```
-
-3. Report project-brief status/version/inventory/change count, current cycle and phase, interview status/round, final-plan confirmation, lease status/run id, grant purpose/fingerprint, current milestone, action counts, rejected envelope count, and phase history. Never expose a plaintext grant token.
-4. Do not mutate `.mary-workflow/state.yaml`.
+Present phase-local progress from persisted records. A host TodoList is a view, not another source of task truth. Do not claim a pending worker completed or a skipped command passed. This command is read-only: do not renew authorization, create tasks, or modify state.

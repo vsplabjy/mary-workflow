@@ -1,7 +1,7 @@
 {
   "name": "mary-workflow",
-  "version": "2.2.0-alpha.7+codex.20260730132249",
-  "description": "Cycle-aware project, learning, research-paper, and polished Notion MCP workflows for Codex.",
+  "version": "3.0.0",
+  "description": "Model-independent project, learning, research-paper, and Notion workflows with delegated execution and evidence-backed review.",
   "author": {
     "name": "Mary Workflow",
     "url": "https://github.com/reversevertin1999/mary-workflow"
@@ -28,7 +28,7 @@
   "interface": {
     "displayName": "Mary Workflow",
     "shortDescription": "Run project, learning, paper, and Notion workflows",
-    "longDescription": "Mary Workflow packages a stable v2.1 milestone engine, course Lecture learning and ExamPass review profiles, v2.2 research skills for independent paper states and grounded artifacts, plus schema-aware Notion MCP operations with polished page construction and read-back verification.",
+    "longDescription": "Mary Workflow combines a model-independent v3.0 milestone engine with scoped worker delegation, evidence-backed review, resumable execution, version-pinned project runtimes, course learning profiles, independent paper states and schema-aware Notion operations.",
     "developerName": "Mary Workflow",
     "category": "Coding",
     "capabilities": [

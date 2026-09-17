@@ -1,21 +1,12 @@
 ---
 name: cycle
-description: Archive the current Mary Workflow cycle and reset active state. Use when the user invokes /mw-cycle.
+description: Refresh changed project understanding incrementally and archive a completed Mary Workflow cycle. Use for /mw-cycle.
 ---
 
 # Mary Workflow: Cycle
 
-Archive the current cycle into `.mary-workflow/cycles/<cycle>/` and start the next cycle.
+Run `python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py cycle` from the project root.
 
-## Procedure
+If it reports `refresh_required`, render `mw-init` and use the [memory contract](../../references/memory-contract.md). Read added/modified files, account for deletions and affected dependencies, submit an incremental brief update with explicit retained entries and superseded facts, then run `cycle` again. The runtime computes coverage and merges a complete brief; do not manually resubmit every unchanged file description.
 
-1. Work from the user's current project root.
-2. Run:
-
-   ```bash
-   python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py cycle
-   ```
-
-3. If the command reports `refresh_required`, render `mw-init`, perform the incremental reread for every `project.changed_files` entry, apply a complete `submit_brief mode=cycle_refresh`, and run `cycle` again.
-4. Report the archive path, new cycle, and updated project-brief version.
-5. Tell the user the next step is `/mw-plan`.
+Report the archive path, new cycle, and project brief version. Preserve facts and confirmed project preferences/decisions; archive task-local execution, review, and retry evidence. Do not overwrite host memory or auto-start unrelated work. The next task can be planned with `/mw-plan`.

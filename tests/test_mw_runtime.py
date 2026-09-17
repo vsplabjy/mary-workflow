@@ -172,12 +172,15 @@ class PersistenceRuntimeTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as context:
             apply_action(workflow, {"action": "update_project", "data": []})
 
-        self.assertEqual(
-            str(context.exception),
-            "Rejected action update_project: Action data must be an object.",
-        )
+        self.assertTrue(str(context.exception).startswith(
+            "Rejected action update_project: Action data must be an object.\n"
+        ))
         state = read_state(workflow)
         self.assertEqual(state["rejected_actions"], 1)
+        recovery = state["runtime_meta"]["last_rejection"]
+        self.assertEqual(recovery["code"], "ACTION_REJECTED")
+        self.assertIn("update_project", recovery["allowed_actions"])
+        self.assertTrue(recovery["suggested_next"])
         log = (workflow / "log.md").read_text(encoding="utf-8")
         self.assertIn(
             "rejected action=update_project phase=PLANNING reason=Action data must be an object.",
