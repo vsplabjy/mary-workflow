@@ -202,7 +202,8 @@ def render_run_authorization(state: dict[str, object], alias: str) -> str:
     return ("## Execution Authorization\n\n"
             f"- plan_digest: `{digest}`\n"
             f"- plan_revision: {state.get('runtime_meta', {}).get('plan_revision', 0)}\n"
-            "Record the user's actual /mw-run instruction with source=/mw-run and this plan_digest. "
+            "Record /mw-run with source=/mw-run, or a clear natural-language execution request with "
+            "source=user_instruction, intent=execute, and verbatim confirmation, bound to this plan_digest. "
             "Rendering is read-only and is not itself evidence of user authorization. "
             "Do not ask again when the current plan is already explicitly authorized.")
 

@@ -8,3 +8,5 @@ description: Show persisted Mary Workflow phase, current tasks, validation, and 
 Run `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-status` from the project root. Report the project brief and refresh status, pinned contract version, current cycle and phase, frozen plan revision/digest, authorization, run status and identity, current milestone, worker attempts, validation, independent review, and blockers when those records are available.
 
 Present phase-local progress from persisted records. A host TodoList is a view, not another source of task truth. Do not claim a pending worker completed or a skipped command passed. This command is read-only: do not renew authorization, create tasks, or modify state.
+
+For a bound SDD change also show the change ID, source/baseline drift, task-to-scenario/check coverage, review decisions, and unaccepted work. Distinguish structural coverage from semantic validation and recorded acceptance. Read-only `sdd-check <change-id>` can inspect source-derived milestones without binding or authorizing them.

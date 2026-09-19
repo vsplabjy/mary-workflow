@@ -22,3 +22,5 @@ For acceptance use the current verifier task ID:
 ```
 
 Use `FINISHED` only after all milestones and required review are accepted. Failed acceptance uses `record_error`, preserving the actual command/output. A need to revise scope uses the state contract's legal return to `PLANNING`, not an invented `reopen_plan` in this phase. Continue the automatic run for the next milestone when allowed. Report findings and evidence, not an unverified claim of success.
+
+For SDD milestones require `scenario_reviews` for every current milestone reference, each with `scenario`, `decision: passed|needs-fix`, and nonempty concrete `evidence` pointers. Read the scenarios and inspect actual implementation/tests; reject missing or contradicted evidence. Removal/rename references are obligations too. Keep traceability coverage distinct from semantic correctness. Check bound artifacts/base specs remain current before acceptance.

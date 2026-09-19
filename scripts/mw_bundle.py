@@ -24,10 +24,10 @@ STATE_VERSION = "3.0"
 LOCK_FILE = "workflow-lock.json"
 CORE_SCRIPTS = (
     "mary_workflow.py", "mw_codex.py", "mw_runtime.py", "mw_workers.py",
-    "mw_brief.py", "mw_bundle.py", "mw_host.py", "mw_surfaces.py", "mw_reading_profile.py",
+    "mw_brief.py", "mw_bundle.py", "mw_host.py", "mw_surfaces.py", "mw_reading_profile.py", "mw_sdd.py",
 )
 CORE_REFERENCES = (
-    "state-contract.md", "memory-contract.md", "subagent-contract.md", "host-contract.md",
+    "state-contract.md", "memory-contract.md", "subagent-contract.md", "host-contract.md", "sdd-contract.md",
 )
 CORE_SKILLS = ("lecture-learning", "exam-review", "slide-to-lecture", "roundtrip-screenshot")
 
