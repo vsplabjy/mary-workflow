@@ -52,7 +52,7 @@ PHASE_PROMPTS = {
     "DEBUGGING": "mw-debug.md",
 }
 PHASE_ACTIONS = {
-    "PLANNING": {"submit_brief", "update_interview", "update_project", "update_state", "delegate_task", "submit_worker_result"},
+    "PLANNING": {"submit_brief", "update_interview", "update_project", "update_state", "bind_change", "delegate_task", "submit_worker_result"},
     "PLANNED": {"reopen_plan", "start_execution"},
     "EXECUTING": {"mark_task_done", "record_error", "delegate_task", "run_validation", "submit_worker_result", "confirm_milestone", "request_replan"},
     "REVIEWING": {"set_phase", "record_error", "delegate_task", "run_validation", "submit_worker_result", "request_replan"},
@@ -773,11 +773,17 @@ def current_plan_digest(state: State) -> str:
         "clarifications": list(state.get("clarifications", [])),
         "milestones": milestone_plan_signature([item for item in state_milestones(state) if not item.get("repair_of")]),
     }
+    if state.get("runtime_meta", {}).get("sdd"):
+        payload["sdd"] = state["runtime_meta"]["sdd"]
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def assert_frozen_plan(state: State) -> str:
+    binding = state.get("runtime_meta", {}).get("sdd")
+    if binding:
+        from mw_sdd import assert_binding
+        assert_binding(Path(state["project_root"]), binding)
     frozen = str(state.get("runtime_meta", {}).get("frozen_plan_digest") or "")
     if not frozen or frozen != current_plan_digest(state):
         raise WorkflowError("The frozen plan changed. Return to planning and confirm a new revision before execution.")
@@ -789,12 +795,13 @@ def confirm_execution(state: State, data: JsonObject, purpose: str) -> None:
     if data.get("plan_digest") != digest:
         raise WorkflowError("plan_digest must match the displayed frozen plan; refresh /mw-run context.")
     confirmation = require_text(data.get("confirmation"), "confirmation")
-    if data.get("source") != "/mw-run":
-        raise WorkflowError("Execution requires an explicit /mw-run instruction, recorded as source=/mw-run.")
+    source = data.get("source")
+    if source != "/mw-run" and not (source == "user_instruction" and data.get("intent") == "execute"):
+        raise WorkflowError("Execution requires /mw-run or an explicit user_instruction with intent=execute and verbatim confirmation.")
     metadata = state.setdefault("runtime_meta", {})
     metadata.setdefault("authorizations", []).append({
         "purpose": purpose, "plan_digest": digest, "plan_revision": metadata.get("plan_revision", 0),
-        "confirmation": confirmation, "source": "/mw-run", "recorded_at": now_iso(),
+        "confirmation": confirmation, "source": source, "intent": "execute", "recorded_at": now_iso(),
     })
 
 
@@ -959,6 +966,8 @@ def apply_action(root: Path, payload: JsonObject) -> State:
 
 def _apply_action_locked(root: Path, payload: JsonObject) -> State:
     state = read_state(root)
+    if (root / "cycle-archive.json").exists():
+        raise WorkflowError("Cycle archival was interrupted; run cycle to recover before applying actions.")
     try:
         action, data = action_envelope_parts(payload)
     except EnvelopeError as exc:
@@ -991,6 +1000,8 @@ def _apply_action_locked(root: Path, payload: JsonObject) -> State:
             state = action_submit_brief(root, working_state, data)
         elif action == "update_state":
             state = action_update_state(root, working_state, data)
+        elif action == "bind_change":
+            state = action_bind_change(root, working_state, data)
         elif action == "reopen_plan":
             state = action_reopen_plan(root, working_state, data)
         elif action == "start_execution":
@@ -1032,6 +1043,12 @@ def _apply_action_locked(root: Path, payload: JsonObject) -> State:
     refresh_progress(state)
     state.setdefault("runtime_meta", {})["state_revision"] = state.get("runtime_meta", {}).get("state_revision", 0) + 1
     write_state(root, state)
+    if (action == "set_phase" and data.get("decision") in {"accepted", "accepted-next"}
+            and state.get("runtime_meta", {}).get("sdd")):
+        from mw_sdd import sync_tasks
+        accepted = {item["id"] for item in state_milestones(state)
+                    if item.get("review") in {"accepted", "accepted-next"}}
+        sync_tasks(root.parent, state["runtime_meta"]["sdd"], accepted)
     return state
 
 
@@ -1049,6 +1066,8 @@ def legal_actions_for_state(state: State) -> set[str]:
         return recovery | {"submit_brief", "delegate_task", "submit_worker_result"}
     if phase == "PLANNING" and brief_status != "complete":
         return recovery | {"submit_brief", "update_project", "delegate_task", "submit_worker_result"}
+    if phase == "FINISHED" and state.get("runtime_meta", {}).get("sdd") and not state["runtime_meta"].get("sdd_archive"):
+        return recovery | {"request_replan"}
     return recovery | PHASE_ACTIONS.get(phase, set())
 
 
@@ -1498,12 +1517,25 @@ def action_submit_brief(root: Path, state: State, data: JsonObject) -> State:
     return state
 
 
+def action_bind_change(root: Path, state: State, data: JsonObject) -> State:
+    from mw_sdd import load_change
+    if state.get("interview_status") != "draft_ready":
+        raise WorkflowError("Prepare the source-derived interview draft before bind_change.")
+    binding = load_change(root.parent, require_text(data.get("change_id"), "change_id"))
+    source = normalize_milestones(binding["milestones"])
+    if milestone_plan_signature(source) != milestone_plan_signature(state_draft_milestones(state)):
+        raise WorkflowError("tasks.md differs from the reviewed draft; revise the draft from sdd-check before binding.")
+    state.setdefault("runtime_meta", {})["sdd"] = binding
+    state["runtime_meta"]["frozen_plan_digest"] = ""
+    return state
+
+
 def action_update_state(root: Path, state: State, data: JsonObject) -> State:
     phase = str(data.get("phase") or "PLANNED").upper()
     if phase != "PLANNED":
-        raise WorkflowError("update_state must move the workflow to PLANNED. Only /mw-run may start execution.")
+        raise WorkflowError("update_state must move the workflow to PLANNED. Explicit execution authorization is required to start.")
     if any(key in data for key in ("confirmed", "confirmation")):
-        raise WorkflowError("update_state must not declare plan confirmation; /mw-run confirms the frozen plan.")
+        raise WorkflowError("update_state must not declare plan confirmation; start_execution confirms the frozen plan.")
     if state.get("interview_status") != "draft_ready":
         raise WorkflowError("update_state requires a completed interview and a draft plan ready to freeze.")
     clarifications = normalize_optional_list(data.get("clarifications"))
@@ -1516,6 +1548,12 @@ def action_update_state(root: Path, state: State, data: JsonObject) -> State:
     draft = state_draft_milestones(state)
     if milestone_plan_signature(milestones) != milestone_plan_signature(draft):
         raise WorkflowError("update_state milestones must exactly match the user-reviewed draft_milestones.")
+    binding = state.get("runtime_meta", {}).get("sdd")
+    if binding:
+        from mw_sdd import assert_binding
+        assert_binding(root.parent, binding)
+        if milestone_plan_signature(milestones) != milestone_plan_signature(normalize_milestones(binding["milestones"])):
+            raise WorkflowError("Frozen milestones must match the bound tasks.md source; revise and bind_change again.")
     state["final_plan_confirmed"] = False
     state["interview_status"] = "plan_ready"
     state["clarifications"] = clarifications
@@ -1553,6 +1591,9 @@ def action_reopen_plan(root: Path, state: State, data: JsonObject) -> State:
 def action_request_replan(root: Path, state: State, data: JsonObject) -> State:
     from mw_workers import cancel_tasks, list_tasks
     feedback = require_text(data.get("feedback"), "request_replan.feedback")
+    journal = root / "sdd-archive.json"
+    if journal.exists() and not json.loads(journal.read_text()).get("complete"):
+        raise WorkflowError("Recover the pending SDD archive with cycle before replanning.")
     ensure_validation_settled(root)
     pending = [task for task in list_tasks(root) if task.get("status") == "running"]
     if (pending or state.get("runtime_meta", {}).get("stop_pending")) and data.get("workers_quiescent") is not True:
@@ -1561,6 +1602,7 @@ def action_request_replan(root: Path, state: State, data: JsonObject) -> State:
     metadata.setdefault("plan_history", []).append({
         "plan_revision": metadata.get("plan_revision"), "plan_digest": metadata.get("frozen_plan_digest"),
         "milestones": copy.deepcopy(state_milestones(state)), "feedback": feedback, "recorded_at": now_iso(),
+        "sdd": copy.deepcopy(metadata.get("sdd")),
     })
     cancel_tasks(root, "explicit replan request")
     clear_execution_lease(state)
@@ -1730,6 +1772,10 @@ def action_set_phase(root: Path, state: State, data: JsonObject) -> State:
         reset_planning_session(state, root)
         state.setdefault("runtime_meta", {})["frozen_plan_digest"] = ""
     elif phase == "FINISHED":
+        if state.get("runtime_meta", {}).get("sdd"):
+            from mw_workers import _extra
+            state["runtime_meta"]["sdd_snapshot_paths"] = _extra(root, state)
+            state["runtime_meta"]["sdd_accepted_product"] = sdd_product_snapshot(root, state)
         cancel_tasks(root, "run finished")
         state["current_milestone_id"] = ""
         release_execution_lease(state)
@@ -1879,7 +1925,11 @@ def next_cycle_id(cycle_id: str) -> str:
 
 
 def make_readonly(path: Path) -> None:
+    if path.is_symlink():
+        return
     for item in path.rglob("*"):
+        if item.is_symlink():
+            continue
         if item.is_file():
             item.chmod(0o444)
         elif item.is_dir():
@@ -1888,10 +1938,15 @@ def make_readonly(path: Path) -> None:
 
 
 def remove_tree(path: Path) -> None:
+    if path.is_symlink():
+        path.unlink()
+        return
     if not path.exists():
         return
     for item in path.rglob("*"):
         try:
+            if item.is_symlink():
+                continue
             if item.is_dir():
                 item.chmod(0o755)
             else:
@@ -2532,8 +2587,21 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def sdd_product_snapshot(root: Path, state: State) -> JsonObject:
+    from mw_workers import _snapshot
+    metadata = state["runtime_meta"]
+    binding = metadata["sdd"]
+    snapshot = _snapshot(root.parent, metadata.get("sdd_snapshot_paths", []))
+    excluded = set(binding["files"]) | set(binding["base_specs"])
+    destination = f"openspec/changes/archive/{state['cycle']}-{binding['change_id']}/"
+    return {path: value for path, value in snapshot.items()
+            if path not in excluded and not path.startswith(destination)}
+
+
 def cmd_cycle(args: argparse.Namespace) -> int:
     root = require_root(Path.cwd())
+    if (root / "cycle-archive.json").exists():
+        return resume_cycle_archive(root)
     state = read_state(root)
     ensure_validation_settled(root)
     if state.get("phase") in {"EXECUTING", "REVIEWING", "DEBUGGING"} and state.get("status") != "stopped":
@@ -2546,6 +2614,17 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     brief_status = str(state.get("project_brief_status") or "machine_detected")
     if brief_status not in {"complete", "refresh_required"}:
         raise SystemExit("Project brief is incomplete. Finish /mw-init and submit_brief before /mw-cycle.")
+    if state.get("phase") == "FINISHED" and state.get("runtime_meta", {}).get("sdd"):
+        from mw_sdd import archive_change
+        expected = state["runtime_meta"].get("sdd_accepted_product")
+        changed_after_acceptance = expected is None or sdd_product_snapshot(root, state) != expected
+        if changed_after_acceptance and not state["runtime_meta"].get("sdd_archive"):
+            raise WorkflowError("Product changed after SDD acceptance; obtain fresh execution/review evidence before archival.")
+        if changed_after_acceptance:
+            state["runtime_meta"]["sdd_post_archive_changes"] = True
+            print("规格已经按已验收快照归档；后续产品变化将进入简报刷新，不视为本次验收通过。")
+        state["runtime_meta"]["sdd_archive"] = archive_change(root, state)
+        write_state(root, state)
     changed_files = changed_project_files(state)
     if state.get("runtime_meta", {}).get("legacy_brief_refresh_pending") or state.get("runtime_meta", {}).get("brief", {}).get("legacy_pending"):
         state["project_brief_status"] = "refresh_required"
@@ -2574,37 +2653,9 @@ def cmd_cycle(args: argparse.Namespace) -> int:
 
     old_cycle = str(state.get("cycle") or "C0")
     new_cycle = next_cycle_id(old_cycle)
-    archive = root / CYCLES_DIR / old_cycle
-    if archive.exists():
-        raise SystemExit(f"Cycle archive already exists: {archive}")
-    archive.mkdir(parents=True)
-
-    for name in ("state.yaml", "log.md", BRIEF_FILE):
-        source = root / name
-        if source.exists():
-            shutil.copy2(source, archive / name)
-
-    reports_root = root / REPORTS_DIR
-    cycle_reports = reports_root / old_cycle
-    if cycle_reports.exists():
-        shutil.copytree(cycle_reports, archive / REPORTS_DIR)
-    elif reports_root.exists():
-        shutil.copytree(reports_root, archive / REPORTS_DIR)
-    if reports_root.exists():
-        shutil.rmtree(reports_root)
-    (root / REPORTS_DIR).mkdir(exist_ok=True)
-
-    analysis_root = root / ANALYSIS_DIR
-    if analysis_root.exists():
-        shutil.copytree(analysis_root, archive / ANALYSIS_DIR)
-        shutil.rmtree(analysis_root)
-    analysis_root.mkdir(exist_ok=True)
-    tasks_root = root / "tasks"
-    if tasks_root.exists():
-        shutil.copytree(tasks_root, archive / "tasks")
-        shutil.rmtree(tasks_root)
-    make_readonly(archive)
-
+    if (root / CYCLES_DIR / old_cycle).exists():
+        raise WorkflowError(f"Cycle archive already exists: {root / CYCLES_DIR / old_cycle}")
+    archived_state = copy.deepcopy(state)
     state["cycle"] = new_cycle
     state["status"] = "idle"
     state["phase"] = "PLANNING"
@@ -2620,17 +2671,75 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     state["rejected_actions"] = 0
     state["phase_history"] = []
     metadata = state.setdefault("runtime_meta", {})
-    for key in ("last_task_id", "last_evidence", "milestone_tasks", "confirmations", "authorizations", "stop_pending"):
+    for key in ("last_task_id", "last_evidence", "milestone_tasks", "confirmations", "authorizations", "stop_pending", "sdd", "sdd_archive", "sdd_snapshot_paths", "sdd_accepted_product", "sdd_post_archive_changes"):
         metadata.pop(key, None)
     metadata["frozen_plan_digest"] = ""
     metadata["state_revision"] = metadata.get("state_revision", 0) + 1
-    sync_prompt_for_phase(state, root)
+    transaction = {"schema_version": 1, "id": secrets.token_hex(12),
+                   "old_cycle": old_cycle, "old_state": archived_state, "next_state": state}
+    atomic_write_text(root / "cycle-archive.json", json.dumps(transaction, ensure_ascii=False, indent=2) + "\n")
+    return resume_cycle_archive(root)
+
+
+def resume_cycle_archive(root: Path) -> int:
+    """Copy before clearing controls; a durable journal makes each step retryable."""
+    journal = root / "cycle-archive.json"
+    if journal.is_symlink():
+        raise WorkflowError("Cycle archive journal must not be a symlink.")
+    transaction = json.loads(journal.read_text(encoding="utf-8"))
+    old_cycle = transaction["old_cycle"]
+    if not re.fullmatch(r"C[0-9]+", old_cycle):
+        raise WorkflowError("Invalid cycle archive identity.")
+    state = transaction["next_state"]
+    if read_state(root)["cycle"] not in {old_cycle, state["cycle"]}:
+        raise WorkflowError("Cycle archive journal is stale; preserve it for diagnosis.")
+    archive = root / CYCLES_DIR / old_cycle
+    staging = root / CYCLES_DIR / ("." + old_cycle + ".pending")
+    if any(path.is_symlink() for path in (root / CYCLES_DIR, archive, staging)):
+        raise WorkflowError("Cycle archive paths must not be symlinks.")
+    marker = archive / ".transaction.json"
+    if archive.exists():
+        if not marker.is_file() or json.loads(marker.read_text()) != {"id": transaction["id"]}:
+            raise WorkflowError(f"Cycle archive already exists: {archive}")
+    else:
+        if staging.exists():
+            remove_tree(staging)
+        staging.mkdir(parents=True)
+        for name in ("state.yaml", "log.md", BRIEF_FILE, "sdd-archive.json"):
+            source = root / name
+            if source.is_symlink():
+                raise WorkflowError("Cycle control files must not be symlinks.")
+            if source.exists():
+                shutil.copy2(source, staging / name)
+        for name in (REPORTS_DIR, ANALYSIS_DIR, "tasks"):
+            source = root / name
+            if source.is_symlink() or (source / old_cycle).is_symlink():
+                raise WorkflowError("Cycle control directories must not be symlinks.")
+            if name == REPORTS_DIR and (source / old_cycle).exists():
+                source = source / old_cycle
+            if source.exists():
+                shutil.copytree(source, staging / name, symlinks=True)
+        atomic_write_text(staging / ".transaction.json", json.dumps({"id": transaction["id"]}) + "\n")
+        staging.rename(archive)
+    make_readonly(archive)
+    # No new actions are allowed until the journal is removed. Clearing source
+    # controls is safe after the complete copy exists, including after a crash.
+    for name in (REPORTS_DIR, ANALYSIS_DIR, "tasks"):
+        source = root / name
+        if source.is_symlink():
+            raise WorkflowError("Cycle control directories must not be symlinks.")
+        if source.exists():
+            remove_tree(source)
+        if name != "tasks":
+            source.mkdir()
     write_state(root, state)
+    sync_prompt_for_phase(state, root)
     write_project_brief(root, state)
     atomic_write_text(root / "log.md", "# Mary Workflow Log\n\n", encoding="utf-8")
-    append_log(root, f"cycle {old_cycle} archived; started {new_cycle}")
+    append_log(root, f"cycle {old_cycle} archived; started {state['cycle']}")
+    journal.unlink()
     print(f"已归档 {old_cycle} 到 {archive}")
-    print(f"已开启 {new_cycle}。下一步：/mw-plan")
+    print(f"已开启 {state['cycle']}。下一步：/mw-plan")
     return 0
 
 
@@ -2638,6 +2747,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     root = require_root(Path.cwd())
     state = read_state(root)
     print_status(state, read_config(root).get("language", "zh"))
+    return 0
+
+
+def cmd_sdd_check(args: argparse.Namespace) -> int:
+    from mw_sdd import load_change
+    binding = load_change(Path.cwd(), args.change_id)
+    normalize_milestones(binding["milestones"])
+    print(json.dumps(binding, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -2689,6 +2806,19 @@ def print_status(state: State, language: str = "zh") -> None:
         print_status_en(state, milestone, milestone_id)
     else:
         print_status_zh(state, milestone, milestone_id)
+    binding = state.get("runtime_meta", {}).get("sdd")
+    if binding:
+        from mw_sdd import assert_binding
+        print(f"sdd_change: {binding['change_id']}")
+        accepted = {item["id"] for item in state_milestones(state)
+                    if item.get("review") in {"accepted", "accepted-next"}}
+        trace = binding["trace"]
+        print(f"sdd_scenario_checks_accepted: {sum(item['milestone_id'] in accepted for item in trace)}/{len(trace)}")
+        try:
+            assert_binding(Path(state["project_root"]), binding)
+            print("sdd_artifacts: current")
+        except ValueError as exc:
+            print(f"sdd_artifacts: changed or archived ({exc})")
 
 
 def print_status_en(state: State, milestone: Milestone | None, milestone_id: str) -> None:
@@ -2797,6 +2927,9 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.set_defaults(func=cmd_init)
 
     subparsers.add_parser("status", help="show status without mutating state").set_defaults(func=cmd_status)
+    sdd_parser = subparsers.add_parser("sdd-check", help="validate a change and print its source-derived plan without writing")
+    sdd_parser.add_argument("change_id")
+    sdd_parser.set_defaults(func=cmd_sdd_check)
     cycle_parser = subparsers.add_parser("cycle", help="archive current cycle and reset active state")
     cycle_parser.add_argument("--workers-quiescent", action="store_true", help="attest stopped workers no longer write")
     cycle_parser.set_defaults(func=cmd_cycle)
@@ -2824,6 +2957,9 @@ def main(argv: list[str]) -> int:
         if forwarded is not None:
             return forwarded
         args = build_parser().parse_args(argv)
+        if ((workflow_root(Path.cwd()) / "cycle-archive.json").exists()
+                and args.command not in {"cycle", "status", "tasks", "sdd-check"}):
+            raise WorkflowError("Cycle archival was interrupted; run cycle to recover before other mutations.")
         if args.command in {"init", "cycle"}:
             with workflow_lock(workflow_root(Path.cwd())):
                 return args.func(args)

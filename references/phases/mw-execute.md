@@ -16,3 +16,5 @@ The main agent is the coordinator. Read current state; require `EXECUTING` and a
 Failure uses `record_error` with the actual command, error output, and return code. Preserve environment/input blockers without claiming success or retrying indefinitely. Product repair runs only as authorized execution work; a scope change uses `request_replan` with concrete feedback. After completion re-render `/mw-run` and continue into independent review.
 
 Keep phase-local progress visible and report verification limits in the configured language. On stop, cease dispatch/acceptance, notify or interrupt workers, persist pause, and wait for writes to settle. Never delegate authorization, final acceptance, workflow state, Git writes, or external mutations. Inherit host configuration for every agent.
+
+For a bound change, supply complete relevant requirement/scenario text and `covers` references with each task. Frozen proposal/spec/design/task or base-spec drift requires quiescing workers and a legal replan. Do not edit task checkboxes to claim progress: acceptance synchronizes them. A linked scenario is a review obligation, not evidence of success.

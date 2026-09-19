@@ -160,9 +160,12 @@ def _revision(state: Json) -> object:
 
 
 def _binding(state: Json) -> Json:
-    return {"run_id": state.get("lease_run_id", ""),
+    binding = {"run_id": state.get("lease_run_id", ""),
             "plan_revision": _revision(state), "cycle": state.get("cycle", "C0"),
             "execution_mode": state.get("runtime_meta", {}).get("execution_mode", "delegated")}
+    if state.get("runtime_meta", {}).get("sdd"):
+        binding["sdd_digest"] = _digest(state["runtime_meta"]["sdd"])
+    return binding
 
 
 def _milestone(state: Json, milestone_id: str) -> Json:
@@ -183,6 +186,12 @@ def _checks(milestone: Json) -> list[Json]:
 
 def _current(root: Path, state: Json, data: Json, *, statuses: set[str] | None = None) -> Json:
     task = _read_json(_task_dir(root, data.get("task_id")) / "task.json")
+    if task.get("role") != "explorer" and state.get("runtime_meta", {}).get("sdd"):
+        from mw_sdd import assert_binding
+        try:
+            assert_binding(root.parent, state["runtime_meta"]["sdd"])
+        except ValueError as exc:
+            raise WorkerError(str(exc)) from exc
     if not data.get("attempt_id") or data["attempt_id"] != task["attempt_id"]:
         raise WorkerError("attempt_id is required and must match the active dispatch.")
     for key in ("run_id", "plan_revision", "cycle", "execution_mode", "milestone_id"):
@@ -246,7 +255,11 @@ def _snapshot(project: Path, extra: list[str] | None = None) -> Json:
         elif path.is_symlink():
             result[name] = {"kind": "symlink", "target": os.readlink(path), "index": index.get(name, [])}
         elif path.is_file():
-            result[name] = {"kind": "file", "sha256": _file_digest(path),
+            digest = _file_digest(path)
+            if name.startswith("openspec/changes/") and path.name == "tasks.md":
+                from mw_sdd import canonical_tasks
+                digest = hashlib.sha256(canonical_tasks(path.read_text(encoding="utf-8")).encode()).hexdigest()
+            result[name] = {"kind": "file", "sha256": digest,
                             "mode": stat.S_IMODE(path.stat().st_mode), "index": index.get(name, [])}
         elif path.exists():
             result[name] = {"kind": "directory", "index": index.get(name, [])}
@@ -317,6 +330,17 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
     deliverables = _paths(project, data.get("deliverables", milestone.get("deliverables", [])), "deliverables")
     scope = _paths(project, data.get("write_scope", deliverables if role == "implementer" else []), "write_scope")
     dependencies = _paths(project, data.get("read_dependencies", milestone.get("read_dependencies", [])), "read_dependencies")
+    binding = state.get("runtime_meta", {}).get("sdd")
+    trace = []
+    if binding and role != "explorer":
+        from mw_sdd import assert_binding
+        assert_binding(project, binding)
+        protected = set(binding["files"]) | set(binding["base_specs"])
+        if set(scope) & protected:
+            raise WorkerError("Bound SDD artifacts are coordinator-owned; use replanning to change them.")
+        dependencies = sorted(set(dependencies) | {path for path in protected if (project / path).exists()})
+        source_id = milestone.get("repair_of") or milestone_id
+        trace = [item for item in binding["trace"] if item["milestone_id"] == source_id]
     if role != "implementer" and scope:
         raise WorkerError("Explorer/verifier must have empty product write_scope.")
     if role == "implementer":
@@ -361,6 +385,8 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
                   "reviews_task_ids": reviews, "retry_of": str(data.get("retry_of") or ""),
                   "status": "running", "created_at": _now(), "validation": [],
                   "scratch": f".mary-workflow-worker/{task_id}"}
+    if binding and role != "explorer":
+        task["sdd"] = {"change_id": binding["change_id"], "files": binding["files"], "trace": trace}
     baseline = _snapshot(project, _extra(root, state) + scope + dependencies + deliverables)
     scratch_root = project / ".mary-workflow-worker"
     if scratch_root.is_symlink() or (scratch_root / task_id).is_symlink():
@@ -673,6 +699,20 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
             raise WorkerError("Verifier requires decision=passed|needs-fix and a findings list.")
         if data["decision"] == "needs-fix" and not data["findings"]:
             raise WorkerError("A needs-fix decision requires concrete findings.")
+        if task.get("sdd"):
+            reviews = data.get("scenario_reviews")
+            required = {item["scenario"] for item in task["sdd"]["trace"]}
+            if (not isinstance(reviews, list) or not all(isinstance(item, dict) and isinstance(item.get("scenario"), str) for item in reviews)
+                    or len(reviews) != len(required)
+                    or {item.get("scenario") for item in reviews} != required):
+                raise WorkerError("scenario_reviews must cover every bound scenario exactly once.")
+            for review in reviews:
+                if (review.get("decision") not in {"passed", "needs-fix"}
+                        or not isinstance(review.get("evidence"), list) or not review["evidence"]
+                        or not all(isinstance(ref, str) and ref.strip() for ref in review["evidence"])):
+                    raise WorkerError("Each scenario review requires a decision and concrete evidence references.")
+                if data["decision"] == "passed" and review["decision"] != "passed":
+                    raise WorkerError("A passed review cannot contain an unresolved scenario.")
     result: Json = {"schema_version": 1, "task_id": task["task_id"], "attempt_id": task["attempt_id"],
                     **_binding(state), "status": status, "summary": str(data["summary"]),
                     "files_changed": actual, "validation": validation,
@@ -685,6 +725,8 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
     if task["role"] == "verifier" and status == "ready_for_review":
         result.update(decision=data["decision"], findings=data["findings"],
                       review_mode=task["review_mode"], reviews_task_ids=task["reviews_task_ids"])
+        if task.get("sdd"):
+            result["scenario_reviews"] = data["scenario_reviews"]
     _immutable(_task_dir(root, task["task_id"]) / "result.json", result)
     task.update(status=status, submitted_at=result["submitted_at"], result_digest=_digest(result))
     _save(root, task)
@@ -731,8 +773,13 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
     missing = {check["id"] for check in _checks(milestone)} - covered
     if missing:
         raise WorkerError("Missing executed passing acceptance evidence: " + ", ".join(sorted(missing)))
+    source_id = milestone.get("repair_of") or milestone["id"]
+    trace = state.get("runtime_meta", {}).get("sdd", {}).get("trace", [])
+    coverage = [{**item, "evidence": [record["evidence_id"] for record in validation
+                                     if record["acceptance_id"] in item["acceptance_ids"]]}
+                for item in trace if item["milestone_id"] == source_id]
     return {"task_ids": task_ids, "files_changed": sorted(files), "validation": validation,
-            "snapshot_digest": digest}
+            "snapshot_digest": digest, "scenario_coverage": coverage}
 
 
 def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json) -> Json:

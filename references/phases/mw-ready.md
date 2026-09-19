@@ -16,3 +16,5 @@ Apply through `mary_workflow.py apply-action` using the digest from the rendered
 ```
 
 This starts a run bound to the frozen plan. A hash checks plan identity; it cannot independently authenticate human authorization. Re-render `/mw-run` after success and begin coordinating the current milestone. Never substitute silence or a generated confirmation string for the user's instruction.
+
+An unambiguous natural-language instruction to execute is also valid: use `source: user_instruction`, `intent: execute`, and its verbatim text in `confirmation`. Mere agreement is insufficient. For a bound SDD change, inspect spec/task coverage and current source/base identity before starting; drift requires the legal replan/rebind path, not a new hash pasted into the old plan.

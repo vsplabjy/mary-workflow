@@ -9,7 +9,7 @@ Mary Workflow 3.0 是一套与模型无关的 agent 工作流，适用于代码�
 - **上下文复用**：保留已有探索成果，阶段边界核对状态与变化；项目说明和机器清单保存在项目内，不要求声明丢弃记忆。
 - **分级理解**：小项目直接阅读，中项目形成模块摘要，大项目可由 explorer 并行分片。运行时核算清单覆盖，无需为每个文件填写重复的用途、导出和消费者字段。
 - **必要访谈**：只问影响范围、验收或重要选择的问题，信息充分时不额外提问。里程碑按可独立验收边界划分，不限制文件数和里程碑数。
-- **明确执行起点**：计划冻结后，用户明确发出 `/mw-run` 即开始。记录计划哈希、确认来源和运行身份，不搬运一次性口令，也不重复请求已给出的授权。
+- **明确执行起点**：计划冻结后，用户明确发出 `/mw-run` 或“通过，直接修改”等执行指令即开始。记录计划哈希、确认来源和运行身份，不搬运一次性口令，也不重复请求已给出的授权。
 - **委派与独立审查**：worker 提交待审结果，主线核对任务身份、真实改动和实际验证。实现者不能自行接受交付；独立 verifier 审查之后，主线完成状态转换。
 - **可恢复执行**：停止时中断或通知 worker，保留现场；恢复时核对残留改动和计划版本，拒绝旧任务的迟到或重复结果。
 - **聚焦修复**：DEBUGGING 只诊断并排入修复任务，回到 EXECUTING 才修改产品文件；保留失败、执行、审查和重试证据。
@@ -117,3 +117,19 @@ python -m unittest discover -s tests
 ```
 
 `--check` 只报告生成物漂移，不写入文件。核心运行时测试验证阶段和交付边界；真实宿主、远端连接和真实模型表现需要对应环境实测，不能由本地合成测试替代。
+
+## SDD：规格、变更与执行
+
+核心代码开发默认使用 [SDD 契约](references/sdd-contract.md)。已接受的行为保存在 `openspec/specs/<capability>/spec.md`；当前变更位于 `openspec/changes/<change-id>/`，包含 `proposal.md`、增量规格、按需要编写的 `design.md` 和 `tasks.md`。规格描述可观察行为，任务描述实现与验证。既有未绑定计划继续兼容；论文与 Notion 保持独立流程。
+
+`tasks.md` 是唯一人工维护的任务定义。每个编号勾选项后附 `mary-task` JSON，声明交付路径、验收命令及场景到验收编号的映射。运行时从它生成 milestone；只有验收通过才回写勾选，不能靠手工勾选跳过验证。
+
+```bash
+python scripts/mary_workflow.py sdd-check add-export
+```
+
+此命令只读检查变更并输出里程碑与覆盖信息。主线将这些里程碑和真实澄清写入 `update_interview`，再执行 `bind_change` 和 `update_state` 冻结。计划身份绑定规格、设计、任务和已接受规格基线；改动后走合法重新规划路径。审查为每个场景记录具体证据与结论，覆盖完整不等于语义正确。
+
+完成并验收后的 `cycle` 合并 delta 并归档变更；遇到基线冲突停止覆盖，归档中断通过日志恢复。停止的未完成周期只归档执行证据，保留尚未合并的变更。纯文档/重构可通过 `.openspec.yaml` 的 `skip_specs: true` 与 `skip_reason` 明确解释无行为变化；不要为了格式发明需求。
+
+设计参考 [OpenSpec 概念](https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md) 和 [默认 spec-driven schema](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/schema.yaml)。兼容边界是本地文件布局和受支持的 Requirement/Scenario 增量格式，`mary-task` 和证据绑定是 Mary 扩展；不宣称完整 OpenSpec CLI 兼容，不要求 Node/OpenSpec CLI，也不模拟 stores、自定义 schema 或并发 change 执行。

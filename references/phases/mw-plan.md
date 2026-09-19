@@ -2,7 +2,7 @@
 
 Read current state and the project brief. Planning requires a complete brief and `PLANNING`, or a revision/read-only entry from `PLANNED`. Reuse prior context, actual answers, and evidence. A disputed brief is corrected through the appropriate state action after checking sources.
 
-`/mw-plan` does not execute product work. Do not edit product code. Do not run milestone acceptance commands. Do not render `/mw-run` context. Do not emit `start_execution`. An explicit `/mw-run` confirms and starts the frozen plan; discussion agreement alone is not an execution signal.
+`/mw-plan` does not execute product work. Change specification artifacts may be authored; do not edit product implementation code. Do not run milestone acceptance commands. Do not render `/mw-run` context. Do not emit `start_execution`. An explicit `/mw-run` or unambiguous user instruction to execute confirms and starts the frozen plan; discussion agreement alone is not an execution signal.
 
 In `PLANNED`, user-requested changes use `reopen_plan` with actual feedback. Otherwise show the frozen plan and available start action without mutating it.
 
@@ -13,3 +13,5 @@ Ask only material unresolved questions. Structured questions are optional; plain
 Use `update_interview` for actual questions/answers and the documented no-question planning path when information is sufficient; see the state contract for payloads. If genuinely required answers are absent, preserve the pending question and do independent read-only work where useful. Do not invent answers. `update_state` freezes the inspectable plan in `PLANNED` once its scope and acceptance are grounded. Display the final plan and material assumptions; a planning-only task ends here.
 
 Natural-language output and logs follow the configured language. Machine fields remain English. A native TodoList may mirror the plan but cannot rewrite its authority.
+
+For core code changes read the pinned SDD contract. Maintain a single task source in `openspec/changes/<change-id>/tasks.md`; create the proposal, behavior delta and optional design first. Run read-only `sdd-check <change-id>`, use its exact derived milestones in `update_interview`, apply `bind_change`, then `update_state`. Check all changed scenarios and operation references map to real acceptance IDs. Do not hand-author a second milestone definition or invent a behavior delta for a docs-only change.

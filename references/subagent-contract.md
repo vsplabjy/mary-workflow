@@ -343,3 +343,15 @@ initial/final locks and must not be wrapped in an outer lock around the command.
 Accept records only after all transition checks, while the old current milestone
 and run binding still exist. Close records and persist the state in the same
 coordinator critical section. `WorkerError` provides actionable contract errors.
+
+## SDD task context and scenario review
+
+For a bound change, dispatch includes the relevant proposal/design, complete referenced requirements and scenarios, and the current task's `covers` mapping. Workers must inspect those sources as contracts. Implementation tasks cannot change a frozen change definition; report any needed requirement or scope revision to the coordinator.
+
+An SDD verifier result additionally supplies `scenario_reviews`, covering every reference mapped to the current milestone. Each entry uses an exact scenario reference, `decision: passed|needs-fix`, and nonempty concrete evidence references:
+
+```json
+{"scenario_reviews":[{"scenario":"export::Export data::Successful export","decision":"passed","evidence":["tests/test_export.py:test_csv_export; registered check-1 output"]}]}
+```
+
+Removal/rename operations use the synthetic references documented in the SDD contract and also need review. A passed overall result cannot omit scenarios or hide a needs-fix scenario. Inspect behavior and adequacy of evidence; structural mapping and nonempty evidence text alone do not establish correctness. Acceptance still requires the existing runtime command receipts, current artifacts, review identity, and coordinator transition.
