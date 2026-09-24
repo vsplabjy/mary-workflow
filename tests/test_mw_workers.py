@@ -97,6 +97,31 @@ class WorkerContractTests(unittest.TestCase):
         # A crash after sidecars close but before state.yaml advances can retry.
         accept_tasks(self.root, self.state, [task["task_id"], reviewer["task_id"]])
 
+    def test_late_ignored_verifier_read_preserves_implementation_evidence(self):
+        (self.project / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=self.project, check=True)
+        subprocess.run(["git", "add", ".gitignore", "product.txt", "other.txt"],
+                       cwd=self.project, check=True)
+        task, _ = self.finish_implementation()
+        implementation_digest = self.verify()["snapshot_digest"]
+
+        ignored = self.project / "ignored" / "late-read.json"
+        ignored.parent.mkdir()
+        ignored.write_text('{"value": 1}\n', encoding="utf-8")
+        self.state["phase"] = "REVIEWING"
+        reviewer = self.dispatch("review", role="verifier", reviews_task_ids=[task["task_id"]],
+                                 read_dependencies=["ignored/late-read.json"])
+        self.submit(reviewer, files_changed=[], decision="passed", findings=[])
+        review = verify_review_evidence(self.root, self.state, self.milestone,
+                                        {"verifier_task_id": "review"})
+        self.assertEqual(review["snapshot_digest"], implementation_digest)
+        self.assertTrue(review["independent_review"])
+
+        ignored.write_text('{"value": 2}\n', encoding="utf-8")
+        with self.assertRaisesRegex(WorkerError, "Out-of-scope changes|Product changed"):
+            verify_review_evidence(self.root, self.state, self.milestone,
+                                   {"verifier_task_id": "review"})
+
     def test_self_approval_rejected(self):
         task, _ = self.finish_implementation()
         self.state["phase"] = "REVIEWING"
