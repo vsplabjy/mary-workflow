@@ -274,6 +274,14 @@ def _extra(root: Path, state: Json) -> list[str]:
                    for path in task["write_scope"] + task["read_dependencies"] + task["deliverables"]})
 
 
+def _implementation_extra(root: Path, state: Json, milestone_id: str) -> list[str]:
+    """Exclude later verifier reads from frozen implementation snapshots."""
+    return sorted({path for task in list_tasks(root)
+                   if all(task.get(key) == value for key, value in _binding(state).items())
+                   and not (task["role"] == "verifier" and task["milestone_id"] == milestone_id)
+                   for path in task["write_scope"] + task["read_dependencies"] + task["deliverables"]})
+
+
 def _changes(before: Json, after: Json) -> list[str]:
     return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
 
@@ -741,7 +749,7 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
         raise WorkerError("Milestone completion requires a nonempty unique task_ids list.")
     if milestone.get("id") != state.get("current_milestone_id"):
         raise WorkerError("Only the current milestone can be completed.")
-    snapshot = _snapshot(root.parent, _extra(root, state))
+    snapshot = _snapshot(root.parent, _implementation_extra(root, state, milestone["id"]))
     digest = _digest(snapshot)
     peers = [task for task in list_tasks(root)
              if task["role"] == "implementer" and task["milestone_id"] == milestone["id"]
@@ -790,10 +798,13 @@ def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json)
         raise WorkerError("Review requires an independent verifier task for the current milestone.")
     summary = verify_milestone_evidence(root, state, milestone, {"task_ids": task["reviews_task_ids"]})
     result = _result(root, task)
+    review_snapshot = _snapshot(root.parent, _extra(root, state))
+    review_digest = _digest(review_snapshot)
+    _scope_check(root, state, task, review_snapshot)
     if (result.get("status") != "ready_for_review" or result.get("decision") != "passed"
-            or result.get("snapshot_digest") != summary["snapshot_digest"]):
+            or result.get("snapshot_digest") != review_digest):
         raise WorkerError("Verifier has not passed the current product snapshot.")
-    if task["baseline_digest"] != summary["snapshot_digest"]:
+    if task["baseline_digest"] != review_digest:
         raise WorkerError("Product changed during independent review; dispatch a fresh review.")
     for reviewed_id in task["reviews_task_ids"]:
         reviewed = _read_json(_task_dir(root, reviewed_id) / "task.json")
