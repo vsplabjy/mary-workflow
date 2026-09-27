@@ -274,6 +274,23 @@ def _extra(root: Path, state: Json) -> list[str]:
                    for path in task["write_scope"] + task["read_dependencies"] + task["deliverables"]})
 
 
+def _task_snapshot(root: Path, task: Json) -> Json:
+    """Use the paths recorded at dispatch plus this task's own contract.
+
+    A later task may add an ignored read dependency.  Its path must not enter
+    an older task's validation snapshot merely because it was registered later.
+    Git-tracked and nonignored files are still included by ``_snapshot``.
+    """
+    baseline = _read_json(_task_dir(root, task["task_id"]) / "baseline.json")
+    if _digest(baseline) != task["baseline_digest"]:
+        raise WorkerError("Dispatch baseline record changed.")
+    paths = set(baseline)
+    paths.update(task["write_scope"])
+    paths.update(task["read_dependencies"])
+    paths.update(task["deliverables"])
+    return _snapshot(root.parent, sorted(paths))
+
+
 def _implementation_extra(root: Path, state: Json, milestone_id: str) -> list[str]:
     """Exclude later verifier reads from frozen implementation snapshots."""
     return sorted({path for task in list_tasks(root)
@@ -449,7 +466,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
             raise WorkerError("timeout_seconds must be a finite positive number.") from exc
         if not 0 < timeout <= 86400:
             raise WorkerError("timeout_seconds must be between 0 and 86400.")
-        before = _snapshot(root.parent, _extra(root, state))
+        before = _task_snapshot(root, task)
         _scope_check(root, state, task, before)
         evidence_id = "check-" + secrets.token_hex(10)
         directory = _task_dir(root, task["task_id"])
@@ -499,7 +516,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
         except WorkerError as exc:
             interruption = str(exc)
             current = _read_json(directory / "task.json")
-        after = _snapshot(root.parent, _extra(root, fresh))
+        after = _task_snapshot(root, current)
         evidence: Json = {"schema_version": 1, "evidence_id": evidence_id,
                           "task_id": task["task_id"], "attempt_id": task["attempt_id"],
                           **{key: task[key] for key in _binding(state)},
@@ -596,7 +613,7 @@ def recover_validation(root: Path, state: Json, data: Json) -> Json:
             "reason": str(data.get("reason") or "Coordinator crashed before final evidence persistence."),
             "created_at": _now(), "started_at": receipt.get("started_at"),
             "snapshot_digest": receipt.get("snapshot_digest"),
-            "after_snapshot_digest": _digest(_snapshot(root.parent, _extra(root, state))),
+            "after_snapshot_digest": _digest(_task_snapshot(root, task)),
             "coordinator_pid": coordinator_pid, "pid": process_id, "process_group_id": process_group,
             "absence_verified": True, "missing_logs": missing, **logs,
             "original_evidence_sha256": _file_digest(original_evidence) if original_evidence.is_file() else None,
@@ -653,7 +670,7 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
             raise WorkerError(f"{field} must be a list.")
     if status in {"blocked", "failed"} and not data.get("blockers"):
         raise WorkerError("Blocked/failed result requires concrete blockers and attempted remedies.")
-    snapshot = _snapshot(root.parent, _extra(root, state))
+    snapshot = _task_snapshot(root, task)
     issues: list[str] = []
     observed_deviations: list[str] = []
     if status == "ready_for_review":
