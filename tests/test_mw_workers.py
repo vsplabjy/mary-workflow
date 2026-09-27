@@ -122,6 +122,37 @@ class WorkerContractTests(unittest.TestCase):
             verify_review_evidence(self.root, self.state, self.milestone,
                                    {"verifier_task_id": "review"})
 
+    def test_repair_validation_ignores_late_verifier_only_artifact_path(self):
+        (self.project / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=self.project, check=True)
+        subprocess.run(["git", "add", ".gitignore", "product.txt", "other.txt"],
+                       cwd=self.project, check=True)
+        original, _ = self.finish_implementation()
+        self.state["phase"] = "REVIEWING"
+        self.dispatch("review", role="verifier", reviews_task_ids=[original["task_id"]],
+                      read_dependencies=["ignored/formal/receipt.json"])
+        cancel_tasks(self.root, "review rejected")
+        self.state["phase"] = "EXECUTING"
+        repair = self.dispatch("repair", retry_of=original["task_id"])
+
+        late = self.project / "ignored/formal/receipt.json"
+        late.parent.mkdir(parents=True)
+        late.write_text('{"status": "complete"}\n', encoding="utf-8")
+        evidence = self.validate(repair)
+        self.assertEqual(evidence["result"], "passed")
+        self.submit(repair, evidence, files_changed=[])
+
+        late.write_text('{"status": "tampered"}\n', encoding="utf-8")
+        # The repair does not claim to read this path, but the verifier does.
+        # Its own snapshot still rejects a changed receipt during review.
+        self.state["phase"] = "REVIEWING"
+        new_reviewer = self.dispatch("repair-review", role="verifier",
+                                     reviews_task_ids=[repair["task_id"]],
+                                     read_dependencies=["ignored/formal/receipt.json"])
+        late.write_text('{"status": "changed after review dispatch"}\n', encoding="utf-8")
+        with self.assertRaisesRegex(WorkerError, "Out-of-scope changes"):
+            self.submit(new_reviewer, files_changed=[], decision="passed", findings=[])
+
     def test_self_approval_rejected(self):
         task, _ = self.finish_implementation()
         self.state["phase"] = "REVIEWING"
