@@ -96,7 +96,7 @@ class SlidesContractTests(unittest.TestCase):
                 },
             },
         )
-        self.state, self.context = prepare_slides(self.project, self.paper_id)
+        self.state, self.context = prepare_slides(self.project, self.paper_id, backend="marp")
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
@@ -184,6 +184,8 @@ class SlidesContractTests(unittest.TestCase):
                 "--project-root",
                 str(self.project),
                 "prepare-slides",
+                "--backend",
+                "marp",
                 "--paper-id",
                 self.paper_id,
             ],
@@ -459,7 +461,7 @@ class SlidesContractTests(unittest.TestCase):
         context_path.write_text(json.dumps(context), encoding="utf-8")
         self.assert_rejected("slides-context.json is stale")
 
-        prepare_slides(self.project, self.paper_id)
+        prepare_slides(self.project, self.paper_id, backend="marp")
         write_slides_fixture(self.workspace)
         with self.assertRaises(SystemExit) as rejection:
             self.complete(fingerprint("f"))
@@ -473,7 +475,7 @@ class SlidesContractTests(unittest.TestCase):
         settings_path.write_text(json.dumps(settings), encoding="utf-8")
 
         self.assert_rejected("Project VS Code Marp settings are missing or stale")
-        prepare_slides(self.project, self.paper_id)
+        prepare_slides(self.project, self.paper_id, backend="marp")
         repaired = json.loads(settings_path.read_text(encoding="utf-8"))
         self.assertIn(VSCODE_THEME_REFERENCE, repaired["markdown.marp.themes"])
 

@@ -14,7 +14,7 @@ Mary Workflow 是一套面向 Codex 的项目工作流。它会先完整理解�
 - **多轮迭代**：完成一轮工作后归档本轮记录，再基于已有项目理解开始下一轮需求。
 - **课程自学**：ai辅助课程学习，完成Slide → Lecture，并处理课堂录音转写和课堂增量融合。
 - **考试复习**： 结合课程自学中的资料生成章节/总复习、错题本和模拟卷交付物。
-- **论文研读**：独立管理论文阅读状态，生成可追溯笔记、总结、Marp 汇报和来源约束问答。
+- **论文研读**：独立管理论文阅读状态，生成可追溯笔记、总结、Beamer / Marp 汇报和来源约束问答。
 - **Notion 操作**：通过 `/mw-notion` 搜索、读取、新建、修改、移动和整理页面/数据库，并按统一规范排版和回读校验。
 
 ## 适用场景
@@ -40,6 +40,8 @@ Mary Workflow 可以用于：
 - 使用 `/mw-notion` 时，需要在 Codex 中配置并授权 Notion MCP 连接
 
 Mary Workflow 不需要安装额外的 Python 依赖。
+
+论文幻灯片默认交付可编辑源码。使用 Beamer 导出 PDF 时需安装 GNU Make、latexmk、XeLaTeX、Latin Modern 与 Noto CJK SC；Ubuntu/Debian 可安装 `make latexmk texlive-xetex texlive-latex-extra texlive-lang-chinese texlive-fonts-recommended fonts-noto-cjk`。使用 Marp 导出时需安装 Marp CLI（或 Node.js 和可用的 `npx @marp-team/marp-cli@4.3.1`）及其浏览器依赖。离线主题随 Mary Workflow 提供，运行时不依赖 `vsp-beamer` / `vsp-marp` 参考仓库。
 
 ### 安装到 Codex
 
@@ -148,6 +150,16 @@ Codex 会再次展示最终计划供你确认，然后自动执行各个里程�
 `mw_paper.py migrate-artifacts --paper-id <paper-id>`。`prepare-slides` 会额外生成 paper-local `Makefile` 和 `.mary-research/Makefile` dispatcher；可在 paper workspace 运行 `make slide`，也可在 `.mary-research/` 根目录运行 `make slide`（多 paper 时使用 `make PAPER_ID=<paper-id> slide`），并用 `make hypo-template` 查看独立的原始 Hypoxanthine-LaTeX 模板效果。
 
 ## 常用操作
+
+### 制作论文汇报
+
+```text
+/mw-paper slides arxiv-2308.04079
+```
+
+制作开始前会新增一轮方式选择：**Beamer（默认，推荐）** 或 **Marp**，收到你的实际回复后再开始。两者都保留 ShanghaiTech 红色、16:9、至少两页 Method、至少两页多面板布局、原论文图像、来源约束和容量检查；只改变制作方式。也可以直接输入 `/mw-paper slides arxiv-2308.04079 --backend marp` 或 `--backend beamer`，作为本次选择。
+
+Beamer 交付 `slides.tex`，通过 paper-local 的离线 `beamer/` 主题用 latexmk / XeLaTeX 导出 PDF；Marp 继续交付 `slides.md`，可导出 PDF、HTML 和 PPTX。默认仅交付选定的源码。需要 PDF 时运行 `make slide`，得到 `build/slides.pdf`；Beamer 不提供原生可编辑 PPTX。已有未记录 backend 的幻灯片上下文按 Marp 兼容处理。`make hypo-template` 仍是独立的模板效果对照，不替换论文汇报。
 
 ### 操作 Notion
 

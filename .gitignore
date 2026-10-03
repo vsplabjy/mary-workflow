@@ -3,6 +3,7 @@ __pycache__/
 /test/
 .venv/
 /vsp-marp/
+/vsp-beamer/
 /assets/marp/templates/offline-preview.html
 /assets/marp/templates/offline-preview.*.png
 /.pipeline/

@@ -1,0 +1,51 @@
+% Mary Workflow offline ShanghaiTech presentation support.
+% Derived from VSP-Beamer v0.2.0; see LICENSE and THIRD_PARTY_ASSETS.md.
+\usepackage[UTF8,fontset=none]{ctex}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{bm}
+\makeatletter
+\def\input@path{{beamer/themes/}}
+\makeatother
+\graphicspath{{beamer/images/}}
+\usetheme{tutorial-red-shtu}
+
+% Original figure content is never stretched or cropped. The locator is hidden.
+\newcommand{\MaryFigure}[4]{%
+  \begin{minipage}{\linewidth}\centering
+    \if\relax\detokenize{#4}\relax
+      \fbox{\parbox[c][.28\textheight][c]{.92\linewidth}{\centering #1}}%
+    \else
+      \includegraphics[width=\linewidth,height=.43\textheight,keepaspectratio]{#4}%
+    \fi
+    \par\smallskip{\footnotesize\textbf{#1}\par #3\par}%
+  \end{minipage}%
+}
+\newcommand{\MaryColumns}[2]{%
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{.48\textwidth}#1\end{column}
+    \begin{column}{.48\textwidth}#2\end{column}
+  \end{columns}%
+}
+\newcommand{\MaryRows}[2]{%
+  \begin{minipage}{\linewidth}#1\end{minipage}\par\medskip
+  \begin{minipage}{\linewidth}#2\end{minipage}%
+}
+\newcommand{\MaryPinThree}[3]{%
+  \begin{minipage}{\linewidth}#1\end{minipage}\par\medskip
+  \MaryColumns{#2}{#3}%
+}
+% The last page contains only the closing title, matching the Marp contract.
+\renewcommand{\VSPendframe}[1]{%
+  \begin{frame}[plain,noframenumbering]
+    \begin{tikzpicture}[remember picture,overlay]
+      \fill[white] (current page.south west) rectangle (current page.north east);
+      \fill[VSPPrimary] ([yshift=-.20\paperheight]current page.north west)
+        rectangle ([yshift=-.60\paperheight]current page.north east);
+      \node[text=white,align=center,text width=.88\paperwidth]
+        at ([yshift=.10\paperheight]current page.center)
+        {\usebeamerfont{end title}#1};
+    \end{tikzpicture}
+  \end{frame}%
+}

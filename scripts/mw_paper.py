@@ -53,14 +53,18 @@ from mw_paper_summary import (
     write_summary_context,
 )
 from mw_paper_slides import (
+    DEFAULT_SLIDE_BACKEND,
     HYPO_PREVIEW_FILE,
     PAPER_MAKEFILE,
     PaperSlidesError,
     PROJECT_THEME_RELATIVE,
     RESEARCH_MAKEFILE,
     SLIDES_CONTEXT_FILE,
-    SLIDES_FILE,
-    run_marp_smoke,
+    SLIDE_BACKENDS,
+    load_slides_context,
+    normalize_slide_backend,
+    run_slides_smoke,
+    slides_artifact,
     validate_slides,
     write_slides_context,
 )
@@ -635,8 +639,6 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
             )
         metadata = validation["metadata"]
     elif stage == "slides":
-        if artifact != SLIDES_FILE:
-            raise PaperError(f"complete_stage slides requires artifact {SLIDES_FILE}.")
         read_stage = state["stages"]["read"]
         summary_stage = state["stages"]["summary"]
         source_format = str(read_stage["metadata"].get("source_format") or "")
@@ -653,8 +655,12 @@ def action_complete_stage(project_root: Path, state: PaperState, data: JsonObjec
             )
         except PaperSlidesError as exc:
             raise PaperError(str(exc)) from exc
+        if artifact != validation["artifact"]:
+            raise PaperError(f"complete_stage slides requires artifact {validation['artifact']}.")
         if output_fingerprint != validation["slides_fingerprint"]:
-            raise PaperError("complete_stage slides output_fingerprint does not match slides.md.")
+            raise PaperError(
+                f"complete_stage slides output_fingerprint does not match {validation['artifact']}."
+            )
         metadata = validation["metadata"]
     elif stage == "quiz":
         if artifact != QUIZ_LOG_FILE:
@@ -989,7 +995,16 @@ def prepare_summary(project_root: Path, paper_id: object | None = None) -> tuple
     return state, context
 
 
-def prepare_slides(project_root: Path, paper_id: object | None = None) -> tuple[PaperState, JsonObject]:
+def prepare_slides(
+    project_root: Path,
+    paper_id: object | None = None,
+    *,
+    backend: str = DEFAULT_SLIDE_BACKEND,
+) -> tuple[PaperState, JsonObject]:
+    try:
+        backend = normalize_slide_backend(backend)
+    except PaperSlidesError as exc:
+        raise PaperError(str(exc)) from exc
     root = Path(project_root).resolve()
     canonical_id = resolve_paper_id(root, paper_id)
     try:
@@ -1015,6 +1030,7 @@ def prepare_slides(project_root: Path, paper_id: object | None = None) -> tuple[
             source_fingerprint=state["source"]["fingerprint"],
             read_output_fingerprint=read_stage["output_fingerprint"],
             summary_output_fingerprint=summary_stage["output_fingerprint"],
+            backend=backend,
         )
     except PaperSlidesError as exc:
         raise PaperError(str(exc)) from exc
@@ -1029,7 +1045,7 @@ def prepare_slides(project_root: Path, paper_id: object | None = None) -> tuple[
     append_paper_log(
         root,
         canonical_id,
-        f"prepared slides claims={len(context['claim_catalog'])} figures={len(context['figure_catalog'])}",
+        f"prepared slides backend={backend} claims={len(context['claim_catalog'])} figures={len(context['figure_catalog'])}",
     )
     return state, context
 
@@ -1439,19 +1455,23 @@ def cmd_complete_summary(args: argparse.Namespace) -> int:
 
 
 def cmd_prepare_slides(args: argparse.Namespace) -> int:
-    state, context = prepare_slides(Path(args.project_root), args.paper_id)
+    state, context = prepare_slides(Path(args.project_root), args.paper_id, backend=args.backend)
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     print(f"paper_workspace: {workspace}")
     print(f"summary: {workspace / SUMMARY_FILE}")
     print(f"summary_ledger: {workspace / SUMMARY_LEDGER_FILE}")
     print(f"slides_context: {workspace / SLIDES_CONTEXT_FILE}")
-    print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
-    print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
+    print(f"slide_backend: {context['presentation']['backend']}")
+    if args.backend == "marp":
+        print(f"workspace_theme: {Path(args.project_root).resolve() / PROJECT_THEME_RELATIVE}")
+        print(f"vscode_settings: {Path(args.project_root).resolve() / '.vscode' / 'settings.json'}")
+    else:
+        print(f"beamer_support: {workspace / 'beamer'}")
     print(f"figure_directory: {workspace / 'figures'}")
     print(f"research_makefile: {Path(args.project_root).resolve() / RESEARCH_MAKEFILE}")
     print(f"paper_makefile: {workspace / PAPER_MAKEFILE}")
     print(f"hypo_preview_source: {workspace / HYPO_PREVIEW_FILE}")
-    print(f"slides_target: {workspace / SLIDES_FILE}")
+    print(f"slides_target: {workspace / slides_artifact(context)}")
     print(
         json.dumps(
             {
@@ -1473,7 +1493,10 @@ def cmd_lint_slides(args: argparse.Namespace) -> int:
     workspace = paper_directory(Path(args.project_root), state["paper_id"])
     result: JsonObject = {"lint": "passed", **validation}
     if args.smoke_compile:
-        result["smoke_compile"] = run_marp_smoke(workspace)
+        try:
+            result["smoke_compile"] = run_slides_smoke(workspace)
+        except PaperSlidesError as exc:
+            raise PaperError(str(exc)) from exc
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -1482,13 +1505,19 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
     project_root = Path(args.project_root)
     paper_id = resolve_paper_id(project_root, args.paper_id)
     workspace = paper_directory(project_root, paper_id)
-    slides_path = workspace / SLIDES_FILE
+    try:
+        artifact = slides_artifact(load_slides_context(workspace))
+    except PaperSlidesError as exc:
+        raise PaperError(str(exc)) from exc
+    slides_path = workspace / artifact
     if not slides_path.is_file():
-        raise PaperError(f"{SLIDES_FILE} is missing: {slides_path}")
+        raise PaperError(f"{artifact} is missing: {slides_path}")
     smoke_result: JsonObject | None = None
     if args.smoke_compile:
         try:
-            smoke_result = run_marp_smoke(workspace)
+            # Validate source and lineage before invoking either compiler.
+            validate_prepared_slides(project_root, paper_id)
+            smoke_result = run_slides_smoke(workspace)
         except PaperSlidesError as exc:
             raise PaperError(str(exc)) from exc
     state = apply_paper_action(
@@ -1498,7 +1527,7 @@ def cmd_complete_slides(args: argparse.Namespace) -> int:
             "action": "complete_stage",
             "data": {
                 "stage": "slides",
-                "artifact": SLIDES_FILE,
+                "artifact": artifact,
                 "output_fingerprint": sha256_file(slides_path),
             },
         },
@@ -1666,26 +1695,30 @@ def build_parser() -> argparse.ArgumentParser:
     summary_complete_parser.set_defaults(func=cmd_complete_summary)
 
     slides_prepare_parser = subparsers.add_parser(
-        "prepare-slides", help="prepare grounded Marp claims, figures, and lint context"
+        "prepare-slides", help="prepare grounded Beamer or Marp claims, figures, and lint context"
     )
     slides_prepare_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
+    slides_prepare_parser.add_argument(
+        "--backend", choices=SLIDE_BACKENDS, default=DEFAULT_SLIDE_BACKEND,
+        help="presentation source backend (default: beamer)",
+    )
     slides_prepare_parser.set_defaults(func=cmd_prepare_slides)
 
     slides_lint_parser = subparsers.add_parser(
-        "lint-slides", help="validate slides.md without changing paper state"
+        "lint-slides", help="validate the selected slide source without changing paper state"
     )
     slides_lint_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     slides_lint_parser.add_argument(
-        "--smoke-compile", action="store_true", help="also compile temporary HTML with local Marp CLI"
+        "--smoke-compile", action="store_true", help="also compile temporary Beamer PDF or Marp HTML"
     )
     slides_lint_parser.set_defaults(func=cmd_lint_slides)
 
     slides_complete_parser = subparsers.add_parser(
-        "complete-slides", help="lint slides.md and complete the slides stage"
+        "complete-slides", help="lint the selected slide source and complete the slides stage"
     )
     slides_complete_parser.add_argument("--paper-id", help="optional when exactly one paper exists")
     slides_complete_parser.add_argument(
-        "--smoke-compile", action="store_true", help="also require a temporary Marp HTML compile"
+        "--smoke-compile", action="store_true", help="also require a temporary Beamer PDF or Marp HTML compile"
     )
     slides_complete_parser.set_defaults(func=cmd_complete_slides)
 

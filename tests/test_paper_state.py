@@ -64,7 +64,7 @@ class PaperStateTests(unittest.TestCase):
         if stage == "summary":
             prepare_summary(self.project, self.paper_id)
         elif stage == "slides":
-            prepare_slides(self.project, self.paper_id)
+            prepare_slides(self.project, self.paper_id, backend="marp")
         elif stage == "quiz":
             prepare_quiz(self.project, self.paper_id)
         else:
