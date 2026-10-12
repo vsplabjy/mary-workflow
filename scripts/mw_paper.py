@@ -445,11 +445,15 @@ def create_paper(
         state = read_paper_state(project_root, canonical_id)
         source = state["source"]
         if source["locator"] == locator and source["fingerprint"] == fingerprint:
+            from mw_runtime import ensure_workflow_gitignore
+            ensure_workflow_gitignore(project_root)
             return state, False
         raise PaperError(
             f"Paper {canonical_id} already exists with a different source. Use update_source instead of create."
         )
 
+    from mw_runtime import ensure_workflow_gitignore
+    ensure_workflow_gitignore(project_root)
     directory.mkdir(parents=True, exist_ok=True)
     state = default_paper_state(canonical_id, locator, fingerprint)
     write_paper_state(project_root, state)

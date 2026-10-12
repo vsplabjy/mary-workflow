@@ -485,7 +485,8 @@ class WorkflowBoundaryTests(unittest.TestCase):
             state = read_state(workflow)
             self.assertEqual(state["version"], "3.0")
             self.assertEqual(state["phase"], "PLANNING")
-            self.assertEqual(len(state["project_inventory"]), 106)
+            self.assertEqual(len(state["project_inventory"]), 107)
+            self.assertIn(".gitignore", state["project_inventory"])
             self.assertIn("file_104.txt", state["project_inventory"])
             for excluded in ("image.bin", "weights.ckpt", "node_modules/ignored.js", "output/metrics.csv", "scratch/debug.json"):
                 self.assertNotIn(excluded, state["project_inventory"])

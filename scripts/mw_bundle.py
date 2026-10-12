@@ -16,7 +16,7 @@ import tempfile
 from typing import Any
 
 from mw_brief import migrate_legacy_ledger
-from mw_runtime import atomic_write_text, workflow_lock
+from mw_runtime import atomic_write_text, ensure_workflow_gitignore, workflow_lock
 
 
 BUNDLE_VERSION = 1
@@ -209,6 +209,13 @@ def forward_to_pinned(root: Path, script_name: str, args: list[str]) -> int | No
     if not (root / LOCK_FILE).exists():
         return None
     verify_bundle(root)
+    # The installed entrypoint also applies local-record policy for older pins.
+    # Do not replace their runtime or mutate read-only/help invocations.
+    if script_name == "mary_workflow.py" and args and args[0] == "init" and not any(
+        arg in {"-h", "--help"} for arg in args
+    ):
+        with workflow_lock(root):
+            ensure_workflow_gitignore(root.parent)
     target = (root / "runtime" / "scripts" / script_name).resolve()
     local = Path(__file__).resolve().parent / script_name
     if local.resolve() == target or Path(sys.argv[0]).resolve() == target:

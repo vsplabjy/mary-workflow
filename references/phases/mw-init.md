@@ -2,6 +2,8 @@
 
 Follow the memory contract in the pinned bundle. Use the configured output language for explanations and natural-language logs; machine fields remain English.
 
+Init maintains project-root `.gitignore` entries for `/.mary-workflow/`, `/.mary-workflow-worker/`, `/.mary-research/` and `/.vspi/`. Generated records, hashes and configuration stay local by default. Put other workflow-only records in these directories or ignore their exact paths before writing. Preserve user rules and the Git index; already tracked files are unaffected by ignore rules.
+
 Read project brief status and the machine inventory. `machine_detected` requires initial understanding; `refresh_required` requires affected-file and dependency refresh; `complete` reuses valid understanding and applies evidence-backed corrections only when needed. Init does not plan tasks or edit product files.
 
 Choose reading depth and partitioning by repository size, text volume, coupling, and task scope: direct reading for small repositories, module summaries for medium repositories, and independent explorer shards for large repositories when workers exist. Keep machine-generated path/fingerprint inventory and computed coverage. Summaries bind to explicit member paths; important boundary files receive focused explanations. An empty claimed unread list is insufficient: the runtime computes missing coverage against the inventory. Exclusions need recorded rules. Coverage records establish inventory accounting, not proof of semantic comprehension.

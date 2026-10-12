@@ -56,7 +56,8 @@ The file must retain `<!-- mary-reading:v1 -->` and should be edited into a
 coherent paper document. The default profile is `.mary-research/reading-profile.md`.
 `/mw-init` seeds it from the versioned `defaults/reading-profile.md` only when
 the project copy is absent. The project copy is the active authority and can be
-committed with the project; later init runs do not overwrite it.
+edited locally; it is ignored by default with other workflow-generated configuration.
+Later init runs do not overwrite it.
 
 - Keep the main prose in English and preserve original technical names,
   equations, citations, measurements, and figure/table numbers.
