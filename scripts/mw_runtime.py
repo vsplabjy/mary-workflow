@@ -19,6 +19,35 @@ JsonObject = dict[str, Any]
 _LOCKS: dict[str, threading.RLock] = {}
 _LOCK_DEPTH = threading.local()
 
+WORKFLOW_GITIGNORE_PATTERNS = (
+    "/.mary-workflow/",
+    "/.mary-workflow-worker/",
+    "/.mary-research/",
+    "/.vspi/",
+)
+
+
+def ensure_workflow_gitignore(project_root: Path) -> bool:
+    """Append missing local-artifact rules, preserving user bytes and the Git index."""
+    target = Path(project_root) / ".gitignore"
+    if target.is_symlink():
+        raise ValueError("Refusing to modify a symlinked .gitignore; use a regular project-local file.")
+    original = target.read_bytes() if target.exists() else b""
+    lines = original.splitlines()
+    missing = [pattern for pattern in WORKFLOW_GITIGNORE_PATTERNS
+               if pattern.encode("utf-8") not in lines]
+    if not missing:
+        return False
+    newline = b"\r\n" if b"\r\n" in original else b"\n"
+    separator = newline if original and not original.endswith(b"\n") else b""
+    addition = newline.join(line.encode("utf-8") for line in (
+        "# Mary Workflow: local records, runtime, hashes and generated configuration",
+        *missing,
+    )) + newline
+    # latin-1 round-trips existing bytes, including non-UTF-8 comments.
+    atomic_write_text(target, (original + separator + addition).decode("latin-1"), encoding="latin-1")
+    return True
+
 
 @contextmanager
 def workflow_lock(root: Path):

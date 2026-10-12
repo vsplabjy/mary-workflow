@@ -158,6 +158,22 @@ class BundleTests(unittest.TestCase):
                 self.assertIsNone(forward_to_pinned(self.root, "mary_workflow.py", ["status"]))
             run.assert_not_called()
 
+    def test_init_adds_ignore_rules_before_forwarding_to_older_bundle(self) -> None:
+        # Fixture scripts contain no current ignore logic, modeling an older pin.
+        install_bundle(self.root, self.source)
+        lock = (self.root / "workflow-lock.json").read_bytes()
+        target = self.root.parent / ".gitignore"
+        with mock.patch("mw_bundle.subprocess.run", return_value=mock.Mock(returncode=0)):
+            forward_to_pinned(self.root, "mary_workflow.py", ["status"])
+            self.assertFalse(target.exists())
+            forward_to_pinned(self.root, "mary_workflow.py", ["init", "--help"])
+            self.assertFalse(target.exists())
+            forward_to_pinned(self.root, "mary_workflow.py", ["init"])
+        self.assertIn("/.mary-workflow/", target.read_text())
+        self.assertIn("/.mary-research/", target.read_text())
+        self.assertEqual((self.root / "workflow-lock.json").read_bytes(), lock)
+        verify_bundle(self.root)
+
     def test_direct_pinned_reset_cannot_delete_its_own_runtime_source(self) -> None:
         install_bundle(self.root, self.source)
         with mock.patch("mw_bundle.__file__", str(self.root / "runtime" / "scripts" / "mw_bundle.py")):

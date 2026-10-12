@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mw_runtime import atomic_write_text
+from mw_runtime import atomic_write_text, ensure_workflow_gitignore
 
 
 READING_PROFILE_RELATIVE = ".mary-research/reading-profile.md"
@@ -27,6 +27,7 @@ def reading_profile_path(project_root: Path) -> Path:
 
 
 def ensure_reading_profile(project_root: Path) -> tuple[Path, bool]:
+    ensure_workflow_gitignore(project_root)
     path = reading_profile_path(project_root)
     if path.exists():
         return path, False

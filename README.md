@@ -37,6 +37,8 @@ git clone https://github.com/reversevertin1999/mary-workflow.git \
 
 `/mw-init` 建立项目说明；`/mw-plan` 保存真实需求、必要澄清、交付路径和验收条件并冻结计划；`/mw-run` 确认并执行这个计划。讨论中的“可以/对”必须按其回答的问题理解，不能把对方案的认可偷换成开始执行的授权。用户已有明确执行授权时，不再机械追问。
 
+初始化及独立论文创建会自动补齐项目根目录 `.gitignore`：默认忽略 `/.mary-workflow/`、`/.mary-workflow-worker/`、`/.mary-research/`、`/.vspi/`。流程记录、哈希清单、生成配置、固定运行时和归档默认保留在本地；其他路径的流程记录应在生成前添加精确忽略项。已有规则和 Git 索引保持原样，因此已跟踪文件仍会被跟踪。项目源码、正式交付物和手写 OpenSpec 规范按项目自身的版本管理约定处理。
+
 项目根目录的 `.maryignore` 与 `.mary-workflow/config.yaml` 中 `init.ignore` 控制扫描排除项，例如：
 
 ```gitignore
