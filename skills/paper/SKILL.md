@@ -71,6 +71,4 @@ Manage independent paper states, close reading, grounded summaries, research sli
 
 Read `references/paper-notes-contract.md` before producing notes, `references/summary-contract.md` before producing a summary, `references/slides-contract.md` before producing slides, and `references/quiz-contract.md` before expert Q&A. See `references/paper-state-contract.md` for state transitions and `references/beamer-assets-contract.md` for the offline presentation runtime.
 
-## Coordination
-
-Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.
+Shared authorization, delegation and delivery rules: [task policy](../../references/task-policy.md).

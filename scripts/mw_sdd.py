@@ -189,8 +189,12 @@ def _tasks(text):
                 _fail(f"{field} must be a nonempty string list")
         if not isinstance(data.get("estimated_scope"), int) or isinstance(data["estimated_scope"], bool) or data["estimated_scope"] < 0:
             _fail("estimated_scope must be a nonnegative integer")
-        if set(data) - {"id", "deliverables", "acceptance", "estimated_scope", "gate", "write_scope", "read_dependencies", "covers"}:
+        if set(data) - {"id", "deliverables", "acceptance", "estimated_scope", "gate", "write_scope", "read_dependencies", "validation_inputs", "covers"}:
             _fail("Unknown mary-task field")
+        if "validation_inputs" in data:
+            inputs = data["validation_inputs"]
+            if not isinstance(inputs, list) or not inputs or any(not isinstance(x, str) or not x.strip() for x in inputs):
+                _fail("validation_inputs must be a nonempty string list")
         covers = data.pop("covers", {})
         if not isinstance(covers, dict):
             _fail("covers must map scenario references to acceptance IDs")

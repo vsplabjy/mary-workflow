@@ -9,7 +9,7 @@ Use existing local Lecture notes as the primary source; use slides and handouts 
 
 ## Start Gate
 
-Confirm the course, exam name/type, exact scope, exam date or remaining days, today's single 25-minute block, and mode. Modes are:
+Identify the course and requested scope from the request and available notes. Reuse the exam name/date and study block when known; ask only when the missing information changes the requested content. An unknown date does not prevent a chapter review; mark it unknown and avoid date-dependent recommendations. Modes are:
 
 - `平衡模式` (default): knowledge, necessary explanation, examples, and self-test.
 - `考试模式`: formulas, conclusions, exam points, mistakes, and practice; minimize expansion when `<= 3` days remain.
@@ -54,12 +54,8 @@ Keep one local Mistake Log per course under the Course Hub. Its index has only `
 
 ## Mock Exams
 
-Default to two sets: A is consolidation, B is advanced. Source priority is prior course exams, reputable open university exams, then textbook exercises. Rewrite values/wording and label each source. Include total score, duration, closed-book note, points, complete question types, and answers in a separate collapsed section. For mass practice, release one module batch at a time and update the Mistake Log after each batch.
+Generate mock papers only when requested. If the requested count is unspecified, use two sets: A is consolidation, B is advanced. Do not append both papers to an ordinary chapter review. Source priority is prior course exams, reputable open university exams, then textbook exercises. Rewrite values/wording and label each source. Include total score, duration, closed-book note, points, complete question types, and answers in a separate collapsed section. For mass practice, release one module batch at a time and update the Mistake Log after each batch.
 
-## Mary Workflow Contract
+## Execution
 
-For `/mw-exam`, one chapter, one whole-exam package, or one mock-exam package is a bounded Mary Workflow milestone. Preserve plan interview, explicit assumptions, explicit run authorization bound to the frozen plan, worker and review evidence, stop/resume, debug, and cycle archive. A review deliverable is a relative local source note, local schedule record, or local Mistake Log record by default. Do not mark done until local placement, scope, labels, self-test, and evidence are checked.
-
-## Coordination
-
-Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.
+Use the course route in [shared task policy](../../references/task-policy.md); it owns direct versus formal execution and authorization.

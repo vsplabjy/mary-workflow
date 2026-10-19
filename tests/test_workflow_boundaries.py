@@ -214,6 +214,17 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertTrue(running["lease_run_id"])
         self.rejected("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
 
+    def test_compact_execution_context_retains_binding_and_full_context_is_opt_in(self):
+        self.freeze()
+        state = read_state(self.root)
+        self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+        compact = render_prompt(self.project, "mw-run")
+        full = render_prompt(self.project, "mw-run", full_context=True)
+        self.assertLess(len(compact), len(full))
+        self.assertIn(state["runtime_meta"]["frozen_plan_digest"], compact)
+        self.assertIn("Legal Actions", compact)
+        self.assertIn("milestone-1", compact)
+
     def test_start_rejects_wrong_digest_and_absent_confirmation(self):
         state = self.freeze()
         digest = state["runtime_meta"]["frozen_plan_digest"]
@@ -500,10 +511,10 @@ class WorkflowBoundaryTests(unittest.TestCase):
 
     def test_course_aliases_keep_local_scene_and_shared_phase_context(self):
         for alias, expected, marker in (("mw-learn", "mw-learn.md", "Course Learning Profile"), ("mw-exam", "mw-exam.md", "ExamPass Profile"), ("mw-review", "mw-exam.md", "ExamPass Profile"), ("slide-learning", "slide-learning.md", "Slide Learning Profile")):
-            phase, prompt = prompt_path_for(self.project, alias)
+            phase, prompt = prompt_path_for(self.project, alias, formal=True)
             self.assertEqual(phase, "PLANNING")
             self.assertEqual(prompt.name, expected)
-            self.assertIn(marker, render_prompt(self.project, alias))
+            self.assertIn(marker, render_prompt(self.project, alias, formal=True))
         for name in ("mw-learn", "mw-exam"):
             source = (REPO_ROOT / "references/phases" / f"{name}.md").read_text()
             self.assertIn("Local Delivery Contract", source)
@@ -513,10 +524,10 @@ class WorkflowBoundaryTests(unittest.TestCase):
     def test_course_profile_is_available_after_finish(self):
         self.start()
         self.review(self.implementation())
-        phase, prompt = prompt_path_for(self.project, "mw-exam")
+        phase, prompt = prompt_path_for(self.project, "mw-exam", formal=True)
         self.assertEqual(phase, "FINISHED")
         self.assertEqual(prompt.name, "mw-exam.md")
-        self.assertIn("ExamPass Profile", render_prompt(self.project, "mw-exam"))
+        self.assertIn("ExamPass Profile", render_prompt(self.project, "mw-exam", formal=True))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 # Mary Workflow Slide Learning Profile
 
-Use this prompt for `/slide-learning` with `skills/slide-to-lecture/SKILL.md`. This is the direct child workflow for users who want to prepare slide notes before adding a recording.
+Read `skills/slide-to-lecture/SKILL.md` for content and `references/task-policy.md` for shared process rules. Ordinary content work uses that skill directly without initialization; `mw_codex.py slide-learning --formal` selects this wrapper for explicitly staged or already-bound work.
 
-Classify Lecture/Homework/Lab/Project, reuse an existing empty page, preserve the course hierarchy, and follow the image/PDF/deadline rules. Treat one bounded material set as one Mary milestone. Preserve the normal Mary plan, run, review, stop/resume, and cycle gates. For precise image crops load `skills/roundtrip-screenshot/SKILL.md` and read every output image before embedding.
+## Local Delivery Contract
 
-Use the pinned subagent contract for task results, validation capture, and independent review. The main agent owns state and external writes. All agents inherit host configuration; no model or reasoning level is selected by this profile.
+Keep authored content in the existing course/notes tree, with a relative path for every formal deliverable. Preserve raw sources and meet the skill's content checklist. Do not invent missing material.
+
+For formal work, use the current phase's governing prompt and `references/state-contract.md` for legal transitions; `references/subagent-contract.md` owns dispatch, validation and review. This wrapper adds no actions, alternate gates or repeated acceptance checklist.

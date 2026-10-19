@@ -1,7 +1,7 @@
 interface:
   display_name: "Mary Workflow"
-  short_description: "Run project, learning, paper, and Notion workflows"
-  default_prompt: "Use $mary-workflow for project milestones, learning, paper workflows, or /mw-notion for verified Notion MCP operations and polished pages."
+  short_description: "Direct work, experiments, and formal project workflows"
+  default_prompt: "Use $mary-workflow: /mw-experiment for settled-method runs, /mw-quick for small changes, or formal milestones, learning, paper and Notion workflows as needed."
 
 policy:
   allow_implicit_invocation: true

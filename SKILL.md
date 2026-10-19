@@ -1,25 +1,15 @@
 ---
 name: mary-workflow
-description: Coordinate model-independent project work with persisted plans, delegated implementation, evidence-based review, and resumable milestones. Use for /mw-init, /mw-plan, /mw-run, /mw-status, /mw-stop, /mw-debug, /mw-cycle, course Lecture learning, exam review, /mw-paper research reading and presentations, or /mw-notion operations.
+description: Coordinate model-independent project work with persisted context, plans, delegated implementation, evidence-based review, and resumable milestones. Use /mw-context for docs-first project handoff; /mw-init, /mw-plan, /mw-run, /mw-status, /mw-stop, /mw-debug, /mw-cycle for formal work; course learning, /mw-paper, /mw-notion and /mw-humanize for content; /mw-experiment for settled-method trials and /mw-quick for small changes.
 ---
 
 # Mary Workflow
 
-Mary Workflow 3.0 separates coordination, worker deliverables, and runtime validation. It does not select a model, provider, reasoning effort, context window, or service tier. Every agent inherits the user's host configuration. Capabilities determine the execution route; model names do not.
+Mary Workflow 3.0 separates coordination, worker deliverables, and runtime validation. Shared execution choices and host-setting rules are maintained in the policy below.
 
-## Shared contract
+## Shared policy
 
-- Workflow-generated records, runtime bundles, hash manifests, receipts and configuration are local by default. Init and paper creation maintain project-root `.gitignore` rules for `/.mary-workflow/`, `/.mary-workflow-worker/`, `/.mary-research/` and `/.vspi/`. Put other workflow-only records under these directories; if an authorized task needs another location, add its exact path to `.gitignore` before writing it. Preserve existing ignore rules. Avoid broad `*.json`, `*.yaml`, or `config/` rules that hide product files. Do not untrack existing files without user authorization; explain that ignore rules only apply to untracked files. Product deliverables and authored OpenSpec specifications follow the project's normal version-control policy.
-- User instructions define scope and authorization and take precedence over workflow defaults. Explicit authorization persists; do not ask for it again without a material scope or plan change. Discussion agreement alone does not start execution.
-- The main agent coordinates, communicates with the user, integrates evidence, and applies state actions. Delegate concrete implementation, investigation, and independent verification when the host supports workers and the work benefits from delegation. Do not manufacture microtasks. Workers never accept their own delivery or mutate workflow control files.
-- Read [references/subagent-contract.md](references/subagent-contract.md) before dispatch or review. A worker result is a claim to check against the actual artifact and recorded validation, not completion authority.
-- Read [references/memory-contract.md](references/memory-contract.md) for initialization, refresh, or recovery. Reuse working context; verify current state and changed inputs. Persisted state defines the workflow, the brief records project understanding, and source/artifact evidence establishes implementation facts. Resolve stale brief entries instead of overriding observed facts.
-- Only the main agent changes control state, using `scripts/mary_workflow.py apply-action`; the runtime enforces phase, plan version, task identity, scope, and required evidence. Its checks prevent protocol mistakes, not arbitrary shell writes by an agent with filesystem access.
-- Freeze an inspectable plan before execution. Explicit `/mw-run` or an unambiguous user instruction to execute/resume starts or resumes it using its digest and the actual user instruction. Retain run identity and pause state. Read [references/state-contract.md](references/state-contract.md) for legal actions and exact payloads.
-- For core code changes, read [references/sdd-contract.md](references/sdd-contract.md). Maintain accepted behavior in `openspec/specs/` and proposal, delta specs, optional design, and task definitions in `openspec/changes/<change-id>/`. Bind the change before freezing; milestones are execution mappings of those tasks, not a second authored plan. Existing unbound states remain compatible. Paper and Notion retain their independent lifecycles.
-- Ask only questions that change scope, acceptance, or important choices. Use structured questions if available; plain text is a complete fallback. No quota of questions, files, or milestones. Ordinary implementation details within authorized scope do not require another approval.
-- Progress lists reflect persisted tasks and validation; they are not a second plan. Explain current work, findings, and blockers in the user's language. Natural-language logs may use that language; machine action names, phase values, keys, and event types stay stable English.
-- Follow [references/host-contract.md](references/host-contract.md) for capability discovery, compatible fallback, and optional hooks. No hook, native memory, goal tool, or worker API is required for portability. Never fabricate independent review when only one agent was available.
+Read [task-policy.md](references/task-policy.md) once, then load only the relevant skill. It owns process selection, authorization, delegation, local records and shared delivery rules. Use direct work for bounded changes, experiment runs for settled methods, and formal milestones for explicit staged acceptance or already-bound work. Ordinary course notes and review are direct content tasks.
 
 ## Routing
 
@@ -27,6 +17,9 @@ Work from the user's project root. Load only the relevant subskill:
 
 | Request | Skill | Result |
 | --- | --- | --- |
+| `/mw-context`, new conversation about an existing project | `skills/context/SKILL.md` | docs-first overview, module introductions, handoff and incremental updates |
+| `/mw-experiment`, settled-method experiment runs | `skills/experiment/SKILL.md` | immediate run, status, stop, comparison and explicit audit |
+| `/mw-quick`, small bounded changes | `skills/quick/SKILL.md` | direct work with relevant checks |
 | `/mw-init` | `skills/init/SKILL.md` | inventory, module coverage, project brief |
 | `/mw-plan` | `skills/plan/SKILL.md` | necessary clarification and frozen plan |
 | `/mw-run` | `skills/run/SKILL.md` | dispatch, evidence, independent review, acceptance |
@@ -38,15 +31,16 @@ Work from the user's project root. Load only the relevant subskill:
 | `/mw-exam`, `/mw-review` | `skills/exam-review/SKILL.md` | chapter/exam review, self-tests, Mistake Log |
 | `/slide-learning` | `skills/slide-to-lecture/SKILL.md` | source-grounded slide notes |
 | `/mw-paper` | `skills/paper/SKILL.md` | independent research state, reading, summary, slides, quiz |
+| `/mw-humanize`, `humanizer-zh`, Chinese prose polishing | `skills/humanizer-zh/SKILL.md` | natural wording with facts, voice, and evidence preserved |
 | `/mw-notion` | `skills/notion/SKILL.md` | schema-aware external operations with read-back |
 
-For image/PDF crops also use `skills/roundtrip-screenshot/SKILL.md` and inspect each rendered result.
+For precise image/PDF crops load `skills/roundtrip-screenshot/SKILL.md` when needed.
 
 ## Independent scenes
 
 Paper state remains `paper_state_schema: 1` under `.mary-research/papers/`. Source locators, parse quality, downstream invalidation, slide compilation/render checks, and the append-only quiz hash chain stay authoritative for paper work. Paper actions do not require milestone initialization or run authorization. Read the paper skill and its content contracts; delegate bounded content work while the main agent owns paper state and external writes.
 
-Course learning and exam review use the milestone lifecycle with local content deliverables and source/content acceptance. Preserve raw sources and transcripts; do not invent missing lecture material or classify notes as code. Notion operations remain independent, require actual connector capability, and retain fetch-before-write and read-back verification. Workers can prepare content or gather evidence; the main agent performs authorized external mutations and Git writes.
+Course learning and exam review normally run directly with local content deliverables and their content checklists. Explicit staged projects or already-bound course tasks use the formal lifecycle. Preserve raw sources and transcripts; do not invent missing lecture material or classify notes as code. Notion operations remain independent, require actual connector capability, and retain fetch-before-write and read-back verification. Workers can prepare content or gather evidence; the main agent performs authorized external mutations and Git writes.
 
 ## Versioned sources and upgrades
 

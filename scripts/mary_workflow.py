@@ -423,11 +423,11 @@ def read_state(root: Path, *, allow_legacy: bool = False) -> State:
                 continue
             if current_milestone is None:
                 continue
-            if re.match(r"^\s{4}(deliverables|acceptance|write_scope|read_dependencies):\s*$", line):
+            if re.match(r"^\s{4}(deliverables|acceptance|write_scope|read_dependencies|validation_inputs):\s*$", line):
                 subsection = line.strip()[:-1]
                 continue
             list_match = re.match(r"^\s{6}-\s*(.*)$", line)
-            if list_match and subsection in {"deliverables", "acceptance", "write_scope", "read_dependencies"}:
+            if list_match and subsection in {"deliverables", "acceptance", "write_scope", "read_dependencies", "validation_inputs"}:
                 current_milestone.setdefault(subsection, []).append(parse_scalar(list_match.group(1)))
                 continue
             key_value = match_key_value(line, indent=4)
@@ -569,7 +569,7 @@ def append_milestone_section(lines: list[str], name: str, milestones: list[Miles
         lines.extend(f"      - {quote_value(item)}" for item in milestone.get("deliverables", []))
         lines.append("    acceptance:")
         lines.extend(f"      - {quote_value(item)}" for item in milestone.get("acceptance", []))
-        for scope_key in ("write_scope", "read_dependencies"):
+        for scope_key in ("write_scope", "read_dependencies", "validation_inputs"):
             if scope_key in milestone:
                 lines.append(f"    {scope_key}:")
                 lines.extend(f"      - {quote_value(item)}" for item in milestone[scope_key])
@@ -924,9 +924,10 @@ def normalize_milestones(value: object) -> list[Milestone]:
         if any(existing["id"] == milestone_id for existing in milestones):
             raise WorkflowError(f"Duplicate milestone id: {milestone_id}")
         write_scope = normalize_optional_list(item.get("write_scope")) or list(deliverables)
+        inputs = normalize_string_list(item["validation_inputs"], "validation_inputs") if "validation_inputs" in item else None
         from mw_workers import validate_relative_path
         try:
-            for path in [*deliverables, *write_scope, *normalize_optional_list(item.get("read_dependencies"))]:
+            for path in [*deliverables, *write_scope, *normalize_optional_list(item.get("read_dependencies")), *(inputs or [])]:
                 validate_relative_path(path)
         except ValueError as exc:
             raise WorkflowError(str(exc)) from exc
@@ -944,6 +945,8 @@ def normalize_milestones(value: object) -> list[Milestone]:
                 "review": "",
             }
         )
+        if inputs is not None:
+            milestones[-1]["validation_inputs"] = inputs
     return milestones
 
 
@@ -1166,6 +1169,7 @@ def milestone_plan_signature(milestones: list[Milestone]) -> list[dict[str, obje
             "read_dependencies": list(item.get("read_dependencies", [])),
             "estimated_scope": item.get("estimated_scope"),
             "gate": item.get("gate", "auto"),
+            **({"validation_inputs": list(item["validation_inputs"])} if "validation_inputs" in item else {}),
         }
         for item in milestones
     ]
@@ -1513,6 +1517,14 @@ def action_submit_brief(root: Path, state: State, data: JsonObject) -> State:
     state["project_brief_cycle"] = str(state.get("cycle", "C0"))
     state["updated_at"] = now_iso()
     write_project_brief(root, state)
+    # Additive profile: use already-computed metadata, never another inventory scan.
+    if Path(__file__).with_name("mw_knowledge.py").is_file():
+        from mw_knowledge import mark_changed, seed_brief
+        mark_changed(project_root, [item.split(":", 1)[1] for item in changes],
+                     "Brief refresh observed changed files", existing_only=True)
+        # Formal init owns ignore rules; recording context must not mutate product
+        # files after the already-computed inventory or task baseline.
+        seed_brief(project_root, brief, ensure_ignore=False)
     append_log(root, f"submitted project brief mode={mode} version={brief['version']} modules={len(brief['coverage']['modules'])}")
     return state
 
@@ -1837,6 +1849,8 @@ def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State
         "acceptance": acceptance, "estimated_scope": max(0, parse_int(data.get("estimated_scope"), len(scope))),
         "gate": origin.get("gate", "auto"), "review": "", "repair_of": origin_id,
     }
+    if "validation_inputs" in origin:
+        fix_milestone["validation_inputs"] = list(origin["validation_inputs"])
     current["status"] = "pending"
     current["review"] = "needs-fix"
     insert_at = milestones.index(current)

@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -100,6 +101,33 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(install_bundle(self.root, self.source), manifest)
         self.assertEqual(self.tree(), before)
 
+    def test_humanizer_profile_is_pinned_with_rules_and_license(self) -> None:
+        from mw_bundle import HUMANIZER_FILES
+        actual_source = Path(__file__).resolve().parents[1]
+        for relative in HUMANIZER_FILES:
+            target = self.source / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((actual_source / relative).read_bytes())
+        manifest = install_bundle(self.root, self.source)
+        for relative in HUMANIZER_FILES:
+            self.assertIn(f"runtime/{relative}", manifest["files"])
+            self.assertEqual((self.root / "runtime" / relative).read_bytes(),
+                             (self.source / relative).read_bytes())
+        self.assertEqual(manifest, verify_bundle(self.root))
+        rules = self.root / "runtime" / HUMANIZER_FILES[1]
+        rules.write_text("Changed rules\n", encoding="utf-8")
+        with self.assertRaisesRegex(BundleError, "file changed"):
+            verify_bundle(self.root)
+
+    def test_incomplete_humanizer_profile_does_not_partially_install(self) -> None:
+        profile = self.source / "skills" / "humanizer-zh"
+        profile.mkdir()
+        (profile / "SKILL.md").write_text("# Incomplete profile\n", encoding="utf-8")
+        before = self.tree()
+        with self.assertRaisesRegex(BundleError, "Humanizer profile source is missing"):
+            install_bundle(self.root, self.source)
+        self.assertEqual(self.tree(), before)
+
     def test_ordinary_install_cannot_silently_repair_tampered_prompt(self) -> None:
         install_bundle(self.root, self.source)
         (self.root / "prompts" / "mw-execute.md").write_text("Altered instructions", encoding="utf-8")
@@ -138,6 +166,50 @@ class BundleTests(unittest.TestCase):
         cache.mkdir()
         (cache / "mw_runtime.cpython-314.pyc").write_bytes(b"cached")
         verify_bundle(self.root)
+
+    def test_tampered_bundle_is_rejected_before_starting_pinned_python(self):
+        install_bundle(self.root, self.source)
+        (self.root / "runtime/scripts/mary_workflow.py").write_text("# tampered\n")
+        with mock.patch("mw_bundle.subprocess.run") as child:
+            with self.assertRaises(BundleError):
+                forward_to_pinned(self.root, "mary_workflow.py", ["status"])
+        child.assert_not_called()
+
+    def test_only_the_verified_parent_handoff_skips_duplicate_child_audit(self):
+        install_bundle(self.root, self.source)
+        child_path = self.root / "runtime/scripts/mary_workflow.py"
+        marker = f"{os.getppid()}:{self.root.resolve()}"
+        with mock.patch.object(sys, "argv", [str(child_path)]), mock.patch.dict(os.environ, {"MARY_VERIFIED_BUNDLE_PARENT": marker}), mock.patch("mw_bundle.verify_bundle") as verify:
+            self.assertIsNone(forward_to_pinned(self.root, "mary_workflow.py", ["status"]))
+            verify.assert_not_called()
+        with mock.patch.object(sys, "argv", [str(child_path)]), mock.patch.dict(os.environ, {"MARY_VERIFIED_BUNDLE_PARENT": "stale-parent"}), mock.patch("mw_bundle.verify_bundle") as verify:
+            forward_to_pinned(self.root, "mary_workflow.py", ["status"])
+            verify.assert_called_once()
+
+    def test_experiment_profile_is_additive_and_runs_from_actual_bundle(self):
+        actual = Path(__file__).resolve().parents[1]
+        fresh = self.base / "fresh" / ".mary-workflow"
+        manifest = install_bundle(fresh, actual)
+        self.assertIn("runtime/scripts/mw_experiment.py", manifest["files"])
+        self.assertIn("runtime/references/experiment-contract.md", manifest["files"])
+        self.assertIn("runtime/scripts/mw_knowledge.py", manifest["files"])
+        self.assertIn("runtime/references/knowledge-contract.md", manifest["files"])
+        self.assertIn("runtime/skills/context/SKILL.md", manifest["files"])
+        # A pre-profile fixture remains valid with the new verifier.
+        legacy = install_bundle(self.root, self.source)
+        self.assertEqual(verify_bundle(self.root), legacy)
+        command = [sys.executable, str(fresh / "runtime/scripts/mw_experiment.py"),
+                   "--project", str(fresh.parent), "run", "--", sys.executable, "-c", "print('bundled')"]
+        response = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        self.assertEqual(response.returncode, 0, response.stderr)
+        record = json.loads(response.stdout)
+        import mw_experiment
+        deadline = time.monotonic() + 5
+        while record["execution_status"] not in mw_experiment.TERMINAL and time.monotonic() < deadline:
+            time.sleep(.02)
+            record = mw_experiment.status(fresh.parent, record["run_id"])
+        self.assertEqual(record["exit_code"], 0)
+        self.assertEqual(verify_bundle(fresh), manifest)
 
     def test_forward_uses_verified_pinned_script_and_preserves_arguments(self) -> None:
         install_bundle(self.root, self.source)

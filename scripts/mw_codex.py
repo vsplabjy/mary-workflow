@@ -26,6 +26,10 @@ from mary_workflow import (
 
 
 PROMPTS_DIR = "prompts"
+COURSE_SKILLS = {
+    "mw-learn": "lecture-learning", "mw-exam": "exam-review",
+    "mw-review": "exam-review", "slide-learning": "slide-to-lecture",
+}
 SPECIALIZED_PROMPTS = {
     "mw-learn": "mw-learn.md",
     "mw-exam": "mw-exam.md",
@@ -41,7 +45,11 @@ def require_initialized(root: Path) -> Path:
     return workflow
 
 
-def prompt_path_for(root: Path, alias: str) -> tuple[str, Path | None]:
+def prompt_path_for(root: Path, alias: str, *, formal: bool = False) -> tuple[str, Path | None]:
+    normalized = alias.lstrip("/").strip()
+    if normalized in COURSE_SKILLS and not formal:
+        source = Path(__file__).resolve().parents[1] / "skills" / COURSE_SKILLS[normalized] / "SKILL.md"
+        return "DIRECT", source
     workflow = require_initialized(root)
     state = read_state(workflow)
     normalized = alias.lstrip("/").strip()
@@ -90,10 +98,17 @@ def prompt_path_for(root: Path, alias: str) -> tuple[str, Path | None]:
     raise SystemExit(f"Unknown Mary Workflow alias: /{normalized}. Available: {valid}")
 
 
-def render_prompt(root: Path, alias: str) -> str:
+def render_prompt(root: Path, alias: str, *, full_context: bool = False, formal: bool = False) -> str:
     normalized = alias.lstrip("/").strip()
+    if normalized in COURSE_SKILLS and not formal:
+        _, source = prompt_path_for(root, normalized)
+        from mw_surfaces import skill_parts
+        _, body = skill_parts(source)
+        policy = source.parents[2] / "references/task-policy.md"
+        return (f"# Mary direct course work\n\nSource: `{source}`\n"
+                f"Shared policy: `{policy}`\n\n" + body)
     workflow = require_initialized(root)
-    phase, prompt_path = prompt_path_for(root, normalized)
+    phase, prompt_path = prompt_path_for(root, normalized, formal=formal)
     state = read_state(workflow)
     projection = {key: state.get(key) for key in ("version", "cycle", "status", "phase", "current_milestone_id", "project_brief_status", "project_brief_version", "interview_status", "completed", "total")}
     projection.update({"run_id": state.get("lease_run_id"), "run_status": state.get("lease_status"),
@@ -109,6 +124,27 @@ def render_prompt(root: Path, alias: str) -> str:
         raise SystemExit(f"Prompt file not found: {prompt_path}")
 
     prompt_text = prompt_path.read_text(encoding="utf-8")
+    planning = normalized in {"mw-init", "mw-plan"} or phase == "PLANNING"
+    context = []
+    if (workflow / "knowledge" / "index.json").is_file():
+        context.append(f"Project understanding: read `{workflow / 'knowledge' / 'overview.md'}`, "
+                       "relevant module introductions and handoff.md first. "
+                       "Use mw_knowledge.py read for the canonical revision; open code only as needed. "
+                       "Update affected introductions or leave stale markers after editing.")
+    if full_context or planning:
+        context.extend([render_project_snapshot(state), render_project_brief_authority(root, normalized),
+                        render_interview_context(state)])
+    else:
+        context.append(f"Project brief: `{workflow / BRIEF_FILE}`; read relevant changed modules only.")
+    context.extend([render_action_whitelist(state), render_run_authorization(state, normalized)])
+    if full_context or phase == "PLANNED":
+        context.append(render_plan_confirmation_evidence(state, normalized, phase))
+    if full_context or phase in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
+        context.append(render_worker_progress(workflow))
+    context.append(render_milestone_context(root, state, phase))
+    if full_context or phase == "REVIEWING":
+        context.append(render_review_evidence(root, phase))
+    context_text = "\n\n".join(context)
     return (
         "# Mary Workflow v3.0 Context\n\n"
         f"Alias: /{normalized}\n"
@@ -116,16 +152,8 @@ def render_prompt(root: Path, alias: str) -> str:
         f"Prompt file: {prompt_path}\n\n"
         "## State Check\n\n"
         "核对阶段、计划版本、当前任务和证据；复用仍有效的上下文。文件发生变化时重读相关部分。\n"
-        "主线负责授权、派单和接纳结果；具体工作优先委派，worker 继承宿主配置。\n\n"
-        f"{render_project_snapshot(state)}\n\n"
-        f"{render_project_brief_authority(root, normalized)}\n\n"
-        f"{render_interview_context(state)}\n\n"
-        f"{render_action_whitelist(state)}\n\n"
-        f"{render_plan_confirmation_evidence(state, normalized, phase)}\n\n"
-        f"{render_run_authorization(state, normalized)}\n\n"
-        f"{render_worker_progress(workflow)}\n\n"
-        f"{render_milestone_context(root, state, phase)}\n\n"
-        f"{render_review_evidence(root, phase)}\n\n"
+        "主线负责授权和接纳结果；按任务选择直接执行或委派，继承宿主配置。\n\n"
+        f"{context_text}\n\n"
         "## Current State\n\n"
         f"```yaml\n{state_text}```\n\n"
         "## Phase Prompt\n\n"
@@ -379,20 +407,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Project root containing .mary-workflow; defaults to current directory",
     )
+    parser.add_argument("--formal", action="store_true", help="use formal milestone gates for a course task")
+    parser.add_argument("--full-context", action="store_true", help="include full planning/history sections")
     return parser
 
 
 def main(argv: list[str]) -> int:
-    locator = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-    locator.add_argument("--project-root", default=".")
-    location, _ = locator.parse_known_args(argv)
-    root = Path(location.project_root).resolve()
+    args = build_parser().parse_args(argv)
+    root = Path(args.project_root).resolve()
+    if args.alias in COURSE_SKILLS and not args.formal:
+        print(render_prompt(root, args.alias))
+        return 0
     from mw_bundle import forward_to_pinned
-    forwarded = forward_to_pinned(root / WORKFLOW_DIR, "mw_codex.py", argv)
+    forwarded_args = argv
+    # Old pins already use formal course semantics and do not know this flag.
+    if args.formal and not (root / WORKFLOW_DIR / "runtime/references/task-policy.md").is_file():
+        forwarded_args = [item for item in argv if item != "--formal"]
+    forwarded = forward_to_pinned(root / WORKFLOW_DIR, "mw_codex.py", forwarded_args)
     if forwarded is not None:
         return forwarded
-    args = build_parser().parse_args(argv)
-    print(render_prompt(root, args.alias))
+    print(render_prompt(root, args.alias, full_context=args.full_context, formal=args.formal))
     return 0
 
 
