@@ -5,7 +5,7 @@ description: Convert course slides into structured local Lecture notes with pres
 
 # Slide to Lecture
 
-Use this skill as the foundation for `lecture-learning`; do not create a competing slide-only workflow.
+Use this skill as the foundation for `lecture-learning`. Follow [shared task policy](../../references/task-policy.md); ordinary slide notes run directly without milestone initialization.
 
 ## Classify First
 

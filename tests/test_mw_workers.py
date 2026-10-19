@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +76,39 @@ class WorkerContractTests(unittest.TestCase):
     def verify(self, tasks=None):
         return verify_milestone_evidence(self.root, self.state, self.milestone,
                                          {"task_ids": tasks or ["implementation"]})
+
+    def test_worker_receipt_marks_existing_module_intro_stale(self):
+        from mw_knowledge import DETAILS, update, load
+        update(self.project, {"modules": [{"id": "product", "files": ["product.txt"],
+                                           **{key: "Recorded " + key for key in DETAILS}}]}, 0)
+        self.finish_implementation()
+        module = load(self.project)["modules"]["product"]
+        self.assertEqual(module["status"], "stale")
+        self.assertEqual(module["pending_files"], ["product.txt"])
+
+    def test_long_validation_polls_stop_without_reparsing_sdd(self):
+        self.milestone["acceptance"] = [python_command("import time; time.sleep(.6)")]
+        self.state["runtime_meta"]["sdd"] = {"change_id": "fixture", "files": {}, "base_specs": {}, "trace": []}
+        with mock.patch("mw_sdd.assert_binding") as check:
+            task = self.dispatch()
+            check.reset_mock()
+            evidence = self.validate(task)
+        self.assertEqual(evidence["exit_code"], 0)
+        self.assertEqual(check.call_count, 2)  # start/end, not each polling tick
+        self.assertGreaterEqual(evidence["total_duration_ms"], evidence["duration_ms"])
+        self.assertIn("prepare_ms", evidence)
+        self.assertIn("finalize_ms", evidence)
+
+    def test_sdd_drift_at_validation_end_cannot_produce_a_pass(self):
+        self.milestone["acceptance"] = [python_command("import time; time.sleep(.3)")]
+        self.state["runtime_meta"]["sdd"] = {"change_id": "fixture", "files": {}, "base_specs": {}, "trace": []}
+        with mock.patch("mw_sdd.assert_binding"):
+            task = self.dispatch()
+        with mock.patch("mw_sdd.assert_binding", side_effect=[None, ValueError("SDD drift")]):
+            evidence = self.validate(task)
+        self.assertEqual(evidence["result"], "cancelled")
+        with self.assertRaises(WorkerError):
+            self.submit(task, evidence, files_changed=[])
 
     def test_full_implementation_and_independent_review(self):
         task, evidence = self.finish_implementation()

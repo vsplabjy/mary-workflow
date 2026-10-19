@@ -30,6 +30,20 @@ CORE_REFERENCES = (
     "state-contract.md", "memory-contract.md", "subagent-contract.md", "host-contract.md", "sdd-contract.md",
 )
 CORE_SKILLS = ("lecture-learning", "exam-review", "slide-to-lecture", "roundtrip-screenshot")
+# Additive content profile: old pinned manifests remain valid. New installs
+# include the complete profile when it exists in the source checkout.
+EXPERIMENT_FILES = (
+    "scripts/mw_experiment.py", "skills/experiment/SKILL.md",
+    "references/experiment-contract.md", "skills/quick/SKILL.md", "references/task-policy.md",
+)
+HUMANIZER_FILES = (
+    "skills/humanizer-zh/SKILL.md",
+    "skills/humanizer-zh/references/upstream-skill.md",
+    "skills/humanizer-zh/LICENSE",
+)
+KNOWLEDGE_FILES = (
+    "scripts/mw_knowledge.py", "skills/context/SKILL.md", "references/knowledge-contract.md",
+)
 
 
 class BundleError(ValueError):
@@ -77,6 +91,27 @@ def _bundle_contents(source_root: Path) -> tuple[dict[str, bytes], dict[str, byt
         if not path.is_file():
             raise BundleError(f"Core profile source is missing {path}.")
         files[f"skills/{name}/SKILL.md"] = path.read_bytes()
+    if (source_root / "skills" / "humanizer-zh").exists():
+        for relative in HUMANIZER_FILES:
+            path = source_root / relative
+            if not path.is_file():
+                raise BundleError(f"Humanizer profile source is missing {path}.")
+            files[relative] = path.read_bytes()
+    if (source_root / "skills" / "experiment").exists():
+        for relative in EXPERIMENT_FILES:
+            path = source_root / relative
+            if not path.is_file():
+                raise BundleError(f"Experiment profile source is missing {path}.")
+            files[relative] = path.read_bytes()
+    if (source_root / "skills" / "context").exists():
+        for relative in KNOWLEDGE_FILES:
+            path = source_root / relative
+            if not path.is_file():
+                raise BundleError(f"Knowledge profile source is missing {path}.")
+            files[relative] = path.read_bytes()
+    policy = source_root / "references" / "task-policy.md"
+    if policy.is_file() and "references/task-policy.md" not in files:
+        files["references/task-policy.md"] = policy.read_bytes()
     return files, prompts
 
 
@@ -208,19 +243,26 @@ def forward_to_pinned(root: Path, script_name: str, args: list[str]) -> int | No
         return None
     if not (root / LOCK_FILE).exists():
         return None
+    target = (root / "runtime" / "scripts" / script_name).resolve()
+    local = Path(__file__).resolve().parent / script_name
+    marker = os.environ.get("MARY_VERIFIED_BUNDLE_PARENT", "")
+    expected_marker = f"{os.getppid()}:{root.resolve()}"
+    if local.resolve() == target or Path(sys.argv[0]).resolve() == target:
+        # A cooperating parent just verified this bundle before executing us.
+        # Direct invocations still verify; this is not hostile-host attestation.
+        if marker != expected_marker:
+            verify_bundle(root)
+        return None
     verify_bundle(root)
-    # The installed entrypoint also applies local-record policy for older pins.
-    # Do not replace their runtime or mutate read-only/help invocations.
+    # Preserve local-record policy when forwarding to an older pinned runtime.
     if script_name == "mary_workflow.py" and args and args[0] == "init" and not any(
         arg in {"-h", "--help"} for arg in args
     ):
         with workflow_lock(root):
             ensure_workflow_gitignore(root.parent)
-    target = (root / "runtime" / "scripts" / script_name).resolve()
-    local = Path(__file__).resolve().parent / script_name
-    if local.resolve() == target or Path(sys.argv[0]).resolve() == target:
-        return None
-    return subprocess.run([sys.executable, str(target), *args], check=False).returncode
+    env = os.environ.copy()
+    env["MARY_VERIFIED_BUNDLE_PARENT"] = f"{os.getpid()}:{root.resolve()}"
+    return subprocess.run([sys.executable, str(target), *args], env=env, check=False).returncode
 
 
 def _read_state(root: Path, *, legacy: bool = False) -> dict[str, Any]:

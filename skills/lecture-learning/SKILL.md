@@ -9,9 +9,9 @@ This is the course-level orchestration skill. Local files are the default source
 
 ## Course Information Architecture
 
-Before editing a Lecture, inspect the local Course Hub note, existing local child notes, syllabus/schedule, and Source Index. Build the knowledge map first, then place notes by dependency, engineering flow, or teaching order.
+Inspect the existing Course Hub and sources relevant to the requested Lecture. Reuse its map, hierarchy and index; update only affected links. Build or reorganize the full Course Hub only when requested or absent and necessary for the task.
 
-Course Hub fixed order:
+When creating a Course Hub, use this order:
 
 1. Course positioning callout.
 2. Overall knowledge map with 3–7 pillars or a dependency flow.
@@ -34,7 +34,7 @@ Classify the material and invoke `slide-to-lecture`. Reuse an existing empty Lec
 
 ### Stage 2: Raw recording file
 
-Under the Lecture note's `📎 原始 Slides` section, immediately after the PDF link, create or reuse the local file `<course code> Lecture <N> — 课堂录音转写（raw）.md`. Keep the pasted transcription raw and traceable. Ask the user to provide the transcript locally when it is not supplied.
+Under the Lecture note's `📎 原始 Slides` section, immediately after the PDF link, create or reuse the local file `<course code> Lecture <N> — 课堂录音转写（raw）.md`. Keep the pasted transcription raw and traceable. When a recording transcript is absent, deliver the supported slide note and mark recording integration pending; request the transcript only for the recording-dependent part. Never invent a raw transcript.
 
 ### Stage 3: Correct and fuse
 
@@ -44,21 +44,15 @@ Only add information absent from slides: derivation steps, teacher emphasis, exa
 
 Sync useful English terms to English learning. Put exam points and common mistakes in the Lecture summary. Keep one focused learning block at a time and split long recordings by topic.
 
-## Trigger and State Discipline
+## Execution
 
-For `/mw-learn`, treat one Lecture or one bounded topic as one Mary Workflow milestone. The command must preserve the normal plan interview, explicit run authorization bound to the frozen plan, recorded worker evidence, independent review, stop/resume, and cycle rules. Use relative local source paths as milestone deliverables; do not invent external ids/URLs, external synchronization results, or code changes for content work.
-
-If the source note already exists, update it in place. If a duplicate local file was created, merge back into the canonical note, remove the duplicate only after confirming no unique content is lost, and repair local Course Hub links.
+Use the course route in [shared task policy](../../references/task-policy.md); it owns direct versus formal execution and authorization.
 
 ## Delivery Checklist
 
 - Course Hub map, ordering, local parentage, and Source Index are coherent.
 - Slide foundation explicitly used the Slide skill.
-- Raw transcript file is linked directly after the original PDF.
+- When a transcript was provided, its raw file is linked directly after the original PDF; otherwise recording integration is marked pending.
 - Terminology, Greek letters, formulas, units, and derivations follow slides.
 - Every recording-only addition has a `🎙` marker; uncertainty has `⚠️存疑`.
 - Summary contains exam points, mistakes, deadlines, and one next action.
-
-## Coordination
-
-Use the shared [subagent contract](../../references/subagent-contract.md) for bounded investigation, content creation, or independent checks when workers are supported. The main agent owns user interaction, acceptance, state transitions, Git writes, and authorized external mutations. Workers inherit host settings; never choose a model or reasoning level. Keep this scene's source, content, and verification rules and state lifecycle intact.

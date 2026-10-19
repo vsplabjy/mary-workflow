@@ -16,7 +16,7 @@ openspec/
 .mary-workflow/                              # execution state and evidence
 ```
 
-Use this flow by default for core code changes. Existing unbound states remain valid; do not silently convert their frozen plans. Paper and Notion retain independent state and authorization. Read source and relevant accepted specs before authoring a baseline; do not label aspirations as current behavior. Keep artifact length proportional to scope. A design document is useful for cross-cutting, migration, or material architectural decisions; it is not mandatory for every small change.
+Use this flow for cross-cutting behavior changes, durable specifications or explicitly chosen formal acceptance. Small unbound fixes and settled-method experiment runs use the quick and experiment profiles without creating SDD artifacts. Existing unbound states remain valid; do not silently convert their frozen plans. Paper and Notion retain independent state and authorization. Read source and relevant accepted specs before authoring a baseline; do not label aspirations as current behavior. Keep artifact length proportional to scope. A design document is useful for cross-cutting, migration, or material architectural decisions; it is not mandatory for every small change.
 
 Proposal records motivation, changed capabilities and affected surfaces. Base specs use `## Purpose` and `## Requirements`. Each requirement uses `### Requirement: Name`, normative SHALL/MUST language, and one or more `#### Scenario: Name` sections with WHEN/THEN statements. Names must identify their scope unambiguously.
 
@@ -39,7 +39,7 @@ The reason is required and no delta may accompany this exception. The coordinato
 
 ## Single task definition and traceability
 
-Each numbered checkbox maps to one milestone and is immediately followed by its machine-readable `mary-task` block. The checkbox supplies the title; do not duplicate a different title inside JSON. IDs identify execution milestones. Exact relative deliverables, acceptance commands, scope and dependencies follow the state/worker contracts.
+Each numbered checkbox maps to one milestone and is immediately followed by its machine-readable `mary-task` block. The checkbox supplies the title; do not duplicate a different title inside JSON. IDs identify execution milestones. Exact relative deliverables, acceptance commands, scope and dependencies follow the state/worker contracts. When command dependencies are known, add optional nonempty `validation_inputs` to bind command evidence to those files; its semantics and full ownership audits are defined only in [subagent-contract.md](subagent-contract.md#validation-inputs-and-ownership-audits).
 
 ````markdown
 ## 1. Export

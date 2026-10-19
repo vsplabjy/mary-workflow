@@ -1,5 +1,7 @@
 # Project memory and coverage
 
+For new-conversation reading and per-change module introductions, use [knowledge-contract.md](knowledge-contract.md). That lightweight path reads saved context and declared changed paths only; it does not invoke the formal inventory/coverage operations below. Formal briefs remain authoritative for their own lifecycle; documentation freshness is tracked separately.
+
 This contract is independent of the model, provider, context window, and host.
 The project works without host memory, subagents, hooks, or a native task list.
 Use available worker capabilities to reduce reading latency, without making a

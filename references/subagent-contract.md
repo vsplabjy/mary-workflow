@@ -126,12 +126,43 @@ Ignored generated files are outside general coverage unless explicitly named in
 the contract. Do not claim a complete audit of arbitrary filesystem writes.
 Product dependencies that matter to correctness must be named even when ignored.
 
-All sibling product writes must stabilize **before** final command execution and
-result submission. Validation binds the complete covered product snapshot, not
-only the worker's own files. A changed dependency, new file, staging operation, or
-later integration invalidates old evidence. Independent worker outputs may be
+All relevant writers must stabilize before a check executes; all sibling writers
+must settle before result acceptance. Without `validation_inputs`, command
+receipts retain the legacy complete covered-product binding. With an explicitly
+frozen input list, a receipt binds only those inputs; changing an authorized note
+outside that list does not require rerunning an unchanged product check.
+Changes within the declared inputs (including creation, deletion, mode or index)
+invalidate that receipt. Independent worker outputs may be
 combined, but a milestone cannot complete while a writer is running or while a
 ready implementer has been omitted from its task list.
+
+## Validation inputs and ownership audits
+
+When the command's dependencies are known, declare a nonempty `validation_inputs`
+list in the milestone (or its `mary-task` source) before freezing the plan. Name
+all consumed code, test entrypoints, imported modules, fixtures and config files,
+including ignored inputs. Treat an incomplete list as an evidence limitation;
+if dependency coverage is unknown, omit it and keep project-wide validation.
+Do not infer completeness merely from changed files. This field cannot be changed
+at dispatch or submission to rescue a failed check; it is part of plan identity.
+
+```json
+{"validation_inputs":["src/export.py","tests/test_export.py","fixtures/input.csv"]}
+```
+
+Dispatch still captures a full ownership baseline. Scoped command execution
+reads only the task's declared delivery/dependency paths and records a digest of
+`validation_inputs`. Delivery and acceptance still perform full scope/index
+checks, so an undeclared write cannot be accepted even when a command exits 0.
+This separates command evidence freshness from ownership auditing; it does not
+claim arbitrary shell writes are sandboxed. In particular, an out-of-scope edit
+still needs coordinator resolution, not automatic acceptance.
+
+The result/review freshness domain includes deliverables, allowed writes and
+read dependencies. Legacy tasks without this field retain full snapshot identity;
+new scoped tasks do not alter old receipts. Final bound-SDD product archival
+still uses its full accepted snapshot. This optimization reduces repeated command
+reads and unnecessary check reruns, not every final audit.
 
 ## Command execution evidence
 
@@ -303,12 +334,12 @@ scope deviations and remaining uncertainties before applying the action.
 
 ## Capability fallback and other scenarios
 
-Delegation is the normal mode when the host supports workers. Independent
+Choose delegation when parallel work, independent review or context isolation merits its overhead. Single-agent execution is a normal mode even when the host supports workers. Independent
 workers are an execution mechanism, not a requirement to fabricate for tiny or
-tightly coupled work. If workers are unavailable, the coordinator explicitly
+tightly coupled work. When single-agent execution is chosen, the coordinator explicitly
 starts in `execution_mode: single_agent`, uses separate implementation and review
 passes, and the verifier envelope must contain `review_mode: same_agent`.
-The resulting record reports `independent_review: false`. This fallback never
+The resulting record reports `independent_review: false`. This mode never
 pretends that a renamed identity is an independent reviewer.
 
 Paper, course, experiment, document and external-application work can reuse these
@@ -355,3 +386,5 @@ An SDD verifier result additionally supplies `scenario_reviews`, covering every 
 ```
 
 Removal/rename operations use the synthetic references documented in the SDD contract and also need review. A passed overall result cannot omit scenarios or hide a needs-fix scenario. Inspect behavior and adequacy of evidence; structural mapping and nonempty evidence text alone do not establish correctness. Acceptance still requires the existing runtime command receipts, current artifacts, review identity, and coordinator transition.
+
+Formal validation checks SDD at command boundaries. The 0.25-second control poll checks stop/cancellation and task identity without reparsing SDD. Drift at the final boundary cancels the evidence; it cannot become a pass. Receipt `duration_ms` retains subprocess timing; `prepare_ms`, `finalize_ms` and `total_duration_ms` additionally include snapshot and log-hash work up to receipt persistence. These receipt fields do not measure agent interaction or the enclosing CLI startup.

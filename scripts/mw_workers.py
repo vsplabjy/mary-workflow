@@ -184,9 +184,34 @@ def _checks(milestone: Json) -> list[Json]:
     return checks
 
 
-def _current(root: Path, state: Json, data: Json, *, statuses: set[str] | None = None) -> Json:
+def _milestone_digest(milestone: Json) -> str:
+    contract = {key: milestone.get(key, []) for key in ("deliverables", "write_scope", "read_dependencies", "acceptance")}
+    if "validation_inputs" in milestone:
+        contract["validation_inputs"] = milestone["validation_inputs"]
+    return _digest(contract)
+
+
+def _projection(snapshot: Json, paths: list[str]) -> Json:
+    return {path: snapshot.get(path, {"kind": "missing", "index": []}) for path in sorted(set(paths))}
+
+
+def _validation_digest(task: Json, snapshot: Json) -> str:
+    paths = task.get("validation_inputs")
+    return _digest(_projection(snapshot, paths)) if paths else _digest(snapshot)
+
+
+def _delivery_paths(task: Json) -> list[str]:
+    return sorted(set(task["write_scope"] + task["read_dependencies"] + task["deliverables"] + task.get("validation_inputs", [])))
+
+
+def _delivery_digest(task: Json, snapshot: Json) -> str:
+    return _digest(_projection(snapshot, _delivery_paths(task))) if task.get("validation_inputs") else _digest(snapshot)
+
+
+def _current(root: Path, state: Json, data: Json, *, statuses: set[str] | None = None,
+             check_sdd: bool = True) -> Json:
     task = _read_json(_task_dir(root, data.get("task_id")) / "task.json")
-    if task.get("role") != "explorer" and state.get("runtime_meta", {}).get("sdd"):
+    if check_sdd and task.get("role") != "explorer" and state.get("runtime_meta", {}).get("sdd"):
         from mw_sdd import assert_binding
         try:
             assert_binding(root.parent, state["runtime_meta"]["sdd"])
@@ -206,15 +231,18 @@ def _current(root: Path, state: Json, data: Json, *, statuses: set[str] | None =
         if task["milestone_id"] != state.get("current_milestone_id"):
             raise WorkerError("Stale worker result: current milestone changed.")
         milestone = _milestone(state, task["milestone_id"])
-        if task["milestone_digest"] != _digest({key: milestone.get(key, [])
-                                               for key in ("deliverables", "write_scope", "read_dependencies", "acceptance")}):
+        if task["milestone_digest"] != _milestone_digest(milestone):
             raise WorkerError("Stale worker result: milestone contract changed.")
+        expected_inputs = sorted(set(milestone["validation_inputs"])) if "validation_inputs" in milestone else None
+        if task.get("validation_inputs") != expected_inputs:
+            raise WorkerError("Task validation input domain differs from its frozen milestone.")
+
     if task.get("status") not in (statuses if statuses is not None else _OPEN):
         raise WorkerError(f"Task is {task.get('status')}; duplicate or late submission rejected.")
     return task
 
 
-def _snapshot(project: Path, extra: list[str] | None = None) -> Json:
+def _snapshot(project: Path, extra: list[str] | None = None, *, only: bool = False) -> Json:
     """Track file contents/modes plus index entries, including existing edits.
 
     Git repositories include tracked and nonignored untracked files. Explicit
@@ -222,26 +250,30 @@ def _snapshot(project: Path, extra: list[str] | None = None) -> Json:
     Cache/scratch/control directories are excluded; no symlinks are followed.
     """
     index: dict[str, list[str]] = {}
+    names = set(extra or [])
     try:
-        found = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                               cwd=project, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                               timeout=20, check=False)
-        if found.returncode:
-            raise OSError("not a git workspace")
-        names = set(os.fsdecode(name) for name in found.stdout.split(b"\0") if name)
-        stages = subprocess.run(["git", "ls-files", "--stage", "-z"], cwd=project,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        if not only:
+            found = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                                   cwd=project, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   timeout=20, check=False)
+            if found.returncode:
+                raise OSError("not a git workspace")
+            names.update(os.fsdecode(name) for name in found.stdout.split(b"\0") if name)
+        command = ["git", "ls-files", "--stage", "-z"]
+        if only:
+            command.extend(["--", *sorted(names)])
+        stages = subprocess.run(command, cwd=project, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                 timeout=20, check=True)
         for entry in stages.stdout.split(b"\0"):
             if entry:
                 metadata, name = os.fsdecode(entry).split("\t", 1)
                 index.setdefault(name, []).append(metadata)
     except (OSError, subprocess.SubprocessError):
-        names = set()
-        for parent, dirs, files in os.walk(project, followlinks=False):
-            dirs[:] = [name for name in dirs if name not in _CONTROL | _CACHE
-                       and not (Path(parent) / name).is_symlink()]
-            names.update((Path(parent) / name).relative_to(project).as_posix() for name in files)
+        if not only:
+            for parent, dirs, files in os.walk(project, followlinks=False):
+                dirs[:] = [name for name in dirs if name not in _CONTROL | _CACHE
+                           and not (Path(parent) / name).is_symlink()]
+                names.update((Path(parent) / name).relative_to(project).as_posix() for name in files)
     names.update(extra or [])
     result: Json = {}
     for name in sorted(names):
@@ -265,6 +297,8 @@ def _snapshot(project: Path, extra: list[str] | None = None) -> Json:
             result[name] = {"kind": "directory", "index": index.get(name, [])}
         elif name in index:
             result[name] = {"kind": "deleted", "index": index[name]}
+        elif only:
+            result[name] = {"kind": "missing", "index": []}
     return result
 
 
@@ -274,7 +308,7 @@ def _extra(root: Path, state: Json) -> list[str]:
                    for path in task["write_scope"] + task["read_dependencies"] + task["deliverables"]})
 
 
-def _task_snapshot(root: Path, task: Json) -> Json:
+def _task_snapshot(root: Path, task: Json, *, audit: bool = False) -> Json:
     """Use the paths recorded at dispatch plus this task's own contract.
 
     A later task may add an ignored read dependency.  Its path must not enter
@@ -284,6 +318,8 @@ def _task_snapshot(root: Path, task: Json) -> Json:
     baseline = _read_json(_task_dir(root, task["task_id"]) / "baseline.json")
     if _digest(baseline) != task["baseline_digest"]:
         raise WorkerError("Dispatch baseline record changed.")
+    if task.get("validation_inputs") and not audit:
+        return _snapshot(root.parent, _delivery_paths(task), only=True)
     paths = set(baseline)
     paths.update(task["write_scope"])
     paths.update(task["read_dependencies"])
@@ -303,10 +339,12 @@ def _changes(before: Json, after: Json) -> list[str]:
     return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
 
 
-def _scope_check(root: Path, state: Json, task: Json, snapshot: Json) -> list[str]:
+def _scope_check(root: Path, state: Json, task: Json, snapshot: Json, *, partial: bool = False) -> list[str]:
     baseline = _read_json(_task_dir(root, task["task_id"]) / "baseline.json")
     if _digest(baseline) != task["baseline_digest"]:
         raise WorkerError("Dispatch baseline record changed.")
+    if partial:
+        baseline = _projection(baseline, list(snapshot))
     changed = _changes(baseline, snapshot)
     own = set(task["write_scope"])
     others = {path for peer in list_tasks(root)
@@ -355,6 +393,12 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
     deliverables = _paths(project, data.get("deliverables", milestone.get("deliverables", [])), "deliverables")
     scope = _paths(project, data.get("write_scope", deliverables if role == "implementer" else []), "write_scope")
     dependencies = _paths(project, data.get("read_dependencies", milestone.get("read_dependencies", [])), "read_dependencies")
+    inputs = None
+    if "validation_inputs" in milestone:
+        inputs = _paths(project, milestone["validation_inputs"], "validation_inputs")
+        if not inputs:
+            raise WorkerError("validation_inputs must be nonempty; omit it for project-wide evidence.")
+        dependencies = sorted(set(dependencies + inputs))
     binding = state.get("runtime_meta", {}).get("sdd")
     trace = []
     if binding and role != "explorer":
@@ -402,7 +446,7 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
     task: Json = {"schema_version": 1, "task_id": task_id,
                   "attempt_id": _id(data.get("attempt_id", "attempt-" + secrets.token_hex(6)), "attempt_id"),
                   **_binding(state), "milestone_id": milestone_id,
-                  "milestone_digest": _digest({key: milestone.get(key, []) for key in ("deliverables", "write_scope", "read_dependencies", "acceptance")}),
+                  "milestone_digest": _milestone_digest(milestone),
                   "role": role, "agent_id": agent_id, "objective": str(data["objective"]),
                   "review_mode": "same_agent" if state.get("runtime_meta", {}).get("execution_mode") == "single_agent" else "independent",
                   "deliverables": deliverables, "write_scope": scope, "read_dependencies": dependencies,
@@ -410,6 +454,8 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
                   "reviews_task_ids": reviews, "retry_of": str(data.get("retry_of") or ""),
                   "status": "running", "created_at": _now(), "validation": [],
                   "scratch": f".mary-workflow-worker/{task_id}"}
+    if inputs is not None:
+        task["validation_inputs"] = inputs
     if binding and role != "explorer":
         task["sdd"] = {"change_id": binding["change_id"], "files": binding["files"], "trace": trace}
     baseline = _snapshot(project, _extra(root, state) + scope + dependencies + deliverables)
@@ -450,6 +496,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
     not. Actual state and cancellation are rechecked during and after execution.
     The caller must apply host permissions to the plan-authorized shell command.
     """
+    operation_started = time.monotonic()
     with workflow_lock(root):
         state = _fresh_state(root, state)
         task = _current(root, state, data)
@@ -467,7 +514,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
         if not 0 < timeout <= 86400:
             raise WorkerError("timeout_seconds must be between 0 and 86400.")
         before = _task_snapshot(root, task)
-        _scope_check(root, state, task, before)
+        _scope_check(root, state, task, before, partial=bool(task.get("validation_inputs")))
         evidence_id = "check-" + secrets.token_hex(10)
         directory = _task_dir(root, task["task_id"])
         stdout = directory / (evidence_id + ".stdout.log")
@@ -481,7 +528,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
             "process_group_id": process.pid, "isolated_process_group": os.name == "posix",
             "coordinator_pid": os.getpid(), "platform": os.name,
             "acceptance_id": check["id"], "command": check["command"],
-            "cwd": str(root.parent.resolve()), "snapshot_digest": _digest(before),
+            "cwd": str(root.parent.resolve()), "snapshot_digest": _validation_digest(task, before),
             "started_at": _now(),
         }
         _save(root, task)
@@ -499,7 +546,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
             except subprocess.TimeoutExpired:
                 with workflow_lock(root):
                     try:
-                        _current(root, _fresh_state(root, state), data)
+                        _current(root, _fresh_state(root, state), data, check_sdd=False)
                     except WorkerError as exc:
                         interruption = str(exc)
                 if interruption:
@@ -524,12 +571,18 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
                           "cwd": str(root.parent.resolve()), "exit_code": process.returncode,
                           "result": "cancelled" if interruption else ("timeout" if timed_out else ("passed" if process.returncode == 0 else "failed")),
                           "summary": interruption or ("Timed out" if timed_out else f"Process exited {process.returncode}"),
-                          "duration_ms": duration_ms, "created_at": _now(),
-                          "snapshot_digest": _digest(before), "after_snapshot_digest": _digest(after),
+                          "duration_ms": duration_ms,
+                          "created_at": _now(),
+                          "snapshot_digest": _validation_digest(task, before), "after_snapshot_digest": _validation_digest(task, after),
                           "stdout": stdout.name, "stderr": stderr.name,
                           "stdout_sha256": _file_digest(stdout), "stderr_sha256": _file_digest(stderr)}
+        if task.get("validation_inputs"):
+            evidence["validation_inputs"] = task["validation_inputs"]
         stdout.chmod(0o444)
         stderr.chmod(0o444)
+        evidence.update(prepare_ms=round((started - operation_started) * 1000),
+                        finalize_ms=round((time.monotonic() - started) * 1000) - duration_ms,
+                        total_duration_ms=round((time.monotonic() - operation_started) * 1000))
         _immutable(directory / (evidence_id + ".json"), evidence)
         current.pop("active_validation", None)
         current["validation"].append(evidence_id)
@@ -613,7 +666,7 @@ def recover_validation(root: Path, state: Json, data: Json) -> Json:
             "reason": str(data.get("reason") or "Coordinator crashed before final evidence persistence."),
             "created_at": _now(), "started_at": receipt.get("started_at"),
             "snapshot_digest": receipt.get("snapshot_digest"),
-            "after_snapshot_digest": _digest(_task_snapshot(root, task)),
+            "after_snapshot_digest": _validation_digest(task, _task_snapshot(root, task)),
             "coordinator_pid": coordinator_pid, "pid": process_id, "process_group_id": process_group,
             "absence_verified": True, "missing_logs": missing, **logs,
             "original_evidence_sha256": _file_digest(original_evidence) if original_evidence.is_file() else None,
@@ -632,7 +685,7 @@ def recover_validation(root: Path, state: Json, data: Json) -> Json:
         return {**task, "recovery_evidence": evidence}
 
 
-def _evidence(root: Path, task: Json, evidence_id: object, digest: str) -> Json:
+def _evidence(root: Path, task: Json, evidence_id: object, snapshot: Json) -> Json:
     key = _id(evidence_id, "evidence_id")
     if key not in task["validation"]:
         raise WorkerError("Evidence is not registered to this task.")
@@ -650,6 +703,9 @@ def _evidence(root: Path, task: Json, evidence_id: object, digest: str) -> Json:
         path = directory / name
         if path.is_symlink() or not path.is_file() or _file_digest(path) != evidence.get(stream + "_sha256"):
             raise WorkerError("Missing or changed raw validation log.")
+    if evidence.get("validation_inputs") != task.get("validation_inputs"):
+        raise WorkerError("Evidence validation input domain differs from the frozen task.")
+    digest = _validation_digest(task, snapshot)
     if evidence.get("snapshot_digest") != digest or evidence.get("after_snapshot_digest") != digest:
         raise WorkerError("Validation evidence is stale or its command changed product files; rerun after writes stabilize.")
     return evidence
@@ -670,7 +726,7 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
             raise WorkerError(f"{field} must be a list.")
     if status in {"blocked", "failed"} and not data.get("blockers"):
         raise WorkerError("Blocked/failed result requires concrete blockers and attempted remedies.")
-    snapshot = _task_snapshot(root, task)
+    snapshot = _task_snapshot(root, task, audit=True)
     issues: list[str] = []
     observed_deviations: list[str] = []
     if status == "ready_for_review":
@@ -709,10 +765,10 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
         raise WorkerError("validation must list evidence IDs returned by run_validation.")
     if len(set(validation)) != len(validation):
         raise WorkerError("Duplicate validation evidence IDs.")
-    digest = _digest(snapshot)
+    digest = _delivery_digest(task, snapshot)
     for evidence_id in validation:
         try:
-            _evidence(root, task, evidence_id, digest)
+            _evidence(root, task, evidence_id, snapshot)
         except WorkerError as exc:
             if status == "ready_for_review":
                 raise
@@ -752,6 +808,11 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
                       review_mode=task["review_mode"], reviews_task_ids=task["reviews_task_ids"])
         if task.get("sdd"):
             result["scenario_reviews"] = data["scenario_reviews"]
+    # Reuse observed paths from the existing audit. No additional source reads.
+    # Mark before recording completion so an interrupted receipt stays conservative.
+    if actual and Path(__file__).with_name("mw_knowledge.py").is_file():
+        from mw_knowledge import mark_changed
+        mark_changed(root.parent, actual, f"Worker {task['task_id']} submitted {status}", existing_only=True)
     _immutable(_task_dir(root, task["task_id"]) / "result.json", result)
     task.update(status=status, submitted_at=result["submitted_at"], result_digest=_digest(result))
     _save(root, task)
@@ -786,11 +847,11 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
             raise WorkerError("Milestone evidence must come from its implementer tasks.")
         _scope_check(root, state, task, snapshot)
         result = _result(root, task)
-        if result.get("status") != "ready_for_review" or result.get("snapshot_digest") != digest:
+        if result.get("status") != "ready_for_review" or result.get("snapshot_digest") != _delivery_digest(task, snapshot):
             raise WorkerError("Worker result is stale or not ready for review; dispatch a new attempt.")
         files.update(result["files_changed"])
         for evidence_id in result["validation"]:
-            evidence = _evidence(root, task, evidence_id, digest)
+            evidence = _evidence(root, task, evidence_id, snapshot)
             if evidence["result"] != "passed" or evidence["exit_code"] != 0:
                 raise WorkerError("Required validation did not pass: " + evidence["acceptance_id"])
             covered.add(evidence["acceptance_id"])
@@ -816,12 +877,13 @@ def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json)
     summary = verify_milestone_evidence(root, state, milestone, {"task_ids": task["reviews_task_ids"]})
     result = _result(root, task)
     review_snapshot = _snapshot(root.parent, _extra(root, state))
-    review_digest = _digest(review_snapshot)
+    review_digest = _delivery_digest(task, review_snapshot)
     _scope_check(root, state, task, review_snapshot)
     if (result.get("status") != "ready_for_review" or result.get("decision") != "passed"
             or result.get("snapshot_digest") != review_digest):
         raise WorkerError("Verifier has not passed the current product snapshot.")
-    if task["baseline_digest"] != review_digest:
+    review_baseline = _read_json(_task_dir(root, task["task_id"]) / "baseline.json")
+    if _delivery_digest(task, review_baseline) != review_digest:
         raise WorkerError("Product changed during independent review; dispatch a fresh review.")
     for reviewed_id in task["reviews_task_ids"]:
         reviewed = _read_json(_task_dir(root, reviewed_id) / "task.json")

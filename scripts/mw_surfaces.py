@@ -28,6 +28,10 @@ COMMAND_SKILLS = {
     "slide-learning": "slide-to-lecture",
     "mw-paper": "paper",
     "mw-notion": "notion",
+    "mw-humanize": "humanizer-zh",
+    "mw-experiment": "experiment",
+    "mw-quick": "quick",
+    "mw-context": "context",
 }
 PHASE_NAMES = (
     "mw-init", "mw-plan", "mw-ready", "mw-resume", "mw-execute",
