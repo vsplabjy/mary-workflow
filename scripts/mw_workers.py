@@ -4,7 +4,12 @@
 The coordinator calls these helpers under its workflow mutation lock. These are
 audit and mistake-prevention controls, not a sandbox against arbitrary shell
 access. Workers submit envelopes; they never write this control directory.
+The repair budget (see references/repair-contract.md) is enforced at the
+coordinator's formal entrypoints (enqueue_fix_task, needs-fix review, fresh
+implementer redispatch): an agent cannot bypass it by relabeling work, but
+repair policy is not a process-level sandbox boundary.
 """
+
 
 from __future__ import annotations
 
@@ -365,7 +370,7 @@ def _scope_check(root: Path, state: Json, task: Json, snapshot: Json, *, partial
     return sorted(set(changed) & own)
 
 
-def create_task(root: Path, state: Json, data: Json) -> Json:
+def create_task(root: Path, state: Json, data: Json, *, before_publish=None) -> Json:
     """Register one dispatch before spawning its worker; IDs cannot be reused."""
     role = str(data.get("role", ""))
     allowed = {"implementer": {"EXECUTING"}, "verifier": {"REVIEWING"},
@@ -462,6 +467,8 @@ def create_task(root: Path, state: Json, data: Json) -> Json:
     scratch_root = project / ".mary-workflow-worker"
     if scratch_root.is_symlink() or (scratch_root / task_id).is_symlink():
         raise WorkerError("Worker scratch must not be a symlink.")
+    if before_publish is not None:
+        before_publish()
     (scratch_root / task_id).mkdir(parents=True, exist_ok=True)
     destination.mkdir(parents=True)
     _immutable(destination / "baseline.json", baseline)
@@ -500,6 +507,7 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
     with workflow_lock(root):
         state = _fresh_state(root, state)
         task = _current(root, state, data)
+        _assert_unfailed_attempt(root, task)
         if task.get("active_validation"):
             raise WorkerError("A validation is already running for this task.")
         if "result" in data or "exit_code" in data:
@@ -711,11 +719,27 @@ def _evidence(root: Path, task: Json, evidence_id: object, snapshot: Json) -> Js
     return evidence
 
 
+def _assert_unfailed_attempt(root: Path, task: Json) -> None:
+    """A failed implementation must obtain a new budgeted dispatch."""
+    if task.get("role") != "implementer":
+        return
+    for evidence_id in task.get("validation", []):
+        evidence = _read_json(_task_dir(root, task["task_id"]) / f"{evidence_id}.json")
+        if evidence.get("result") == "failed":
+            raise WorkerError(
+                f"Attempt {task['task_id']} already failed validation {evidence_id}; "
+                "a failed attempt cannot become ready_for_review or rerun validation. "
+                "Record the failure and obtain a fresh budgeted implementer dispatch."
+            )
+
+
 def submit_result(root: Path, state: Json, data: Json) -> Json:
     """Receive an immutable worker envelope, but do not accept the milestone."""
     task = _current(root, state, data, statuses={"running"})
     if task.get("active_validation"):
         raise WorkerError("Wait for active validation before submitting a result.")
+    if data.get("status") == "ready_for_review":
+        _assert_unfailed_attempt(root, task)
     status = data.get("status")
     if status not in {"ready_for_review", "blocked", "failed"}:
         raise WorkerError("Worker status must be ready_for_review, blocked, or failed.")

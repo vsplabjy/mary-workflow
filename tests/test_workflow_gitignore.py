@@ -35,6 +35,8 @@ class WorkflowGitignoreTests(unittest.TestCase):
         subprocess.run(command, cwd=self.project, capture_output=True, check=True)
         first = target.read_bytes()
         self.assertTrue(first.startswith(existing))
+        # Every generated file is already invisible to real Git after a fresh init.
+        self.assertEqual(self.git("status", "--porcelain").stdout, b"?? .gitignore\n")
         lock = self.project / ".mary-workflow/workflow-lock.json"
         pinned = lock.read_bytes()
         subprocess.run(command, cwd=self.project, capture_output=True, check=True)
@@ -42,11 +44,23 @@ class WorkflowGitignoreTests(unittest.TestCase):
         self.assertEqual(lock.read_bytes(), pinned)
         for path in (".mary-workflow/config.yaml", ".mary-workflow/analysis/hash.json",
                      ".mary-workflow/cycles/C0/log.md", ".mary-workflow/runtime/scripts/mw_runtime.py",
-                     ".mary-workflow-worker/task/receipt.json", ".mary-research/reading-profile.md",
+                     ".mary-workflow/reports/index.html",
+                     ".mary-workflow/reports/20261021T101530-e8-report/index.html",
+                     ".mary-workflow/reports/20261021T101530-e8-report/assets/preview.svg",
+                     ".mary-workflow/reports/20261021T101530-e8-report/assets/data/summary.csv",
+                     ".mary-workflow/experiments/20260214T090000-ab12cd34/run.json",
+                     ".mary-workflow/experiments/20260214T090000-ab12cd34/stdout.log",
+                     ".mary-workflow/experiments/20260214T090000-ab12cd34/output/metrics.json",
+                     ".mary-workflow/cycles/C0/reports/M1.md",
+                     ".mary-workflow-worker/task/receipt.json",
+                     ".mary-workflow-worker/task/deep/scratch/notes.md",
+                     ".mary-research/reading-profile.md",
                      ".mary-research/papers/demo/state.json", ".vspi/config.json", "cache/a"):
             self.assertTrue(self.ignored(path), path)
         for path in ("config.yaml", "src/hash.json", "openspec/specs/example/spec.md",
-                     "docs/result.md", "nested/.mary-workflow/config.yaml"):
+                     "docs/result.md", "docs/reports/index.html", "nested/.mary-workflow/config.yaml",
+                     "reports/index.html", "reports/20261021T101530-e8-report/assets/preview.svg",
+                     "assets/preview.svg", "outputs/metrics.json", "index.html"):
             self.assertFalse(self.ignored(path), path)
         # The project-pinned helper has the same policy, without an added bundle dependency.
         subprocess.run([sys.executable, "-c",
@@ -54,6 +68,12 @@ class WorkflowGitignoreTests(unittest.TestCase):
                         "assert not ensure_workflow_gitignore(Path.cwd())"],
                        cwd=self.project, env={**os.environ,
                        "PYTHONPATH": str(self.project / ".mary-workflow/runtime/scripts")}, check=True)
+        # Repeated init still covers every workflow-owned directory after user rule removal.
+        target.write_bytes(target.read_bytes().replace(b"/.vspi/\r\n", b""))
+        self.assertFalse(self.ignored(".vspi/settings.json"))
+        subprocess.run(command, cwd=self.project, capture_output=True, check=True)
+        self.assertIn(b"/.vspi/\r\n", target.read_bytes())
+        self.assertTrue(self.ignored(".vspi/settings.json"))
 
     def test_preserves_bytes_mode_and_index_and_repairs_missing_rule(self):
         target = self.project / ".gitignore"

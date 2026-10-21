@@ -109,9 +109,10 @@ def _bundle_contents(source_root: Path) -> tuple[dict[str, bytes], dict[str, byt
             if not path.is_file():
                 raise BundleError(f"Knowledge profile source is missing {path}.")
             files[relative] = path.read_bytes()
-    policy = source_root / "references" / "task-policy.md"
-    if policy.is_file() and "references/task-policy.md" not in files:
-        files["references/task-policy.md"] = policy.read_bytes()
+    for name in ("task-policy.md", "report-contract.md", "repair-contract.md"):
+        policy = source_root / "references" / name
+        if policy.is_file() and f"references/{name}" not in files:
+            files[f"references/{name}"] = policy.read_bytes()
     return files, prompts
 
 

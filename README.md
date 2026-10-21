@@ -30,6 +30,24 @@ python /path/to/mary-workflow/scripts/mw_experiment.py run \
 
 旧项目保持固定版本；可以显式调用安装位置的实验脚本启动独立新实验。新建或显式升级的 bundle 携带实验能力，不静默迁移活跃任务。详见 [实验技能](skills/experiment/SKILL.md)、[运行合同与设计来源](references/experiment-contract.md)。
 
+## HTML 可视化汇报
+
+一轮实验结束（包括失败、停止）、较大任务或独立里程碑完成、较大任务失败/被外部资源阻塞/修复预算耗尽/停止交接，或者用户明确要求汇报时，主线必须生成静态 HTML 汇报，并在交付回复中提供具体路径。运行中的汇报标注快照时间和未完成项；普通小修改、日常进度与只读查询不逐次生成报告；只读讨论和用户明确禁止写文件的情形除外。失败收尾前先停止派发并适当停止自有进程、等写入稳定；报告不等于验收，也不为了填报告重跑实验。文件无法生成时在聊天里如实交接同样的内容。
+
+```text
+.mary-workflow/reports/
+  index.html                           # 汇报目录，最新优先
+  <YYYYMMDDTHHMMSSZ>-<task-or-run-id>/
+    index.html                         # 本次汇报，浏览器直接打开
+    assets/                            # 图片、缩略图、短视频等展示资源
+```
+
+第一屏先给结论和真实效果，再按需展示前后对比、关键指标、验证结果、证据与复现命令。验证标为「通过、失败、运行中、未运行」，区分程序退出、工程验证、视觉质量和科学验收。失败/停止/预算耗尽的汇报首屏给出最早已证实原因（或 `UNKNOWN`）、已完成与未完成、实际改动路径、检查状态、剩余修复预算和下一步。没有基线或视觉产物就说明，不伪造结果，也不为了填报告重新跑实验。
+
+HTML 默认中文，离线打开，不需要启动服务、安装前端依赖或访问 CDN；核心内容直接写入页面，展示资源用相对路径。使用缩略图与精选结果，不把数据集、checkpoint、完整日志复制进报告。交付前实际打开浏览器检查首屏和本地链接；工具不可用时明确验证限制。
+
+初始化时 `/.mary-workflow/` 已整体覆盖 HTML、assets、实验记录与输出、配置、哈希、runtime 和归档；其他 workflow 自有项目目录同样自动忽略，详见下方初始化说明。目录按需创建，但忽略规则在初始化时先安装。历史汇报包保留，cycle 不删除总入口或含 regular `index.html` 的非 cycle 汇报目录；`reports/C0/` 等名称保留给正式收据，仍按周期归档。新建/显式升级的 bundle 携带规范；不静默升级旧项目。完整要求见 [汇报契约](references/report-contract.md)。
+
 ## 新对话接手与模块说明
 
 使用 `/mw-context`，或让 Mary 在新对话开始时先读取项目内的记录：
@@ -56,9 +74,10 @@ python /path/to/mary-workflow/scripts/mw_experiment.py run \
 - **分级理解**：小项目直接阅读，中项目形成模块摘要，大项目可由 explorer 并行分片。运行时核算清单覆盖，无需为每个文件填写重复的用途、导出和消费者字段。
 - **必要访谈**：只问影响范围、验收或重要选择的问题，信息充分时不额外提问。里程碑按可独立验收边界划分，不限制文件数和里程碑数。
 - **明确执行起点**：计划冻结后，用户明确发出 `/mw-run` 或“通过，直接修改”等执行指令即开始。记录计划哈希、确认来源和运行身份，不搬运一次性口令，也不重复请求已给出的授权。
-- **委派与独立审查**：worker 提交待审结果，主线核对任务身份、真实改动和实际验证。实现者不能自行接受交付；独立 verifier 审查之后，主线完成状态转换。
+- **委派与审查**：worker 提交待审结果，主线核对任务身份、真实改动和实际验证。delegated 模式由独立 verifier 审查后主线验收；小任务或紧耦合任务即使有 workers 也可选择 single-agent，分开实现和审查并明确记录 `same_agent`、`independent_review: false`，不冒充独立审查，也不在审查阶段临时切换模式绕过身份检查。
 - **可恢复执行**：停止时中断或通知 worker，保留现场；恢复时核对残留改动和计划版本，拒绝旧任务的迟到或重复结果。
 - **聚焦修复**：DEBUGGING 只诊断并排入修复任务，回到 EXECUTING 才修改产品文件；保留失败、执行、审查和重试证据。
+- **修复预算**：每个里程碑可用 `max_repair_rounds` 限制自动修复轮数，默认 `2`，`0` 表示失败后不自动修复。首次实现与验证不计；失败后排队修复、审查退回重做、worker/验证失败后的重新派单各计一轮。换任务 ID、换 agent、`retry_of`、嵌套修复、停止恢复或重新规划都不会重置计数；verifier/explorer 与初始并行分片不消耗预算。达到上限后运行时拒绝继续自动修复：保留证据和当前合法 phase，不伪 FINISHED，不借 `/mw-quick` 或 `/mw-experiment` 改名绕过，也不因此获得 GPU/训练/付费授权，并以失败 HTML 汇报收尾。继续修复需要用户记录在案的明确授权。详见 [修复预算契约](references/repair-contract.md)。新建或显式升级的 bundle 携带该能力；旧项目保持固定版本，需要时显式 `upgrade`。
 - **增量归档**：cycle 检测文件变化，更新受影响认知并列出仍有效条目，合并成完整项目说明后归档。
 
 文件哈希和动作白名单用于发现正常流程中的误操作，不能阻止拥有任意 shell 权限的 agent 绕开脚本。所谓只读 worker 也需要宿主实际权限支持；提示词本身不是文件系统隔离。
@@ -83,7 +102,7 @@ git clone https://github.com/reversevertin1999/mary-workflow.git \
 
 `/mw-init` 建立项目说明；`/mw-plan` 保存真实需求、必要澄清、交付路径和验收条件并冻结计划；`/mw-run` 确认并执行这个计划。讨论中的“可以/对”必须按其回答的问题理解，不能把对方案的认可偷换成开始执行的授权。用户已有明确执行授权时，不再机械追问。
 
-初始化及独立论文创建会自动补齐项目根目录 `.gitignore`：默认忽略 `/.mary-workflow/`、`/.mary-workflow-worker/`、`/.mary-research/`、`/.vspi/`。流程记录、哈希清单、生成配置、固定运行时和归档默认保留在本地；其他路径的流程记录应在生成前添加精确忽略项。已有规则和 Git 索引保持原样，因此已跟踪文件仍会被跟踪。项目源码、正式交付物和手写 OpenSpec 规范按项目自身的版本管理约定处理。
+初始化及独立论文创建会自动补齐项目根目录 `.gitignore`：默认忽略 `/.mary-workflow/`、`/.mary-workflow-worker/`、`/.mary-research/`、`/.vspi/`。初始化在生成项目记录前安装这些规则，覆盖 HTML 汇报及其 assets、实验记录与本地输出、哈希清单、生成配置、固定运行时、归档和 worker 临时目录；无需为每个子目录重复加规则。其他路径的流程记录应在生成前添加精确忽略项。已有规则和 Git 索引保持原样，因此已跟踪文件仍会被跟踪。不得使用宽泛的 `reports/`、`outputs/` 规则误忽略项目源码、正式交付物或手写 OpenSpec 规范。
 
 项目根目录的 `.maryignore` 与 `.mary-workflow/config.yaml` 中 `init.ignore` 控制扫描排除项，例如：
 
@@ -105,7 +124,7 @@ data/**
 | `/mw-run` | 开始冻结计划或恢复暂停的运行 |
 | `/mw-status` | 查看阶段、worker、证据与阻塞，不修改状态 |
 | `/mw-stop` | 协调暂停、保留部分产物与恢复记录 |
-| `/mw-debug` | 诊断当前错误并排入聚焦修复 |
+| `/mw-debug` | 诊断当前错误并排入聚焦修复；预算耗尽时停止自动修复并如实交接 |
 | `/mw-cycle` | 刷新项目认知并归档当前周期 |
 | `/mw-learn` | Lecture 学习、slides、原始录音转写与课堂增量融合 |
 | `/mw-exam`、`/mw-review` | 章节/考试复习、错题本、自测与模拟卷 |
@@ -182,7 +201,7 @@ python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate
 python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate --apply
 ```
 
-同一状态版本的运行时/提示 bundle 更新使用 `upgrade` 预览和 `upgrade --apply`。迁移保留历史并创建备份；不要为了升级 reset。使用已授权任务实施升级时，无需再次请求相同授权。
+同一状态版本的运行时/提示 bundle 更新使用 `upgrade` 预览和 `upgrade --apply`。迁移保留历史并创建备份；不要为了升级 reset。使用已授权任务实施升级时，无需再次请求相同授权。修复预算（`max_repair_rounds`，见 [修复预算契约](references/repair-contract.md)）属于这类新能力：新安装和显式升级携带；已固定的旧项目不会在普通 init 中静默获得或被改动。
 
 正式上下文默认只显示当前阶段所需部分；`mw_codex.py <alias> --full-context` 可显式展开完整历史。
 

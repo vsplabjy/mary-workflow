@@ -38,6 +38,7 @@ from mw_reading_profile import ensure_reading_profile
 WORKFLOW_DIR = ".mary-workflow"
 PROMPTS_DIR = "prompts"
 REPORTS_DIR = "reports"
+HTML_REPORT_ENTRY = "index.html"
 ANALYSIS_DIR = "analysis"
 BRIEF_FILE = "project-brief.md"
 CYCLES_DIR = "cycles"
@@ -551,7 +552,9 @@ def set_milestone_key(milestone: Milestone, text: str) -> None:
     value = parse_scalar(value)
     if key == "estimated_scope":
         milestone[key] = parse_int(value)
-    elif key in {"id", "status", "title", "gate", "review", "repair_of"}:
+    elif key == "max_repair_rounds":
+        milestone[key] = normalize_max_repair_rounds(parse_int(value, -1), key)
+    elif key in {"id", "status", "title", "gate", "review", "repair_of", "budget_origin"}:
         milestone[key] = value
 
 
@@ -575,13 +578,18 @@ def append_milestone_section(lines: list[str], name: str, milestones: list[Miles
                 lines.extend(f"      - {quote_value(item)}" for item in milestone[scope_key])
         if milestone.get("repair_of"):
             lines.append(f"    repair_of: {milestone['repair_of']}")
-        lines.extend(
+        if milestone.get("budget_origin"):
+            lines.append(f"    budget_origin: {milestone['budget_origin']}")
+        extra_lines = [f"    estimated_scope: {milestone['estimated_scope']}"]
+        if "max_repair_rounds" in milestone:
+            extra_lines.append(f"    max_repair_rounds: {int(milestone['max_repair_rounds'])}")
+        extra_lines.extend(
             [
-                f"    estimated_scope: {milestone['estimated_scope']}",
                 f"    gate: {milestone.get('gate', 'auto')}",
                 f"    review: {quote_value(milestone.get('review', ''))}",
             ]
         )
+        lines.extend(extra_lines)
 
 
 def write_state(root: Path, state: State) -> None:
@@ -931,6 +939,8 @@ def normalize_milestones(value: object) -> list[Milestone]:
                 validate_relative_path(path)
         except ValueError as exc:
             raise WorkflowError(str(exc)) from exc
+        repair_rounds_present = "max_repair_rounds" in item
+        max_repair_rounds = normalize_max_repair_rounds(item.get("max_repair_rounds"), f"{milestone_id}.max_repair_rounds") if repair_rounds_present else None
         milestones.append(
             {
                 "id": milestone_id,
@@ -945,6 +955,8 @@ def normalize_milestones(value: object) -> list[Milestone]:
                 "review": "",
             }
         )
+        if repair_rounds_present:
+            milestones[-1]["max_repair_rounds"] = max_repair_rounds
         if inputs is not None:
             milestones[-1]["validation_inputs"] = inputs
     return milestones
@@ -1169,6 +1181,7 @@ def milestone_plan_signature(milestones: list[Milestone]) -> list[dict[str, obje
             "read_dependencies": list(item.get("read_dependencies", [])),
             "estimated_scope": item.get("estimated_scope"),
             "gate": item.get("gate", "auto"),
+            **({"max_repair_rounds": item["max_repair_rounds"]} if "max_repair_rounds" in item else {}),
             **({"validation_inputs": list(item["validation_inputs"])} if "validation_inputs" in item else {}),
         }
         for item in milestones
@@ -1569,6 +1582,7 @@ def action_update_state(root: Path, state: State, data: JsonObject) -> State:
     state["final_plan_confirmed"] = False
     state["interview_status"] = "plan_ready"
     state["clarifications"] = clarifications
+    initialize_repair_budget(state, milestones)
     state["milestones"] = milestones
     state["current_milestone_id"] = milestones[0]["id"]
     metadata = state.setdefault("runtime_meta", {})
@@ -1673,6 +1687,10 @@ def action_confirm_milestone(root: Path, state: State, data: JsonObject) -> Stat
     state.setdefault("runtime_meta", {}).setdefault("confirmations", {})[milestone["id"]] = {
         "confirmation": confirmation, "plan_revision": state["runtime_meta"].get("plan_revision"), "recorded_at": now_iso(),
     }
+    if data.get("authorize_repair_rounds") is not None:
+        authorize_repair_rounds(state, repair_origin_id(milestone),
+                                data.get("authorize_repair_rounds"), confirmation)
+        append_log(root, f"authorized additional repair rounds origin={repair_origin_id(milestone)}")
     if milestone.get("repair_of"):
         state["runtime_meta"]["confirmations"][milestone["repair_of"]] = state["runtime_meta"]["confirmations"][milestone["id"]]
     return state
@@ -1687,14 +1705,36 @@ def action_delegate_task(root: Path, state: State, data: JsonObject) -> State:
         if data.get("workers_quiescent") is not True:
             raise WorkflowError("Previous workers may still write; interrupt/wait, inspect changes, then dispatch with workers_quiescent=true.")
         state["runtime_meta"]["stop_pending"] = False
+    redispatch_failed_id = ""
+    redispatch_origin = ""
     if role == "implementer":
         if state["phase"] != "EXECUTING":
             raise WorkflowError("Implementers run only in EXECUTING; DEBUGGING diagnoses and enqueues repairs.")
         if milestone and milestone.get("gate") == "confirm" and milestone["id"] not in state.get("runtime_meta", {}).get("confirmations", {}):
             raise WorkflowError("This milestone requires confirm_milestone with the user's explicit confirmation before dispatch.")
+        if milestone:
+            origin_id = repair_origin_id(milestone)
+            entry = repair_history_entry(state, origin_id)
+            if not entry["history_known"]:
+                assert_repair_allowed(state, origin_id)
+            failed_id = latest_failed_lineage_task(root, state, origin_id)
+            current_round = any(
+                item.get("origin") == origin_id
+                and item.get("plan_revision") == state["runtime_meta"].get("plan_revision")
+                for item in state["runtime_meta"]["repair_budget"].get("rounds", [])
+            )
+            if failed_id and not failure_is_already_covered(state, origin_id, failed_id):
+                assert_repair_allowed(state, origin_id)
+                redispatch_failed_id, redispatch_origin = failed_id, origin_id
+            elif entry["rounds_used"] and not current_round:
+                assert_repair_allowed(state, origin_id)
+                redispatch_failed_id = f"replan-{state['runtime_meta'].get('plan_revision')}"
+                redispatch_origin = origin_id
     if role == "verifier" and state["phase"] != "REVIEWING":
         raise WorkflowError("Milestone verifiers run only in REVIEWING.")
-    record = create_task(root, state, data)
+    if redispatch_origin:
+        consume_repair_round(state, redispatch_origin, "fresh_redispatch", f"redispatch:{redispatch_failed_id}")
+    record = create_task(root, state, data, before_publish=lambda: write_state(root, state))
     state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
     return state
 
@@ -1761,6 +1801,7 @@ def action_set_phase(root: Path, state: State, data: JsonObject) -> State:
     elif decision in {"needs-fix", "fix", "rework"}:
         if phase != "EXECUTING" or not data.get("findings"):
             raise WorkflowError("A rejected review requires findings and phase EXECUTING.")
+        assert_repair_allowed(state, repair_origin_id(current))
         decision = "needs-fix"
     elif decision in {"accepted", "accepted-next"}:
         evidence = verify_review_evidence(root, state, current, data)
@@ -1778,6 +1819,8 @@ def action_set_phase(root: Path, state: State, data: JsonObject) -> State:
     if decision in {"accepted", "accepted-next"}:
         task_ids = state.get("runtime_meta", {}).get("milestone_tasks", {}).get(current["id"], [])
         accept_tasks(root, state, [*task_ids, data["verifier_task_id"]])
+        if not current.get("repair_of"):
+            repair_history_entry(state, repair_origin_id(current))["accepted"] = True
     if phase == "PLANNING":
         cancel_tasks(root, "replanning")
         release_execution_lease(state)
@@ -1792,6 +1835,9 @@ def action_set_phase(root: Path, state: State, data: JsonObject) -> State:
         state["current_milestone_id"] = ""
         release_execution_lease(state)
     elif decision == "needs-fix":
+        review_count = len(list((root / REPORTS_DIR / str(state.get("cycle", "C0"))).glob(f"{current['id']}.review.*.md")))
+        consume_repair_round(state, repair_origin_id(current), "review_needs_fix",
+                             f"needs-fix:{data.get('verifier_task_id') or ''}:{review_count}")
         cancel_tasks(root, "review rejected; preserve evidence and redispatch")
         current["status"] = "pending"
         state["current_milestone_id"] = current["id"]
@@ -1831,8 +1877,10 @@ def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State
     if not current:
         raise WorkflowError("A repair requires a current milestone.")
     title = require_text(data.get("title") or data.get("task"), "repair title")
-    origin_id = current.get("repair_of") or current["id"]
-    origin = find_milestone(state, origin_id)
+    origin_id = repair_origin_id(current)
+    origin = find_milestone(state, current.get("repair_of") or current["id"])
+    if origin is None:
+        raise WorkflowError("Repair origin is missing from the current plan; replan without discarding its budget history.")
     deliverables = normalize_optional_list(data.get("deliverables")) or list(origin["deliverables"])
     scope = normalize_optional_list(data.get("write_scope")) or list(origin.get("write_scope", origin["deliverables"]))
     acceptance = normalize_optional_list(data.get("acceptance")) or list(origin["acceptance"])
@@ -1840,6 +1888,7 @@ def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State
         raise WorkflowError("Repair exceeds the approved scope. Review and replan the original milestone.")
     if acceptance != list(origin["acceptance"]):
         raise WorkflowError("Repair acceptance must preserve the original commands; changing acceptance requires replanning.")
+    assert_repair_allowed(state, origin_id)
     milestones = state_milestones(state)
     next_id = f"milestone-{max(int(item['id'].split('-')[-1]) for item in milestones) + 1}"
     fix_milestone = {
@@ -1847,7 +1896,8 @@ def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State
         "deliverables": deliverables, "write_scope": scope,
         "read_dependencies": list(origin.get("read_dependencies", [])),
         "acceptance": acceptance, "estimated_scope": max(0, parse_int(data.get("estimated_scope"), len(scope))),
-        "gate": origin.get("gate", "auto"), "review": "", "repair_of": origin_id,
+        "gate": origin.get("gate", "auto"), "review": "",
+        "repair_of": origin["id"], "budget_origin": origin_id,
     }
     if "validation_inputs" in origin:
         fix_milestone["validation_inputs"] = list(origin["validation_inputs"])
@@ -1859,6 +1909,12 @@ def action_enqueue_fix_task(root: Path, state: State, data: JsonObject) -> State
     confirmation = state.get("runtime_meta", {}).get("confirmations", {}).get(origin_id)
     if confirmation:
         state["runtime_meta"]["confirmations"][next_id] = copy.deepcopy(confirmation)
+    failed_id = latest_failed_lineage_task(root, state, origin_id)
+    consume_repair_round(
+        state, origin_id, "enqueue_fix_task",
+        f"enqueue:{state['runtime_meta'].get('plan_revision')}:{next_id}"
+        + (f":{failed_id}" if failed_id else ""), phase="DEBUGGING",
+    )
     cancel_tasks(root, "repair queued")
     state["current_milestone_id"] = next_id
     set_phase(state, root, "EXECUTING", "enqueue_fix_task")
@@ -1880,6 +1936,217 @@ def find_milestone(state: State, milestone_id: str) -> Milestone | None:
         if milestone.get("id") == milestone_id:
             return milestone
     return None
+
+DEFAULT_MAX_REPAIR_ROUNDS = 2
+
+
+def normalize_max_repair_rounds(value: object, field_name: str) -> int:
+    """Parse a milestone repair budget strictly: a real non-negative int."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise WorkflowError(f"{field_name} must be a non-negative integer (default {DEFAULT_MAX_REPAIR_ROUNDS} when omitted).")
+    if value < 0:
+        raise WorkflowError(f"{field_name} must be a non-negative integer (default {DEFAULT_MAX_REPAIR_ROUNDS} when omitted).")
+    return value
+
+
+def repair_origin_id(milestone: Milestone) -> str:
+    return str(milestone.get("budget_origin") or milestone.get("repair_of") or milestone.get("id") or "")
+
+
+def initialize_repair_budget(state: State, milestones: list[Milestone]) -> None:
+    """Freeze known budgets; renamed continuations retain their original usage."""
+    budget = state.setdefault("runtime_meta", {}).setdefault("repair_budget", {})
+    history = budget.setdefault("history", {})
+    cycle = state.get("cycle", "C0")
+    if budget.get("cycle", cycle) != cycle:
+        paths = {path for item in milestones for path in item.get("write_scope", item["deliverables"])}
+        history = {
+            key: entry for key, entry in history.items()
+            if not entry.get("accepted") and paths & set(entry.get("write_scope", []))
+        }
+        budget["history"] = history
+        budget["rounds"] = [item for item in budget.get("rounds", []) if item.get("origin") in history]
+    budget["cycle"] = cycle
+    current_ids = {item["id"] for item in milestones}
+    for item in milestones:
+        origin_id = item["id"]
+        paths = set(item.get("write_scope", item["deliverables"]))
+        matches = [
+            key for key, entry in history.items()
+            if key not in current_ids and paths & set(entry.get("write_scope", []))
+        ]
+        if origin_id not in history and len(matches) > 1:
+            raise WorkflowError("Ambiguous repair lineage after replanning; preserve the original milestone IDs before authorizing more work.")
+        if origin_id not in history and matches:
+            origin_id = matches[0]
+            item["budget_origin"] = origin_id
+        if origin_id not in history:
+            history[origin_id] = {"rounds_used": 0, "history_known": True}
+        entry = history[origin_id]
+        entry.setdefault("write_scope", sorted(paths))
+        entry.setdefault("authorized_max", DEFAULT_MAX_REPAIR_ROUNDS)
+        if "max_repair_rounds" in item:
+            entry["authorized_max"] = item["max_repair_rounds"]
+            entry["history_known"] = True
+
+
+def repair_history_entry(state: State, origin_id: str) -> JsonObject:
+    history = state.setdefault("runtime_meta", {}).setdefault("repair_budget", {}).setdefault("history", {})
+    if not isinstance(history, dict):
+        raise WorkflowError("Repair history is invalid; preserve it and obtain explicit recovery authorization.")
+    if origin_id not in history:
+        minimum = sum(
+            bool(item.get("repair_of")) and repair_origin_id(item) == origin_id
+            for item in state_milestones(state)
+        )
+        history[origin_id] = {"rounds_used": minimum, "history_known": False}
+    entry = history[origin_id]
+    if not isinstance(entry, dict) or not isinstance(entry.get("rounds_used"), int):
+        raise WorkflowError("Repair history is incomplete; preserve it and obtain explicit recovery authorization.")
+    entry.setdefault("history_known", False)
+    return entry
+
+
+def milestone_repair_limit(state: State, origin_id: str) -> int | None:
+    """Return the authorized maximum for a lineage, or None when unknown."""
+    entry = repair_history_entry(state, origin_id)
+    if not entry.get("history_known", True):
+        return None
+    authorized = entry.get("authorized_max")
+    if authorized is not None:
+        return int(authorized)
+    milestone = find_milestone(state, origin_id)
+    if milestone is None:
+        return None
+    if "max_repair_rounds" in milestone:
+        return normalize_max_repair_rounds(milestone.get("max_repair_rounds"), f"{origin_id}.max_repair_rounds")
+    plan_history = state.get("runtime_meta", {}).get("plan_history") or []
+    for archived in reversed(plan_history):
+        for item in archived.get("milestones", []) if isinstance(archived, dict) else []:
+            if isinstance(item, dict) and repair_origin_id(item) == origin_id and "max_repair_rounds" in item:
+                return normalize_max_repair_rounds(item.get("max_repair_rounds"), f"{origin_id}.max_repair_rounds")
+    return DEFAULT_MAX_REPAIR_ROUNDS
+
+
+def repair_exhaustion_message(origin_id: str, used: int, maximum: int | None) -> str:
+    if maximum is None:
+        return (
+            f"Repair history for {origin_id} cannot be determined; refusing further automatic repair rounds. "
+            "Obtain the user's recorded authorization (request_replan with the approval, or a recorded confirmation) to continue."
+        )
+    return (
+        f"Repair budget exhausted for {origin_id}: {used}/{maximum} automatic repair rounds used. "
+        "Preserve evidence and the current phase; continue only with the user's recorded authorization "
+        "(request_replan with the approval, or a recorded confirmation)."
+    )
+
+
+def assert_repair_allowed(state: State, origin_id: str) -> JsonObject:
+    """Refuse a new automatic repair round when the frozen budget is spent."""
+    entry = repair_history_entry(state, origin_id)
+    used = int(entry.get("rounds_used", 0))
+    maximum = milestone_repair_limit(state, origin_id)
+    if maximum is None or used >= maximum:
+        raise WorkflowError(repair_exhaustion_message(origin_id, used, maximum))
+    return entry
+
+
+def consume_repair_round(state: State, origin_id: str, reason: str, trigger: str, *, phase: str = "") -> str:
+    """Charge one repair round once per trigger; sibling dispatches stay free.
+
+    The round is registered persistently in the same locked action that
+    authorizes the repair's product writes, so an idempotent replay of the
+    same trigger cannot decrement twice.
+    """
+    budget = state.setdefault("runtime_meta", {}).setdefault("repair_budget", {})
+    rounds = [item for item in budget.get("rounds", []) if isinstance(item, dict)]
+    for item in rounds:
+        if item.get("origin") == origin_id and item.get("trigger") == trigger:
+            return str(item.get("round_id") or "")
+    entry = assert_repair_allowed(state, origin_id)
+    round_id = f"repair-round-{len(rounds) + 1:04d}-{secrets.token_hex(4)}"
+    rounds.append({
+        "round_id": round_id, "origin": origin_id, "reason": reason, "trigger": trigger,
+        "phase": phase or str(state.get("phase") or ""), "created_at": now_iso(),
+        "plan_revision": state["runtime_meta"].get("plan_revision"),
+    })
+    budget["rounds"] = rounds
+    entry["rounds_used"] = int(entry.get("rounds_used", 0)) + 1
+    entry["history_known"] = True
+    maximum = milestone_repair_limit(state, origin_id)
+    if maximum is not None:
+        entry.setdefault("authorized_max", maximum)
+    return round_id
+
+
+def _lineage_milestone_ids(state: State, origin_id: str) -> set[str]:
+    definitions = list(state_milestones(state))
+    for archived in state.get("runtime_meta", {}).get("plan_history", []):
+        definitions.extend(archived.get("milestones", []))
+    return {origin_id} | {
+        item["id"] for item in definitions if repair_origin_id(item) == origin_id
+    }
+
+
+def latest_failed_lineage_task(root: Path, state: State, origin_id: str) -> str:
+    """Identify the newest failed implementer attempt in the lineage.
+
+    An attempt is failed when its task ended failed/blocked, or when a recorded
+    validation on its still-running dispatch exited nonzero. Timeouts may be
+    transient and do not end an attempt. A coordinator-cancelled task is not a
+    failure trigger: the repair it belongs to was already charged where that
+    repair was authorized.
+    """
+    from mw_workers import list_tasks
+    milestone_ids = _lineage_milestone_ids(state, origin_id)
+    best_id, best_time = "", ""
+    for task in list_tasks(root):
+        if task.get("role") != "implementer" or task.get("milestone_id") not in milestone_ids:
+            continue
+        moment = ""
+        if task.get("status") in {"failed", "blocked"}:
+            moment = str(task.get("submitted_at") or task.get("cancelled_at") or task.get("created_at") or "")
+        elif task.get("status") == "running":
+            for evidence_id in task.get("validation", []):
+                path = root / "tasks" / str(task.get("task_id") or "") / f"{evidence_id}.json"
+                try:
+                    evidence = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    return str(task.get("task_id") or "")
+                if evidence.get("result") == "failed":
+                    moment = str(evidence.get("created_at") or "")
+                    break
+        if moment and moment >= best_time:
+            best_id, best_time = str(task.get("task_id") or ""), moment
+    return best_id
+
+
+def failure_is_already_covered(state: State, origin_id: str, failed_id: str) -> bool:
+    """True when a consumed round already covers this failed attempt."""
+    budget = state.get("runtime_meta", {}).get("repair_budget", {})
+    for item in budget.get("rounds", []) if isinstance(budget, dict) else []:
+        if isinstance(item, dict) and item.get("origin") == origin_id:
+            trigger = str(item.get("trigger") or "")
+            if trigger.endswith(f":{failed_id}") or trigger == f"redispatch:{failed_id}":
+                return True
+    return False
+
+
+def authorize_repair_rounds(state: State, origin_id: str, additional: object, confirmation: str) -> int:
+    """Record explicit user authorization that raises a lineage's budget."""
+    additional_int = normalize_max_repair_rounds(additional, "authorize_repair_rounds") if additional is not None else 1
+    if additional_int < 1:
+        raise WorkflowError("authorize_repair_rounds must add at least one round.")
+    entry = repair_history_entry(state, origin_id)
+    current = milestone_repair_limit(state, origin_id)
+    base = current if current is not None else int(entry.get("rounds_used", 0))
+    entry["authorized_max"] = base + additional_int
+    entry["history_known"] = True
+    state["runtime_meta"].setdefault("authorizations", []).append({
+        "kind": "repair_budget", "origin": origin_id, "additional_rounds": additional_int,
+        "authorized_max": entry["authorized_max"], "confirmation": confirmation, "recorded_at": now_iso(),
+    })
+    return entry["authorized_max"]
 
 
 def write_milestone_report(root: Path, milestone: Milestone, data: JsonObject, kind: str) -> None:
@@ -1969,6 +2236,46 @@ def remove_tree(path: Path) -> None:
             pass
     path.chmod(0o755)
     shutil.rmtree(path)
+
+
+def is_html_report_entry(path: Path) -> bool:
+    return path.name == HTML_REPORT_ENTRY and path.is_file() and not path.is_symlink()
+
+
+def is_html_report_bundle(path: Path) -> bool:
+    """A report bundle is a non-cycle regular directory under reports/ holding index.html."""
+    return not path.is_symlink() and not re.fullmatch(r"C[0-9]+", path.name) and is_html_report_entry(path / HTML_REPORT_ENTRY)
+
+
+def clear_cycle_controls(root: Path) -> None:
+    """Reset per-cycle report controls while HTML reports stay in place.
+
+    Formal cycle receipts (reports/<cycle>/ plus legacy loose files) are
+    archived with the cycle; reports/index.html and <timestamp>-<id>/
+    directories containing index.html are the durable HTML reporting surface
+    and survive the archive in place.
+    """
+    reports = root / REPORTS_DIR
+    if reports.is_symlink():
+        raise WorkflowError("Cycle control directories must not be symlinks.")
+    if not reports.exists():
+        reports.mkdir()
+        return
+    for item in reports.iterdir():
+        if is_html_report_entry(item) or is_html_report_bundle(item):
+            continue
+        if item.is_dir() and not item.is_symlink():
+            remove_tree(item)
+        else:
+            item.unlink()
+
+
+def clear_analysis_controls(root: Path) -> None:
+    if (source := root / ANALYSIS_DIR).is_symlink():
+        raise WorkflowError("Cycle control directories must not be symlinks.")
+    if source.exists():
+        remove_tree(source)
+    source.mkdir()
 
 
 def normalize_error_text(value: object, max_length: int = 500) -> str:
@@ -2738,14 +3045,13 @@ def resume_cycle_archive(root: Path) -> int:
     make_readonly(archive)
     # No new actions are allowed until the journal is removed. Clearing source
     # controls is safe after the complete copy exists, including after a crash.
-    for name in (REPORTS_DIR, ANALYSIS_DIR, "tasks"):
-        source = root / name
-        if source.is_symlink():
-            raise WorkflowError("Cycle control directories must not be symlinks.")
-        if source.exists():
-            remove_tree(source)
-        if name != "tasks":
-            source.mkdir()
+    clear_cycle_controls(root)
+    clear_analysis_controls(root)
+    tasks = root / "tasks"
+    if tasks.is_symlink():
+        raise WorkflowError("Cycle control directories must not be symlinks.")
+    if tasks.exists():
+        remove_tree(tasks)
     write_state(root, state)
     sync_prompt_for_phase(state, root)
     write_project_brief(root, state)
@@ -2852,6 +3158,14 @@ def print_status_en(state: State, milestone: Milestone | None, milestone_id: str
     print(f"current_prompt: {state['current_prompt'] or '(none)'}")
     print(f"current_milestone: {milestone_id}")
     print(f"run_status: {state.get('lease_status', 'none')}")
+    budget = state.get("runtime_meta", {}).get("repair_budget", {})
+    used = {origin: int(entry.get("rounds_used", 0)) for origin, entry in (budget.get("history", {}) or {}).items() if isinstance(entry, dict)}
+    if used:
+        parts = []
+        for origin, count in sorted(used.items()):
+            maximum = milestone_repair_limit(state, origin)
+            parts.append(f"{origin} {count}/{maximum if maximum is not None else '?'}")
+        print("repair_budget: " + ", ".join(parts))
     print(f"run_id: {state.get('lease_run_id') or '(none)'}")
     if milestone:
         print(f"title: {milestone['title']}")
@@ -2888,6 +3202,14 @@ def print_status_zh(state: State, milestone: Milestone | None, milestone_id: str
     print(f"当前 prompt: {state['current_prompt'] or '(none)'}")
     print(f"当前 milestone: {milestone_id}")
     print(f"运行状态: {state.get('lease_status', 'none')}")
+    budget = state.get("runtime_meta", {}).get("repair_budget", {})
+    used = {origin: int(entry.get("rounds_used", 0)) for origin, entry in (budget.get("history", {}) or {}).items() if isinstance(entry, dict)}
+    if used:
+        parts = []
+        for origin, count in sorted(used.items()):
+            maximum = milestone_repair_limit(state, origin)
+            parts.append(f"{origin} {count}/{maximum if maximum is not None else '?'}")
+        print("修复预算: " + ", ".join(parts))
     print(f"run id: {state.get('lease_run_id') or '(none)'}")
     if milestone:
         print(f"标题: {milestone['title']}")

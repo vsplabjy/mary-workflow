@@ -22,7 +22,11 @@ Audit only individually selected files from exited runs, streaming SHA-256 once 
 
 ## Task-sized process
 
-Use direct single-agent work for small authorized changes (`skills/quick/SKILL.md`), this experiment lifecycle for settled-method trials, and the strict milestone/SDD lifecycle for explicitly chosen acceptance and cross-cutting changes. Do not bypass an already active bound change or a stopped project run by relabeling its work. Reuse valid evidence, independent review at meaningful boundaries, and current context. Unknown dependencies limit a claim; they need not prevent exploratory execution.
+Use direct single-agent work for small authorized changes (`skills/quick/SKILL.md`), this experiment lifecycle for settled-method trials, and the strict milestone/SDD lifecycle for explicitly chosen acceptance and cross-cutting changes. Do not bypass an already active bound change or a stopped project run by relabeling its work. Reaching a milestone's repair-budget limit does not convert that work into an "experiment": launching a run that repeats the exhausted milestone's work needs the user's recorded authorization per [repair-contract.md](repair-contract.md). Reuse valid evidence, independent review at meaningful boundaries, and current context. Unknown dependencies limit a claim; they need not prevent exploratory execution.
+
+## End-of-round presentation
+
+The main agent delivers a static HTML report for each ended experiment round, including failed or stopped rounds, following [report-contract.md](report-contract.md). Use actual run records and saved results; link the package from `.mary-workflow/reports/index.html` and give its exact path to the user. Keep `assessment_status`, provenance and scientific claims unchanged. A user-requested live report identifies its snapshot time and unfinished work. The supervisor records execution only; report creation happens when the agent observes and delivers the result, not through an invented post-chat reporting service. Never delay launch or rerun training to fill report sections.
 
 ## Design references
 

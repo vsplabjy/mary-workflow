@@ -25,6 +25,19 @@ class CycleArchiveTests(unittest.TestCase):
         with mock.patch.object(Path, 'cwd', return_value=self.fixture.project):
             return mw.cmd_cycle(argparse.Namespace(workers_quiescent=False))
 
+    def make_html_reports(self):
+        (self.root / 'reports' / 'index.html').write_text('<html>entry</html>\n')
+        bundle = self.root / 'reports' / '20261021T120000Z-e8-decoder'
+        (bundle / 'assets').mkdir(parents=True)
+        (bundle / 'index.html').write_text('<html>report</html>\n')
+        (bundle / 'assets' / 'style.css').write_text('body { color: #123456 }\n')
+        return bundle
+
+    def seed_formal_receipts(self):
+        (self.root / 'reports' / 'C0').mkdir()
+        (self.root / 'reports' / 'C0' / 'receipt.md').write_text('formal receipt\n')
+
+
     def test_copy_failure_preserves_source_and_retries(self):
         with mock.patch.object(mw.shutil, 'copytree', side_effect=OSError('interrupted copy')):
             with self.assertRaisesRegex(OSError, 'interrupted copy'):
@@ -98,6 +111,65 @@ class CycleArchiveTests(unittest.TestCase):
             self.cycle()
         self.assertFalse((self.root / 'cycles/C0').exists())
         self.assertEqual((external / 'secret.txt').read_text(), 'not a workflow report')
+
+    def test_cycle_preserves_html_entry_and_report_bundles_in_place(self):
+        bundle = self.make_html_reports()
+        self.seed_formal_receipts()
+        self.cycle()
+        self.assertEqual(mw.read_state(self.root)['cycle'], 'C1')
+        self.assertEqual((self.root / 'reports' / 'index.html').read_bytes(), b'<html>entry</html>\n')
+        self.assertEqual((bundle / 'index.html').read_bytes(), b'<html>report</html>\n')
+        self.assertEqual((bundle / 'assets' / 'style.css').read_bytes(), b'body { color: #123456 }\n')
+        self.assertFalse((self.root / 'reports' / 'C0').exists())
+        self.assertFalse((self.root / 'reports' / 'receipt.txt').exists())
+        self.assertEqual((self.root / 'cycles/C0/reports/receipt.md').read_text(), 'formal receipt\n')
+
+    def test_html_reports_survive_without_formal_cycle_receipts(self):
+        bundle = self.make_html_reports()
+        (self.root / 'reports' / 'receipt.txt').unlink()
+        self.cycle()
+        self.assertEqual(mw.read_state(self.root)['cycle'], 'C1')
+        self.assertTrue((self.root / 'reports' / 'index.html').is_file())
+        self.assertEqual((bundle / 'index.html').read_text(), '<html>report</html>\n')
+
+    def test_interrupted_cleanup_retry_keeps_html_reports(self):
+        bundle = self.make_html_reports()
+        self.seed_formal_receipts()
+        real_write = mw.write_state
+        def interrupted(root, state):
+            if state['cycle'] == 'C1':
+                raise OSError('state interrupted')
+            real_write(root, state)
+        with mock.patch.object(mw, 'write_state', side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, 'state interrupted'):
+                self.cycle()
+        self.assertTrue((self.root / 'cycles/C0').is_dir())
+        self.assertTrue((self.root / 'cycle-archive.json').is_file())
+        self.assertTrue((self.root / 'reports' / 'index.html').is_file())
+        self.assertEqual((bundle / 'assets' / 'style.css').read_text(), 'body { color: #123456 }\n')
+        self.assertFalse((self.root / 'reports' / 'C0').exists())
+        self.cycle()
+        self.assertEqual(mw.read_state(self.root)['cycle'], 'C1')
+        self.assertEqual((self.root / 'reports' / 'index.html').read_text(), '<html>entry</html>\n')
+        self.assertEqual((bundle / 'index.html').read_text(), '<html>report</html>\n')
+        self.assertEqual((bundle / 'assets' / 'style.css').read_text(), 'body { color: #123456 }\n')
+        self.assertEqual((self.root / 'cycles/C0/reports/receipt.md').read_text(), 'formal receipt\n')
+
+    def test_directory_without_index_html_is_not_a_report_bundle(self):
+        (self.root / 'reports' / 'not-a-bundle').mkdir()
+        (self.root / 'reports' / 'not-a-bundle' / 'index.html').symlink_to(self.root / 'reports' / 'receipt.txt')
+        self.cycle()
+        self.assertFalse((self.root / 'reports' / 'not-a-bundle').exists())
+        self.assertTrue((self.root / 'cycles/C0').is_dir())
+
+    def test_cycle_named_directory_with_index_html_is_not_preserved(self):
+        named = self.root / 'reports' / 'C7'
+        named.mkdir()
+        (named / 'index.html').write_text('<html>stale</html>\n')
+        self.cycle()
+        self.assertFalse((self.root / 'reports' / 'C7').exists())
+        self.assertTrue((self.root / 'cycles/C0/reports/C7/index.html').is_file())
+        self.assertTrue((self.root / 'cycles/C0').is_dir())
 
 
 if __name__ == '__main__':

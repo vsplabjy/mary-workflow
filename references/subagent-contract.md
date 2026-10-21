@@ -296,8 +296,16 @@ scope deviations and remaining uncertainties before applying the action.
 - An incomplete but recoverable worker may resume with its context while its
   dispatch remains current. Retry transient tool errors within a bounded budget.
 - A failed path requires preserved diagnosis and an appropriate repair task.
+  Every repair after a failure consumes one round of the milestone's repair
+  budget ([repair-contract.md](repair-contract.md)): `enqueue_fix_task`,
+  needs-fix rework, and fresh redispatch after a failed worker or failed
+  validation all count. When the budget is exhausted, no further automatic
+  repair or redispatch is authorized; preserve the evidence and the current
+  legal phase and hand the decision to the user.
   Avoid infinite retries, silent fallback to a different model, and weaker tests.
 - New task IDs identify retried attempts; retain `retry_of` for traceability.
+  A new ID, a different agent, a nested repair, stop/resume or a replan does
+  not reset the original milestone's repair budget.
 - On `/mw-stop`, stop new dispatches, mark running task records cancelled, interrupt
   native host workers, settle their writes, and only then report a stable pause.
   Cancelling a record alone does not terminate a remote/native worker.
@@ -331,6 +339,15 @@ scope deviations and remaining uncertainties before applying the action.
 - On resume, reconcile the stopped state and actual files, obtain the legal
   resume transition, then dispatch new attempts as needed. Preserve useful
   context and original scope; do not repeat completed external side effects.
+
+
+## Repair budget
+
+The full budget rules — `max_repair_rounds`, the default of 2, what counts as a
+round, exhaustion behavior, and how the user authorizes more — are maintained
+only in [repair-contract.md](repair-contract.md). Verifier and explorer
+dispatches never consume a round; initial parallel slices are not miscounted as
+repairs, and parallel slices implementing one registered round count once.
 
 ## Capability fallback and other scenarios
 

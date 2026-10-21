@@ -296,8 +296,12 @@ class WorkflowBoundaryTests(unittest.TestCase):
         evidence = self.validate(task)
         self.assertEqual(evidence["exit_code"], 7)
         self.assertEqual(evidence["result"], "failed")
-        self.submit(task, evidence, changed=["product.txt"])
-        self.rejected("mark_task_done", id="milestone-1", task_ids=[task["task_id"]])
+        # A failed attempt cannot become ready_for_review; record the failure
+        # instead, and further writes require a fresh charged redispatch.
+        with self.assertRaises(SystemExit) as failure:
+            self.submit(task, evidence, changed=["product.txt"])
+        self.assertIn("cannot become ready_for_review", str(failure.exception))
+        self.assertEqual(self.task(task["task_id"])["status"], "running")
 
     def test_product_change_invalidates_validation_evidence(self):
         self.start()

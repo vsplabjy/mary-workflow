@@ -11,6 +11,8 @@ Mary Workflow 3.0 separates coordination, worker deliverables, and runtime valid
 
 Read [task-policy.md](references/task-policy.md) once, then load only the relevant skill. It owns process selection, authorization, delegation, local records and shared delivery rules. Use direct work for bounded changes, experiment runs for settled methods, and formal milestones for explicit staged acceptance or already-bound work. Ordinary course notes and review are direct content tasks.
 
+At experiment-round end, substantial task/milestone completion, a larger task's failure/external blockage/repair-budget exhaustion/stop handoff, or an explicit report request, deliver a locally viewable HTML report and its exact path per [report-contract.md](references/report-contract.md). Reports and assets stay under the init-ignored `.mary-workflow/reports/`; reporting does not imply experiment or scientific acceptance. Formal milestones bound automatic repairs with `max_repair_rounds` (default `2`) per [repair-contract.md](references/repair-contract.md); exhaustion stops automatic repair and ends in a failure report plus user decision, never a fake finish.
+
 ## Routing
 
 Work from the user's project root. Load only the relevant subskill:
