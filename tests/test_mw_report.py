@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -310,6 +311,19 @@ class ReportBoundaryTests(unittest.TestCase):
             secret.unlink()
             outside.rmdir()
 
+    def test_symlink_loop_artifact_is_omitted_without_losing_report(self):
+        if os.name != "posix":
+            self.skipTest("POSIX symlinks required")
+        (self.project / "loop").symlink_to("loop")
+        result = self.render({"title": "循环链接", "summary": "保留报告",
+                              "artifacts": ["loop"]})
+        page = Path(result["report"]).read_text(encoding="utf-8")
+        self.assertTrue(any("loop" in warning for warning in result["warnings"]))
+        assets = Path(result["report"]).parent / "assets"
+        self.assertEqual(list(assets.iterdir()) if assets.exists() else [], [])
+        self.assertIn("loop", page)
+        self.assertIn("循环链接", Path(result["index"]).read_text(encoding="utf-8"))
+
     def test_report_control_symlinks_cannot_redirect_or_replace_outputs(self):
         if os.name != "posix":
             self.skipTest("POSIX symlinks required")
@@ -358,6 +372,24 @@ class ReportBoundaryTests(unittest.TestCase):
         self.assertLess(index.index("第一份"), index.index("OLD"))
         self.assertNotEqual(Path(first["report"]), Path(second["report"]))
         self.assertEqual((old_bundle / "index.html").read_text(encoding="utf-8"), old_page)
+
+    def test_unreadable_index_fails_without_losing_history(self):
+        first = self.render({"title": "历史报告", "summary": "必须保留"})
+        index = Path(first["index"])
+        original = index.read_bytes()
+        old_page = Path(first["report"]).read_bytes()
+        read_bytes = Path.read_bytes
+
+        def deny_index(path):
+            if path == index:
+                raise PermissionError("index is unreadable")
+            return read_bytes(path)
+
+        with patch.object(Path, "read_bytes", deny_index):
+            with self.assertRaises(PermissionError):
+                self.render({"title": "新报告", "summary": "索引读取失败不得重建"})
+        self.assertEqual(index.read_bytes(), original)
+        self.assertEqual(Path(first["report"]).read_bytes(), old_page)
 
     # -- assets honesty -----------------------------------------------------
 
