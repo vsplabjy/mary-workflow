@@ -105,7 +105,7 @@ def _optional_strings(payload: dict, field: str, limit: int) -> list[str]:
 def _inside(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
-    except (ValueError, OSError):
+    except (ValueError, OSError, RuntimeError):
         return False
     return True
 
@@ -639,20 +639,16 @@ def _update_index(reports: Path, entry_html: str) -> None:
     index = reports / "index.html"
     payload = entry_html.encode("utf-8") + b"\n"
     if index.is_file() and not index.is_symlink():
-        try:
-            original = index.read_bytes()
-        except OSError:
-            original = None
-        if original is not None:
-            marker = original.find(b"<article")
-            if marker != -1:
-                updated = original[:marker] + payload + original[marker:]
-            else:
-                close = original.find(b"</body>")
-                updated = (original[:close] + payload + original[close:]
-                           if close != -1 else original + payload)
-            atomic_write_text(index, updated.decode("utf-8", "replace"))
-            return
+        original = index.read_bytes()
+        marker = original.find(b"<article")
+        if marker != -1:
+            updated = original[:marker] + payload + original[marker:]
+        else:
+            close = original.find(b"</body>")
+            updated = (original[:close] + payload + original[close:]
+                       if close != -1 else original + payload)
+        atomic_write_text(index, updated.decode("utf-8", "replace"))
+        return
     atomic_write_text(index, _INDEX_TEMPLATE.replace("{entry}", entry_html))
 
 
