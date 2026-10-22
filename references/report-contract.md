@@ -1,19 +1,18 @@
 # HTML presentation reports
 
-This is the maintained contract for user-facing visual reports. The main agent creates and verifies the report as part of delivery; it does not replace experiment records, formal execution/review receipts or domain acceptance.
+This is the maintained contract for human-facing visual reports. HTML is a reading surface for the user, not an agent handoff prerequisite. Existing task results, experiment records and validation receipts remain authoritative; reporting never replaces coordination records or domain acceptance.
 
 ## When a report is required
 
 Create an HTML report when any of these conditions applies:
 
 - An experiment round ends: completed, failed or stopped. A round is the agreed run or comparison batch, not every training step or seed in a still-running batch. Preserve failures and partial results.
-- A substantial task or milestone finishes: it has an independently useful deliverable and an observable effect or acceptance result. Routine small edits, ordinary questions and progress messages do not each need a report.
-- A larger task or run ends without success: it fails, is blocked by missing external resources or authorization, exhausts its automatic repair budget, or is stopped for handoff. Report the failure/closure the same way as completion; a fake `FINISHED` or silent abandonment is not an alternative.
+- A work package finishes with an independently useful deliverable: give the user a compact result card in HTML. Related worker results may share one delivery/report; do not create a site or a screenshot for every worker or tool call. Milestones use an aggregate report. Ordinary questions, progress messages and read-only status do not each need a report.
 - The user explicitly requests a report, including while work is still running. Record the snapshot time, live status and unfinished work; do not imply completion.
 
 Discussion-only and read-only requests remain read-only unless the user explicitly asks to create a report file; the only other exemption is an explicit user prohibition on writing files. A read-only status command does not create reports. For detached experiments, report at the next authorized completion observation/delivery; do not block launch, invent a watcher, or claim the supervisor authors a report after the chat ends. Do not mark a live run finished to trigger reporting. Reuse available evidence; never rerun experiments, access held-out inputs or consume additional GPU resources merely to populate a page.
 
-Before writing a closure report, stop dispatching new work, appropriately stop or interrupt owned running processes, and let observed writes stabilize; report what could not be stopped and who owns it. The report itself is not acceptance: creating it never changes phase, run status, assessment or scientific claims, and it never substitutes for formal execution/review receipts. If the report file cannot be written (read-only host, explicit user prohibition, unavailable filesystem), deliver the same closure content honestly in chat — earliest confirmed cause or `UNKNOWN`, finished vs unfinished work, actual changes, check states, remaining repair budget and the next concrete step — instead of promising a file that does not exist or an unsupervised automatic report service.
+The report itself is not acceptance: creating it never changes phase, run status, assessment or scientific claims, and it never substitutes for formal execution/review receipts. Workers do not need to read HTML to continue. If report files cannot be written (read-only host, explicit user prohibition, unavailable filesystem), give the user the same result and limitations in chat instead of promising a nonexistent file.
 
 ## Location and retention
 
@@ -44,12 +43,41 @@ Default to Chinese unless the user requests another language. Preserve identifie
 5. **Evidence and reproduction:** actual run/task ID, relevant configuration/overrides, executable command, logs and artifact paths. Preserve existing authoritative records; the report is a readable projection, not a new source of workflow state. Redact secrets from displayed command/config excerpts.
 6. **Remaining work:** concrete unresolved issues and next actions when applicable. A failed/stopped report must state what ended and what remains unsupported.
 
-For a failure, blockage, budget exhaustion or stop handoff, the first screen states the earliest confirmed cause (or `UNKNOWN` with what was ruled out), what finished and what remains unsupported, actual modified paths, each check's real state (`通过/失败/运行中/未运行`), remaining repair budget when a budget applies, and the concrete next step (user authorization, replan, or explicit stop). Do not relabel the closure as acceptance or completion.
+## Fixed rendering, not another workflow
+
+Use `scripts/mw_report.py` when available in the installed skill or pinned bundle. Give it a short presentation description referencing existing results/evidence; do not ask each worker to write HTML/CSS, screenshots or a global index. No new worker envelope, task state, knowledge record or agent is required. A single task needs only a title and summary; add evidence and actual results when available.
+
+```bash
+python /path/to/mary-workflow/scripts/mw_report.py \
+  --project . --input .mary-workflow/analysis/report.json --name task-result
+```
+
+```json
+{
+  "title": "任务结果",
+  "summary": "先写给人看的结论，不把未知写成成功",
+  "tasks": [".mary-workflow/tasks/implementation-1/result.json"],
+  "verification": ".mary-workflow/analysis/verification.json",
+  "metrics": [{"name": "实际度量", "value": 1, "unit": "声明实际单位"}],
+  "artifacts": ["outputs/selected-preview.png"],
+  "next_steps": ["列出仍需处理的事项"]
+}
+```
+
+The example is a format illustration, not executed evidence. All referenced paths are project-relative. `tasks` also accepts existing result dictionaries (`summary`, `files_changed`, `validation`, `blockers`, `uncertainties`); omit irrelevant fields. `verification` may reference a `run_validation` receipt or an existing `{"checks":[...]}` record with the actual `command`/`argv`, integer `exit_code`, and `stdout`/`stderr` log paths. Logs are relative to that record. A status string alone is not proof; missing, contradictory or altered evidence stays visible. Rendered check states describe recorded command results, not a fresh product audit or scientific acceptance. The local cooperating writer is still part of the trust boundary.
+
+A record identifying a command and an explicit failure, timeout, cancellation or interruption remains `失败` even when its exit code is unknown. Explain an interrupted validation as incomplete with an unknown exit code, not as an unexecuted check or proof that the product failed. Preserve readable, size-bounded logs whose supplied digests match; identify missing or altered streams without hiding the other available stream. Unknown or malformed exit codes never establish `通过`.
+
+A card without its own attached receipt does not mean its commands were never executed; global command records remain separate and are not automatically attributed to every card. Long titles, summaries and hashes must wrap on narrow screens, including in the aggregate index.
+
+The renderer reuses exact ignore rules, creates a new immutable report package, snapshots small selected evidence, and preserves the aggregate index. It executes no validation, browser, training, external write or workflow transition. Supply already-observed results; do not repeat checks to fill the page. Full visual or narrative artifacts may extend the fixed presentation when needed, without changing the authoritative records.
+
+Plain text cards use the fixed layout with per-report link/status checks. Reuse an actual template layout check for unchanged plain text; this is not a claim that each card was visually inspected. New images/media/comparisons, layout changes and substantial reports still need inspection of the actual surface. Do not automatically rerun a browser for every worker.
 
 ## Fast local viewing and verification
 
 - Deliver static UTF-8 HTML with a viewport declaration, readable contrast and responsive layout. Inline essential CSS. Core content MUST be present in the HTML, not fetched at runtime.
 - Opening `index.html` through `file://` MUST show the report without a server, build step, login, package installation or network access. No CDN fonts, remote scripts or mandatory external chart libraries. Use relative local asset/navigation links; escape untrusted text rather than executing log/config content as HTML.
 - Show thumbnails/selected previews first; defer large images and use video controls with `preload="metadata"` or `none`. Avoid autoplay and embedding entire checkpoints, datasets or full logs. Retain original large artifacts in their existing location; copy only small, useful presentation assets.
-- Open the actual page in a browser, inspect the first screen and relevant comparisons, and exercise local navigation/media used by the report. Verify local asset links. Record what was actually checked; if browser/media support is unavailable, state the exact limit instead of claiming visual verification.
+- For template/layout changes, new visual comparisons/media and substantial reports, open the actual page in a browser, inspect the first screen and exercise the local navigation/media used. Unchanged plain text cards may reuse the template layout check, but still verify their own local links and evidence states. Record the exact check scope; if browser/media support is unavailable, say so rather than claim visual verification.
 - Final delivery MUST include the exact report path or clickable link, the main finding, and any material verification limit. A report-generation failure is a delivery issue, not permission to change experiment/acceptance state or claim the report exists.

@@ -22,7 +22,7 @@ Audit only individually selected files from exited runs, streaming SHA-256 once 
 
 ## Task-sized process
 
-Use direct single-agent work for small authorized changes (`skills/quick/SKILL.md`), this experiment lifecycle for settled-method trials, and the strict milestone/SDD lifecycle for explicitly chosen acceptance and cross-cutting changes. Do not bypass an already active bound change or a stopped project run by relabeling its work. Reaching a milestone's repair-budget limit does not convert that work into an "experiment": launching a run that repeats the exhausted milestone's work needs the user's recorded authorization per [repair-contract.md](repair-contract.md). Reuse valid evidence, independent review at meaningful boundaries, and current context. Unknown dependencies limit a claim; they need not prevent exploratory execution.
+Use direct single-agent work for small authorized changes (`skills/quick/SKILL.md`), this experiment lifecycle for settled-method trials, and the strict milestone/SDD lifecycle for explicitly chosen acceptance and cross-cutting changes. Do not bypass an already active bound change or a stopped project run by relabeling its work. Reuse valid evidence, independent review at meaningful boundaries, and current context. Unknown dependencies limit a claim; they need not prevent exploratory execution.
 
 ## End-of-round presentation
 

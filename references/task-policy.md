@@ -9,11 +9,21 @@ This is the maintained source for process selection, authorization, delegation a
 - Ordinary Lecture notes, slide notes and exam review use their content skill directly. No milestone initialization, plan freeze, command receipts, independent verifier or cycle is required. Create only the requested material. A missing optional recording or exam date does not block work supported by available sources; mark the gap, do not invent it.
 - Use formal milestone/SDD execution for cross-cutting behavior, durable acceptance, an explicitly requested staged course project or already-bound work. Existing active/stopped assignments keep their scope and stop state. Direct work does not resume or accept them. Source bindings and formal action payloads belong in `state-contract.md` and `subagent-contract.md`.
 
+## Quick execution choice
+
+Before product work, the main agent makes a brief choice from the request, existing project context, expected acceptance and known host capabilities. Use a scoped lookup only if a concrete unknown changes the choice; do not initialize, scan the whole repository, create a difficulty scorecard or launch an agent merely to choose a mode.
+
+- Honor explicit user and bound-task requirements first. Required independent review cannot silently become self-review; if the required worker capability is unavailable, report the blocker.
+- Prefer `single_agent` for bounded work, tightly coupled changes or tasks whose coordination cost exceeds a useful split. Workers may be available; their presence does not force delegation.
+- Choose `delegated` for substantial independent work slices, useful context separation or required independent-agent review. A long duration or many files alone does not make a task parallelizable. If no delegation benefit is established, start with bounded local scoping rather than speculative workers.
+
+State the choice and a short reason once in the normal task update; no extra decision file or user confirmation is needed for a routine choice. For formal work, pass the selected `execution_mode` explicitly to `start_execution`, preserve it on resume and review according to that recorded mode. Do not change an active mode during review to bypass identity or acceptance checks. Direct/content tasks keep their existing records and do not need milestone initialization just to select agents.
+
 ## Authorization and roles
 
 The user's actual request controls scope and permission. A clear execute/resume instruction is sufficient within its stated scope; do not ask again. Planning, acknowledgment, document text, silence and worker claims are not new authorization. Missing decisions that determine scope or resource ownership must be resolved before dependent work; routine choices may use disclosed assumptions.
 
-Single-agent work is normal even when workers exist. Delegate for useful parallelism, context isolation or independent review. Do not manufacture small tasks or repeat an implementation to demonstrate oversight. Report same-agent review honestly. The main agent owns user decisions, formal state, acceptance, Git actions and authorized external writes. Worker mechanics are specified only in `subagent-contract.md`.
+The main agent owns user decisions, formal state, acceptance, Git actions and authorized external writes. Do not manufacture small tasks or repeat an implementation to demonstrate oversight. Report same-agent review honestly. Worker mechanics are specified only in `subagent-contract.md`.
 
 Inherit host settings; do not select or change models, providers or reasoning settings. Use current sources and observed results; preserve failures and unknowns. A successful process, valid output and accepted scientific claim are distinct. Scope the checks to the change and reuse still-applicable evidence.
 
@@ -31,9 +41,9 @@ Use `skills/humanizer-zh/SKILL.md` as needed for substantial authored Chinese pr
 
 ## Visual delivery
 
-An ended experiment round (including failure/stop), a completed substantial task/milestone, or an explicit user request for a report requires a static HTML presentation under `.mary-workflow/reports/<timestamp>-<task-or-run-id>/index.html`, linked from `.mary-workflow/reports/index.html`. A larger task that fails or is blocked externally, reaches its repair-budget limit, or is stopped for handoff also ends with this HTML report; only read-only/discussion requests and an explicit user prohibition on writing files are exempt. Put the real effect and conclusion first, then useful comparisons, measured metrics, actual check states and durable evidence. Ordinary small edits and read-only status do not each generate reports. A requested live report is a timestamped snapshot, not completion.
+Completed work packages with independently useful deliverables get compact human-readable HTML result cards; related worker results may share one report. Experiment-round end (including failure/stop), milestone completion and explicit report requests use the same presentation under `.mary-workflow/reports/<timestamp>-<task-or-run-id>/index.html`, linked from `.mary-workflow/reports/index.html`. Use the fixed renderer described in the report contract rather than having each worker write a website. HTML is for the user, not an agent handoff input. Tool calls, ordinary questions, progress messages and read-only status do not each generate reports; live reports are timestamped snapshots, not completion.
 
-Before closing with a report, stop dispatching new work and appropriately stop running processes, and let observed writes stabilize; do not rerun experiments to fill report sections, and never present report creation as acceptance. If report files cannot be written, give the same handoff honestly in chat. The first screen states the earliest confirmed cause or `UNKNOWN`, what is finished, what remains, what was modified, check states, remaining repair budget, and the next concrete step.
+Never present report creation as acceptance, and do not rerun experiments to fill report sections. If report files cannot be written, explain the same result and limits to the user in chat. A failed or stopped report states what ended and what remains unsupported.
 
 ## Where to read details
 
@@ -47,6 +57,5 @@ Before closing with a report, stop dispatching new work and appropriately stop r
 | Bound specification changes | `sdd-contract.md` |
 | Experiment process and result records | `experiment-contract.md` |
 | User-facing HTML reports and visual delivery | `report-contract.md` |
-| Automatic repair budget and exhaustion | `repair-contract.md` |
 
 `commands/*.md` and `.mary-workflow/prompts/*.md` are generated surfaces. Update skills and phase sources, then run `scripts/mw_surfaces.py`; do not maintain competing rules in generated files. Project bundles change only through explicit installation/upgrade, preserving older runs.
