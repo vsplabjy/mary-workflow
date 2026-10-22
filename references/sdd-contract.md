@@ -39,7 +39,7 @@ The reason is required and no delta may accompany this exception. The coordinato
 
 ## Single task definition and traceability
 
-Each numbered checkbox maps to one milestone and is immediately followed by its machine-readable `mary-task` block. The checkbox supplies the title; do not duplicate a different title inside JSON. IDs identify execution milestones. Exact relative deliverables, acceptance commands, scope and dependencies follow the state/worker contracts. When command dependencies are known, add optional nonempty `validation_inputs` to bind command evidence to those files; its semantics and full ownership audits are defined only in [subagent-contract.md](subagent-contract.md#validation-inputs-and-ownership-audits). An optional `max_repair_rounds` integer may bound automatic repairs per milestone; its freezing and counting rules are defined only in [repair-contract.md](repair-contract.md), and changing it after freeze requires the legal replan path.
+Each numbered checkbox maps to one milestone and is immediately followed by its machine-readable `mary-task` block. The checkbox supplies the title; do not duplicate a different title inside JSON. IDs identify execution milestones. Exact relative deliverables, acceptance commands, scope and dependencies follow the state/worker contracts. When command dependencies are known, add optional nonempty `validation_inputs` to bind command evidence to those files; its semantics and full ownership audits are defined only in [subagent-contract.md](subagent-contract.md#validation-inputs-and-ownership-audits).
 
 ````markdown
 ## 1. Export
@@ -61,8 +61,6 @@ Each numbered checkbox maps to one milestone and is immediately followed by its 
 ````
 
 `write_scope` and `read_dependencies` are optional. Acceptance IDs correspond to command order (`check-1`, `check-2`, ...). Every added/modified scenario must map to at least one real command ID in a task; unknown references and unknown check IDs are errors. Removals use `capability::REMOVED::Requirement name`; renames use `capability::RENAMED::Old name`. Those operations need task/check mappings and review too. For a no-behavior-delta change use an empty `covers` object.
-
-The repair budget is part of the frozen task definition: it binds at `update_state`, follows the milestone's `repair_of` lineage across retries and replans, and exhausted budget ends the change's automatic repair rather than its scope. See [repair-contract.md](repair-contract.md) for counting, exhaustion closure and authorization to continue.
 
 A mapping declares a review obligation. It does not prove command adequacy, semantic correctness, or successful execution. Keep source/render/external checks required by a scene; never represent an unavailable real experiment with a passing synthetic substitute.
 

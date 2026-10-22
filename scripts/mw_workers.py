@@ -4,12 +4,7 @@
 The coordinator calls these helpers under its workflow mutation lock. These are
 audit and mistake-prevention controls, not a sandbox against arbitrary shell
 access. Workers submit envelopes; they never write this control directory.
-The repair budget (see references/repair-contract.md) is enforced at the
-coordinator's formal entrypoints (enqueue_fix_task, needs-fix review, fresh
-implementer redispatch): an agent cannot bypass it by relabeling work, but
-repair policy is not a process-level sandbox boundary.
 """
-
 
 from __future__ import annotations
 
@@ -370,7 +365,7 @@ def _scope_check(root: Path, state: Json, task: Json, snapshot: Json, *, partial
     return sorted(set(changed) & own)
 
 
-def create_task(root: Path, state: Json, data: Json, *, before_publish=None) -> Json:
+def create_task(root: Path, state: Json, data: Json) -> Json:
     """Register one dispatch before spawning its worker; IDs cannot be reused."""
     role = str(data.get("role", ""))
     allowed = {"implementer": {"EXECUTING"}, "verifier": {"REVIEWING"},
@@ -467,8 +462,6 @@ def create_task(root: Path, state: Json, data: Json, *, before_publish=None) -> 
     scratch_root = project / ".mary-workflow-worker"
     if scratch_root.is_symlink() or (scratch_root / task_id).is_symlink():
         raise WorkerError("Worker scratch must not be a symlink.")
-    if before_publish is not None:
-        before_publish()
     (scratch_root / task_id).mkdir(parents=True, exist_ok=True)
     destination.mkdir(parents=True)
     _immutable(destination / "baseline.json", baseline)
@@ -507,7 +500,6 @@ def run_validation(root: Path, state: Json, data: Json) -> Json:
     with workflow_lock(root):
         state = _fresh_state(root, state)
         task = _current(root, state, data)
-        _assert_unfailed_attempt(root, task)
         if task.get("active_validation"):
             raise WorkerError("A validation is already running for this task.")
         if "result" in data or "exit_code" in data:
@@ -719,27 +711,11 @@ def _evidence(root: Path, task: Json, evidence_id: object, snapshot: Json) -> Js
     return evidence
 
 
-def _assert_unfailed_attempt(root: Path, task: Json) -> None:
-    """A failed implementation must obtain a new budgeted dispatch."""
-    if task.get("role") != "implementer":
-        return
-    for evidence_id in task.get("validation", []):
-        evidence = _read_json(_task_dir(root, task["task_id"]) / f"{evidence_id}.json")
-        if evidence.get("result") == "failed":
-            raise WorkerError(
-                f"Attempt {task['task_id']} already failed validation {evidence_id}; "
-                "a failed attempt cannot become ready_for_review or rerun validation. "
-                "Record the failure and obtain a fresh budgeted implementer dispatch."
-            )
-
-
 def submit_result(root: Path, state: Json, data: Json) -> Json:
     """Receive an immutable worker envelope, but do not accept the milestone."""
     task = _current(root, state, data, statuses={"running"})
     if task.get("active_validation"):
         raise WorkerError("Wait for active validation before submitting a result.")
-    if data.get("status") == "ready_for_review":
-        _assert_unfailed_attempt(root, task)
     status = data.get("status")
     if status not in {"ready_for_review", "blocked", "failed"}:
         raise WorkerError("Worker status must be ready_for_review, blocked, or failed.")
@@ -799,7 +775,7 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
             issues.append(str(exc))
     if task["role"] == "verifier" and status == "ready_for_review":
         if task["review_mode"] == "same_agent" and data.get("review_mode") != "same_agent":
-            raise WorkerError("Single-agent review must explicitly declare review_mode=same_agent; independence is unavailable.")
+            raise WorkerError("Single-agent review must explicitly declare review_mode=same_agent; it is not independent review.")
         if data.get("decision") not in {"passed", "needs-fix"} or not isinstance(data.get("findings"), list):
             raise WorkerError("Verifier requires decision=passed|needs-fix and a findings list.")
         if data["decision"] == "needs-fix" and not data["findings"]:
@@ -893,11 +869,11 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
 
 
 def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json) -> Json:
-    """Require a separate worker's current, product-preserving review."""
+    """Require a current, product-preserving review in the recorded execution mode."""
     task = _read_json(_task_dir(root, data.get("verifier_task_id")) / "task.json")
     _current(root, state, task, statuses={"ready_for_review", "accepted"})
     if task["role"] != "verifier" or task["milestone_id"] != milestone.get("id"):
-        raise WorkerError("Review requires an independent verifier task for the current milestone.")
+        raise WorkerError("Review requires a verifier task for the current milestone.")
     summary = verify_milestone_evidence(root, state, milestone, {"task_ids": task["reviews_task_ids"]})
     result = _result(root, task)
     review_snapshot = _snapshot(root.parent, _extra(root, state))
@@ -908,7 +884,7 @@ def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json)
         raise WorkerError("Verifier has not passed the current product snapshot.")
     review_baseline = _read_json(_task_dir(root, task["task_id"]) / "baseline.json")
     if _delivery_digest(task, review_baseline) != review_digest:
-        raise WorkerError("Product changed during independent review; dispatch a fresh review.")
+        raise WorkerError("Product changed during review; dispatch a fresh review.")
     for reviewed_id in task["reviews_task_ids"]:
         reviewed = _read_json(_task_dir(root, reviewed_id) / "task.json")
         if reviewed["agent_id"] == task["agent_id"] and result.get("review_mode") != "same_agent":

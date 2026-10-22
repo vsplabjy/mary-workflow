@@ -11,8 +11,6 @@ Run `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-plan` from the 
 
 For this formal entry, require a complete project brief and follow [shared task policy](../../references/task-policy.md). Split by dependencies and independently verifiable results; record requirements, assumptions, deliverables, checks and optional confirmation gates. `estimated_scope` is descriptive, not a cap. Freeze the inspectable draft in `PLANNED` using the state contract.
 
-When setting the optional per-milestone `max_repair_rounds` (non-negative integer, default `2` when omitted, `0` = no automatic repair after a failure), follow the [repair contract](../../references/repair-contract.md): the value freezes with the plan, counts failures per original milestone without reset across retries/agents/replans, and can only be raised after start with recorded user authorization. Tell the user what the chosen limit means for automatic fixes.
-
 When the exact check dependencies are known, declare `validation_inputs` before freezing; see [validation inputs](../../references/subagent-contract.md#validation-inputs-and-ownership-audits). Include actual code/test/config/fixture dependencies, not only changed files. Omit the field for an unknown or open-ended dependency set; it cannot be narrowed after running a check.
 
 ## Spec-driven planning

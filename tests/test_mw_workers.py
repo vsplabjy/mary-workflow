@@ -217,12 +217,9 @@ class WorkerContractTests(unittest.TestCase):
         task = self.dispatch()
         evidence = self.validate(task)
         self.assertEqual(evidence["result"], "failed")
-        # A failed attempt cannot become ready_for_review; the failure stays
-        # recorded on the task and completion remains impossible.
-        with self.assertRaisesRegex(WorkerError, "cannot become ready_for_review"):
-            self.submit(task, evidence, files_changed=[])
-        recorded = json.loads((self.root / "tasks/implementation/task.json").read_text())
-        self.assertIn(evidence["evidence_id"], recorded["validation"])
+        self.submit(task, evidence, files_changed=[])
+        with self.assertRaisesRegex(WorkerError, "did not pass"):
+            self.verify()
 
     def test_command_cannot_be_substituted(self):
         task = self.dispatch()

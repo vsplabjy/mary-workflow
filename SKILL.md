@@ -11,7 +11,7 @@ Mary Workflow 3.0 separates coordination, worker deliverables, and runtime valid
 
 Read [task-policy.md](references/task-policy.md) once, then load only the relevant skill. It owns process selection, authorization, delegation, local records and shared delivery rules. Use direct work for bounded changes, experiment runs for settled methods, and formal milestones for explicit staged acceptance or already-bound work. Ordinary course notes and review are direct content tasks.
 
-At experiment-round end, substantial task/milestone completion, a larger task's failure/external blockage/repair-budget exhaustion/stop handoff, or an explicit report request, deliver a locally viewable HTML report and its exact path per [report-contract.md](references/report-contract.md). Reports and assets stay under the init-ignored `.mary-workflow/reports/`; reporting does not imply experiment or scientific acceptance. Formal milestones bound automatic repairs with `max_repair_rounds` (default `2`) per [repair-contract.md](references/repair-contract.md); exhaustion stops automatic repair and ends in a failure report plus user decision, never a fake finish.
+Deliver compact human-readable HTML result cards for completed work packages, with aggregate reports at experiment-round end, milestone completion or an explicit report request, per [report-contract.md](references/report-contract.md). Prefer the fixed `scripts/mw_report.py` renderer when available. HTML is for the user, never a required agent handoff input. Reports/assets stay under the init-ignored `.mary-workflow/reports/`; reporting does not imply experiment or scientific acceptance.
 
 ## Routing
 
@@ -24,7 +24,7 @@ Work from the user's project root. Load only the relevant subskill:
 | `/mw-quick`, small bounded changes | `skills/quick/SKILL.md` | direct work with relevant checks |
 | `/mw-init` | `skills/init/SKILL.md` | inventory, module coverage, project brief |
 | `/mw-plan` | `skills/plan/SKILL.md` | necessary clarification and frozen plan |
-| `/mw-run` | `skills/run/SKILL.md` | dispatch, evidence, independent review, acceptance |
+| `/mw-run` | `skills/run/SKILL.md` | task-sized execution, evidence, mode-aware review, acceptance |
 | `/mw-status` | `skills/status/SKILL.md` | read-only progress |
 | `/mw-stop` | `skills/stop/SKILL.md` | coordinated pause and recovery record |
 | `/mw-debug` | `skills/debug/SKILL.md` | diagnosis and a focused queued fix |

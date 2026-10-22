@@ -2,7 +2,7 @@
 
 Verify an active run in `DEBUGGING`; read the preserved `last_error`, affected artifact version, task attempts, and relevant source. Diagnose the actual failure. An explorer can investigate read-only when useful, but DEBUGGING does not permit product edits or a fixer implementation.
 
-Diagnosis dispatch and result collection use the shared worker actions; its normal state transition is `enqueue_fix_task`. Before enqueueing, check the milestone's remaining repair budget per `references/repair-contract.md`: an exhausted budget rejects another automatic repair round; preserve the diagnosis and hand the decision (add budget with recorded user authorization, replan, or stop) to the user. If evidence requires a different authorized scope, use `request_replan` with concrete feedback. Use the current state contract, link the fix to failed work, and keep its scope and acceptance within existing authorization. Missing tools, credentials, data, or user decisions are specific blockers; distinguish them from defects that a repair can resolve. Do not retry an unchanged blocker indefinitely.
+Diagnosis dispatch and result collection use the shared worker actions; its normal state transition is `enqueue_fix_task`. If evidence requires a different authorized scope, use `request_replan` with concrete feedback. Use the current state contract, link the fix to failed work, and keep its scope and acceptance within existing authorization. Missing tools, credentials, data, or user decisions are specific blockers; distinguish them from defects that a repair can resolve. Do not retry an unchanged blocker indefinitely.
 
 ```json
 {
@@ -18,5 +18,3 @@ Diagnosis dispatch and result collection use the shared worker actions; its norm
 ```
 
 Apply with `mary_workflow.py apply-action`. The runtime returns to `EXECUTING` before any repair is implemented. Preserve the original error and previous attempts. If a larger scope or lower acceptance threshold is needed, use `request_replan` with concrete feedback and existing user authorization rather than silently rewriting the frozen plan.
-
-When the repair budget is exhausted, or the user declines more repairs, close with the failure HTML report required by `references/report-contract.md`: earliest confirmed cause or `UNKNOWN`, what each repair round changed, check states and the next step. Do not mark the milestone finished or accepted.

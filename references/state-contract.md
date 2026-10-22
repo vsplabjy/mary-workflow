@@ -94,12 +94,9 @@ permission.
 
 Every milestone has `id`, `title`, exact relative `deliverables`, executable
 `acceptance`, nonnegative `estimated_scope`, and `gate: auto|confirm`. Optional
-`max_repair_rounds` bounds automatic repair rounds after failures; its counting,
-exhaustion and authorization rules are maintained only in
-[repair-contract.md](repair-contract.md). Optional `write_scope` includes
-permitted implementation/supporting files and defaults to deliverables;
-`read_dependencies` identifies interfaces needed by workers. There is no upper
-file or milestone count. Split by dependencies, independent acceptance,
+`write_scope` includes permitted implementation/supporting files and defaults to
+deliverables; `read_dependencies` identifies interfaces needed by workers. There
+is no upper file or milestone count. Split by dependencies, independent acceptance,
 resource needs, and meaningful user review points. Do not weaken acceptance or
 forbid legitimate scoped test improvements.
 
@@ -120,13 +117,11 @@ the current frozen plan but cannot cryptographically establish who spoke.
 ```
 
 `execution_mode: single_agent` is a normal choice for small or tightly coupled
-work even when native workers are available. Delegate when useful parallelism,
-independent review or context isolation justifies it; honor explicit user or
-bound-contract requirements for independent review. Record same-agent review
-honestly with `review_mode: same_agent` and `independent_review: false`; never
-change execution mode during review to bypass an existing identity check.
-Model choice is inherited in either mode. Task visibility, worker availability
-and optional hooks are described in [host-contract.md](host-contract.md).
+work even when native workers are available. Choose delegation when useful
+parallelism, independent review or context isolation justifies it. Same-agent
+review is recorded honestly, never called independent. Model choice is inherited
+in either mode. Task visibility, worker availability and optional hooks are
+described in [host-contract.md](host-contract.md).
 
 Start creates one run id; explicit resume keeps that id and current phase:
 
@@ -145,12 +140,6 @@ implementer is dispatched. The confirmation does not get recreated on each retry
 {"action":"confirm_milestone","data":{"id":"milestone-1","confirmation":"<actual user confirmation>","plan_digest":"<current frozen digest>"}}
 ```
 
-For a confirmed milestone whose repair budget is exhausted, the same action may
-carry the user's explicit `authorize_repair_rounds` integer to record an
-authorized increase for that milestone's repair lineage
-([repair-contract.md](repair-contract.md)); the primary path for adding budget
-remains `request_replan` with recorded approval.
-
 ## Completion and review
 
 After all writer tasks settle, `mark_task_done` requires the current milestone and
@@ -162,12 +151,13 @@ evidence and current product fingerprints, then enters REVIEWING. Its legacy
 {"action":"mark_task_done","data":{"id":"milestone-1","task_ids":["parser-implementation"]}}
 ```
 
-Dispatch an independent verifier in delegated mode, or perform the explicitly
-recorded same-agent review pass in single-agent mode, with original requirements,
-exact acceptance, actual artifacts, relevant source and evidence pointers.
-Implementation narration is not a passing criterion. A reviewer's `passed`
-result is not itself the state transition; the main agent accepts it using the
-existing review action:
+Review follows the execution mode recorded at start: dispatch an independent
+verifier in delegated mode, or perform a separate, explicitly disclosed same-agent
+review pass in single-agent mode. Supply original requirements, exact acceptance,
+actual artifacts, relevant source and evidence pointers in either case.
+Implementation narration is not a passing criterion. A verifier's `passed` result
+is not itself the state transition; the main agent accepts it using the existing
+review action:
 
 ```json
 {"action":"set_phase","data":{"phase":"FINISHED","decision":"accepted","verifier_task_id":"parser-review"}}
@@ -182,10 +172,7 @@ immutable evidence rather than overwriting one report.
 
 `record_error` retains command, stderr and return code, then enters DEBUGGING.
 `enqueue_fix_task` creates a repair with `repair_of`, bounded by the original
-approved scope and acceptance. Before enqueueing, the runtime checks the
-milestone's remaining repair budget per [repair-contract.md](repair-contract.md):
-an exhausted budget rejects the action instead of starting another automatic
-round. Repairs do not rewrite the original frozen digest.
+approved scope and acceptance. Repairs do not rewrite the original frozen digest.
 After the repair is accepted, the original milestone still requires acceptance.
 
 A scope change during an active phase uses `request_replan` with concrete feedback.

@@ -101,6 +101,35 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(install_bundle(self.root, self.source), manifest)
         self.assertEqual(self.tree(), before)
 
+    def test_explicit_upgrade_enables_report_cli_without_upgrading_an_old_pin(self) -> None:
+        original = install_bundle(self.root, self.source)
+        actual_source = Path(__file__).resolve().parents[1]
+        for name in ("mw_runtime.py", "mw_report.py"):
+            (self.source / "scripts" / name).write_bytes(
+                (actual_source / "scripts" / name).read_bytes())
+        self.assertEqual(install_bundle(self.root, self.source), original)
+        self.assertFalse((self.root / "runtime/scripts/mw_report.py").exists())
+        apply_upgrade(self.root, self.source)
+        # The pinned CLI must run without consulting its installation source.
+        (self.source / "scripts/mw_report.py").unlink()
+        presentation = self.root.parent / "report-input.json"
+        presentation.write_text(json.dumps({
+            "title": "固定版本报告", "summary": "只渲染人类结果，不恢复任务"
+        }), encoding="utf-8")
+        state_before = (self.root / "state.yaml").read_bytes()
+        completed = subprocess.run(
+            [sys.executable, str(self.root / "runtime/scripts/mw_report.py"),
+             "--project", str(self.root.parent), "--input", str(presentation),
+             "--name", "pinned-report"],
+            text=True, capture_output=True, timeout=15)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        delivery = json.loads(completed.stdout)
+        report = Path(delivery["report"])
+        self.assertEqual(report.parent.parent, self.root / "reports")
+        self.assertTrue(Path(delivery["index"]).is_file())
+        self.assertIn("只渲染人类结果，不恢复任务", report.read_text(encoding="utf-8"))
+        self.assertEqual((self.root / "state.yaml").read_bytes(), state_before)
+
     def test_humanizer_profile_is_pinned_with_rules_and_license(self) -> None:
         from mw_bundle import HUMANIZER_FILES
         actual_source = Path(__file__).resolve().parents[1]

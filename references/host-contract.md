@@ -8,7 +8,7 @@ The main agent inspects actual tool schemas and records available, unavailable, 
 
 | Capability | When present | Fallback |
 | --- | --- | --- |
-| workers | Choose scoped delegation where it merits the cost; single-agent remains available | `single_agent` mode with the same formal evidence checks and disclosed lack of independent-agent review |
+| workers | Choose scoped delegation where it merits the cost; single-agent remains available | `single_agent` with the same formal evidence checks and disclosed lack of independent-agent review, unless independent review is required; then report the unmet requirement |
 | worker_resume | Continue the actual prior worker attempt when valid | New attempt with persisted context and residual-change inspection |
 | worker_interrupt | Notify/intercept the actual worker when stopping | Stop dispatch and acceptance locally; report inability to verify remote process termination |
 | readonly_enforcement | Apply host permissions to exploration/review | Describe scope as an instruction, not enforced isolation; arbitrary shell still permits writes |
