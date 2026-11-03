@@ -18,6 +18,8 @@ Run `python ~/.codex/skills/mary-workflow/scripts/mw_codex.py mw-run` from the p
 
 Milestones are sequential. Parallelize independent tasks within the current milestone or initialization only after checking shared files, interfaces, resources, generated outputs, and dependencies. Use isolation when appropriate. A stopped, outdated, or duplicate worker result cannot advance the plan.
 
+Keep task context scoped to the current binding; read full records by task ID or use the paged `tasks` query when needed. Concrete human decisions use `update_worker_attention` per the subagent contract. Deliver the question promptly, continue unaffected authorized work, and resolve its matching ID explicitly before acceptance; routine progress and failure reports do not imply a question.
+
 At a `gate: confirm`, use an already applicable explicit confirmation or obtain the required user decision, then record `confirm_milestone` before dispatch. Keep task progress visible. Continue until finished, stopped, materially blocked, or awaiting a genuinely required user answer. On stop, cancel/intercept workers and wait for writes to stabilize before finalizing pause. Never delegate workflow state, authorization decisions, Git writes, or external mutations.
 
 Present completed work packages as compact human-readable cards in the [HTML presentation](../../references/report-contract.md); group related worker results and aggregate at milestone delivery. Prefer the fixed renderer and reuse recorded or explicitly limited evidence, never ask each worker to write HTML. Give the user the exact path and label live snapshots honestly. HTML is not an agent handoff input, formal receipt, acceptance action or workflow-state change.

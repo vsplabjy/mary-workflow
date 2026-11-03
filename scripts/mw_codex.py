@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 
@@ -140,7 +141,7 @@ def render_prompt(root: Path, alias: str, *, full_context: bool = False, formal:
     if full_context or phase == "PLANNED":
         context.append(render_plan_confirmation_evidence(state, normalized, phase))
     if full_context or phase in {"EXECUTING", "REVIEWING", "DEBUGGING"}:
-        context.append(render_worker_progress(workflow))
+        context.append(render_worker_progress(workflow, state, full_context=full_context))
     context.append(render_milestone_context(root, state, phase))
     if full_context or phase == "REVIEWING":
         context.append(render_review_evidence(root, phase))
@@ -236,14 +237,42 @@ def render_run_authorization(state: dict[str, object], alias: str) -> str:
             "Do not ask again when the current plan is already explicitly authorized.")
 
 
-def render_worker_progress(workflow: Path) -> str:
-    from mw_workers import list_tasks
+def render_worker_progress(workflow: Path, state: dict[str, object], *, full_context: bool = False) -> str:
+    from mw_workers import current_tasks, list_tasks
     tasks = list_tasks(workflow)
     lines = ["## Task Progress", ""]
-    for task in tasks:
-        lines.append(f"- {task['task_id']} / {task.get('role')} / {task.get('status')} / {task.get('objective')}")
-    if not tasks:
-        lines.append("No dispatched tasks. Use the host task list when available; this view remains the persisted record.")
+    selected = tasks if full_context else current_tasks(workflow, state, tasks=tasks)
+    def pending_attention(task):
+        return task.get("attention") if task.get("status") in {"running", "ready_for_review", "blocked", "failed"} else None
+    counts: dict[str, int] = {}
+    for task in selected:
+        status = str(task.get("status"))
+        counts[status] = counts.get(status, 0) + 1
+    lines.append(f"Current selection: {len(selected)} tasks; statuses: {json.dumps(counts, sort_keys=True)}.")
+    if not full_context:
+        priority = {"blocked": 1, "failed": 1, "running": 2, "ready_for_review": 3}
+        selected.sort(key=lambda task: (0 if pending_attention(task) else priority.get(task.get("status"), 4), task["task_id"]))
+        lines.append(f"Historical or other-bound tasks omitted: {len(tasks) - len(selected)}. Records are preserved.")
+        pending = sum(bool(pending_attention(task)) for task in selected)
+        lines.append(f"Pending human decisions: {pending}; resolve before milestone acceptance. Requests never grant authorization.")
+    def preview(value: object, limit: int) -> str:
+        text = " ".join(str(value).split())
+        return text if full_context or len(text) <= limit else text[:limit] + "… [read task for full text]"
+    for task in (selected if full_context else selected[:20]):
+        lines.append(f"- {task['task_id']} / {task.get('role')} / {task.get('status')} / {preview(task.get('objective'), 160)}")
+        if pending_attention(task) or (full_context and task.get("attention")):
+            request = task["attention"]
+            label = "Human decision" if pending_attention(task) else "Historical decision request"
+            lines.append(f"  {label} {request['id']} (blocking={request['blocking']}): {preview(request['question'], 400)}")
+    if not selected:
+        lines.append("No tasks in this selection. Use the host task list when available; this remains the persisted record.")
+    if not full_context:
+        cli = shlex.quote(str(Path(__file__).resolve().with_name("mary_workflow.py")))
+        lines.append(f"Read details/history: `python {cli} tasks --task-id <id>`; "
+                     "list current: `tasks --current --offset 0 --limit 20`; "
+                     "list history: `tasks --offset 0 --limit 20`; `--full-context` expands all tasks.")
+        if len(selected) > 20:
+            lines.append(f"{len(selected) - 20} more current tasks omitted from this preview; use the paged list, including pending decisions.")
     return "\n".join(lines)
 
 

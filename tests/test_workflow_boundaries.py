@@ -233,6 +233,96 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.rejected("start_execution", plan_digest=digest, confirmation="/mw-plan", source="/mw-plan")
         self.assertEqual(read_state(self.root)["phase"], "PLANNED")
 
+    def test_task_context_filters_old_bindings_and_queries_preserve_history(self):
+        state = self.freeze()
+        self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+        task = self.dispatch(objective="Current task " + "detail " * 100)
+        request = {"question": "Which delivery target is required?", "blocking": False}
+        self.act("update_worker_attention", task_id=task["task_id"], attempt_id=task["attempt_id"], human_action=request)
+        for index in range(80):
+            old = {**task, "task_id": f"history-{index:03}", "run_id": "old-run",
+                   "objective": "Historical details " + "old context " * 100}
+            folder = self.root / "tasks" / old["task_id"]
+            folder.mkdir()
+            (folder / "task.json").write_text(json.dumps(old))
+        for field, value in [("plan_revision", 0), ("cycle", "old-cycle"),
+                             ("execution_mode", "single_agent"), ("milestone_id", "old-milestone")]:
+            old = {**task, "task_id": f"other-{field}", field: value, "objective": "Unrelated binding"}
+            folder = self.root / "tasks" / old["task_id"]
+            folder.mkdir()
+            (folder / "task.json").write_text(json.dumps(old))
+        before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        compact = render_prompt(self.project, "mw-run")
+        full = render_prompt(self.project, "mw-run", full_context=True)
+        self.assertIn("Current selection: 1 tasks", compact)
+        self.assertIn("84", compact)
+        self.assertIn(request["question"], compact)
+        self.assertNotIn("Historical details", compact)
+        self.assertNotIn("Unrelated binding", compact)
+        self.assertLess(len(compact), len(full) / 5)
+        self.assertEqual(len(json.loads(self.cli("tasks").stdout)), 85)
+        self.assertEqual(len(json.loads(self.cli("tasks", "--current", "--limit", "20").stdout)), 1)
+        self.assertEqual(len(json.loads(self.cli("tasks", "--offset", "1", "--limit", "2").stdout)), 2)
+        detail = json.loads(self.cli("tasks", "--task-id", task["task_id"]).stdout)
+        self.assertEqual(detail["attention"]["question"], request["question"])
+        self.assertEqual(json.loads(self.cli("tasks", "--task-id", "history-000").stdout)["run_id"], "old-run")
+        self.assertEqual(before, {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+
+    def test_task_preview_bounds_current_records_without_hiding_pending_count(self):
+        from mw_codex import render_worker_progress
+        from mw_workers import _binding
+        state = self.freeze()
+        self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+        state = read_state(self.root)
+        for index in range(25):
+            task = {**_binding(state), "task_id": f"task-{index:02}", "milestone_id": "milestone-1",
+                    "role": "explorer", "status": "running", "objective": "x" * 2000}
+            if index == 24:
+                task["attention"] = {"id": "attention-1", "question": "Need a decision " + "q" * 990, "blocking": True}
+            folder = self.root / "tasks" / task["task_id"]
+            folder.mkdir(parents=True)
+            (folder / "task.json").write_text(json.dumps(task))
+        compact = render_worker_progress(self.root, state)
+        self.assertIn("Pending human decisions: 1", compact)
+        self.assertIn("task-24 /", compact)
+        self.assertIn("5 more current tasks omitted", compact)
+        self.assertEqual(compact.count(" / explorer / running / "), 20)
+        self.assertNotIn("x" * 161, compact)
+        self.assertNotIn("q" * 401, compact)
+        self.assertIn("q" * 990, render_worker_progress(self.root, state, full_context=True))
+        task["status"] = "cancelled"
+        (folder / "task.json").write_text(json.dumps(task))
+        compact = render_worker_progress(self.root, state)
+        self.assertIn("Pending human decisions: 0", compact)
+        self.assertNotIn("Human decision attention-1", compact)
+        self.assertIn("Historical decision request attention-1", render_worker_progress(self.root, state, full_context=True))
+
+    def test_attention_action_reaches_cli_and_stop_cannot_be_bypassed(self):
+        state = self.freeze()
+        self.act("start_execution", plan_digest=state["runtime_meta"]["frozen_plan_digest"], confirmation="/mw-run", source="/mw-run")
+        task = self.dispatch()
+        before = read_state(self.root)
+        payload = {"action": "update_worker_attention", "data": {
+            "task_id": task["task_id"], "attempt_id": task["attempt_id"],
+            "human_action": {"question": "Which output format is required?", "blocking": True}}}
+        response = self.cli("apply-action", "--json", json.dumps(payload))
+        self.assertIn("Which output format is required?", response.stdout)
+        after = read_state(self.root)
+        for field in ("phase", "status", "lease_run_id", "current_milestone_id"):
+            self.assertEqual(before[field], after[field])
+        self.assertEqual(before["runtime_meta"]["frozen_plan_digest"], after["runtime_meta"]["frozen_plan_digest"])
+        self.cli("stop")
+        response = self.cli("apply-action", "--json", json.dumps(payload), check=False)
+        self.assertNotEqual(response.returncode, 0)
+        self.assertEqual(read_state(self.root)["status"], "stopped")
+
+    def test_task_queries_reject_invalid_pagination_and_paths(self):
+        for args in [("--limit", "0"), ("--limit", "101"), ("--offset", "-1"), ("--task-id", ""),
+                     ("--task-id", "../state.yaml"), ("--task-id", "missing"),
+                     ("--task-id", "task-1", "--limit", "2")]:
+            with self.subTest(args=args):
+                self.assertNotEqual(self.cli("tasks", *args, check=False).returncode, 0)
+
     def test_frozen_plan_tampering_is_detected(self):
         state = self.freeze()
         digest = state["runtime_meta"]["frozen_plan_digest"]

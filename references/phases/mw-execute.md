@@ -17,4 +17,6 @@ Failure uses `record_error` with the actual command, error output, and return co
 
 Keep phase-local progress visible and report verification limits in the configured language. On stop, cease dispatch/acceptance, notify or interrupt workers, persist pause, and wait for writes to settle. Never delegate authorization, final acceptance, workflow state, Git writes, or external mutations. Inherit host configuration for every agent.
 
+Record concrete user decisions with `update_worker_attention` per the worker contract; deliver the question promptly and continue unaffected authorized work. Progress and failures alone do not request a decision. Resolve the matching request explicitly before acceptance. Read task details by ID rather than loading unrelated history.
+
 For a bound change, supply complete relevant requirement/scenario text and `covers` references with each task. Frozen proposal/spec/design/task or base-spec drift requires quiescing workers and a legal replan. Do not edit task checkboxes to claim progress: acceptance synchronizes them. A linked scenario is a review obligation, not evidence of success.

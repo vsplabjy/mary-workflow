@@ -60,6 +60,9 @@ PHASE_ACTIONS = {
     "DEBUGGING": {"enqueue_fix_task", "delegate_task", "submit_worker_result", "request_replan"},
     "FINISHED": set(),
 }
+for _phase_actions in PHASE_ACTIONS.values():
+    if "submit_worker_result" in _phase_actions:
+        _phase_actions.add("update_worker_attention")
 CORE_PROMPT_ORDER = {
     "mw-init.md": 0,
     "mw-plan.md": 1,
@@ -1027,6 +1030,11 @@ def _apply_action_locked(root: Path, payload: JsonObject) -> State:
             record = submit_result(root, working_state, data)
             working_state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
             state = working_state
+        elif action == "update_worker_attention":
+            from mw_workers import update_attention
+            record = update_attention(root, working_state, data)
+            working_state.setdefault("runtime_meta", {})["last_task_id"] = record["task_id"]
+            state = working_state
         elif action == "confirm_milestone":
             state = action_confirm_milestone(root, working_state, data)
         elif action == "request_replan":
@@ -1067,9 +1075,9 @@ def legal_actions_for_state(state: State) -> set[str]:
     if state.get("status") == "stopped":
         return recovery | ({"resume_execution", "request_replan"} if phase in {"EXECUTING", "REVIEWING", "DEBUGGING"} else set())
     if brief_status == "refresh_required" and phase in BRIEF_REFRESH_PHASES:
-        return recovery | {"submit_brief", "delegate_task", "submit_worker_result"}
+        return recovery | {"submit_brief", "delegate_task", "submit_worker_result", "update_worker_attention"}
     if phase == "PLANNING" and brief_status != "complete":
-        return recovery | {"submit_brief", "update_project", "delegate_task", "submit_worker_result"}
+        return recovery | {"submit_brief", "update_project", "delegate_task", "submit_worker_result", "update_worker_attention"}
     if phase == "FINISHED" and state.get("runtime_meta", {}).get("sdd") and not state["runtime_meta"].get("sdd_archive"):
         return recovery | {"request_replan"}
     return recovery | PHASE_ACTIONS.get(phase, set())
@@ -2818,10 +2826,10 @@ def cmd_apply_action(args: argparse.Namespace) -> int:
     if payload.get("action") == "submit_brief":
         print((root / BRIEF_FILE).read_text(encoding="utf-8"))
         return 0
-    if payload.get("action") in {"delegate_task", "submit_worker_result", "recover_validation"}:
-        from mw_workers import list_tasks
+    if payload.get("action") in {"delegate_task", "submit_worker_result", "update_worker_attention", "recover_validation"}:
+        from mw_workers import read_task
         task_id = state.get("runtime_meta", {}).get("last_task_id")
-        print(json.dumps(next(task for task in list_tasks(root) if task["task_id"] == task_id), ensure_ascii=False, indent=2))
+        print(json.dumps(read_task(root, task_id), ensure_ascii=False, indent=2))
     elif payload.get("action") == "run_validation":
         print(json.dumps(state.get("runtime_meta", {}).get("last_evidence", {}), ensure_ascii=False, indent=2))
     print_status(state, read_config(root).get("language", "zh"))
@@ -2953,8 +2961,21 @@ def ensure_validation_settled(root: Path) -> None:
 
 
 def cmd_tasks(args: argparse.Namespace) -> int:
-    from mw_workers import list_tasks
-    print(json.dumps(list_tasks(require_root(Path.cwd())), ensure_ascii=False, indent=2))
+    from mw_workers import WorkerError, current_tasks, list_tasks, read_task
+    root = require_root(Path.cwd())
+    if args.offset < 0 or (args.limit is not None and not 1 <= args.limit <= 100):
+        raise SystemExit("Task offset must be nonnegative; limit must be between 1 and 100.")
+    if args.task_id is not None and (args.offset or args.limit is not None):
+        raise SystemExit("Use --task-id alone; pagination applies to task lists.")
+    try:
+        if args.task_id is not None:
+            result = read_task(root, args.task_id)
+        else:
+            result = current_tasks(root, read_state(root)) if args.current else list_tasks(root)
+            result = result[args.offset:None if args.limit is None else args.offset + args.limit]
+    except WorkerError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -2991,7 +3012,13 @@ def build_parser() -> argparse.ArgumentParser:
         maintenance.add_argument("--apply", action="store_true")
         maintenance.add_argument("--workers-quiescent", action="store_true")
         maintenance.set_defaults(func=cmd_maintenance)
-    subparsers.add_parser("tasks", help="show persisted worker tasks as JSON").set_defaults(func=cmd_tasks)
+    tasks_parser = subparsers.add_parser("tasks", help="read worker records; filter current tasks or read one history by ID")
+    selection = tasks_parser.add_mutually_exclusive_group()
+    selection.add_argument("--current", action="store_true", help="only the current run, plan, cycle and milestone")
+    selection.add_argument("--task-id", help="read one full task record, including decision history")
+    tasks_parser.add_argument("--offset", type=int, default=0)
+    tasks_parser.add_argument("--limit", type=int, help="return at most 1-100 records; omitted preserves the full list")
+    tasks_parser.set_defaults(func=cmd_tasks)
 
     action_parser = subparsers.add_parser("apply-action", help="apply AI JSON action to state")
     action_source = action_parser.add_mutually_exclusive_group()

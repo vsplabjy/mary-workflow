@@ -100,6 +100,53 @@ Scope changes require the coordinator to follow the legal planning/revision
 path. Recording a deviation is not permission to proceed. A worker that needs
 another path stops the affected work and reports the reason and proposed change.
 
+## Human decisions and compact context
+
+Progress, failures and questions are separate facts. A concrete decision needed
+from the user is reported promptly to the coordinator, which records it through
+`update_worker_attention` using the current task/attempt identity:
+
+```json
+{
+  "action": "update_worker_attention",
+  "data": {
+    "task_id": "implementation-1",
+    "attempt_id": "<active attempt>",
+    "human_action": {"question": "Which of the two required output formats should be used?", "blocking": true}
+  }
+}
+```
+
+Ask only when a material decision cannot be inferred from existing authorization.
+The coordinator sends the concrete question using the host's structured question
+tool when available; a recorded request alone does not deliver it to the user.
+Continue unaffected authorized work while waiting. `blocking: true` prevents a
+ready result; `false` allows work and a ready result to proceed. Any pending
+decision must be resolved before milestone/review acceptance. This includes
+requests from every current role, including explorers and
+additional reviewers; cancelled or historical requests do not block acceptance.
+Recording or
+resolving a question never grants scope, changes task status, resumes a stopped
+run or replaces an explicit confirmation gate.
+
+The task's `attention` has a generated ID. Repeating the same question and
+blocking flag reuses it. A changed question replaces it and retains the prior
+request in `attention_history`. To resolve, use the same action with
+`human_action: null`, the exact `attention_id` and a concrete `resolution` from
+the user's answer or an established fact making the question unnecessary.
+Silence, routine progress, a failure or a ready result never clears a question.
+Do not infer a request from a failure report. Stopped, stale and cancelled tasks
+cannot create or resolve requests; reconcile them through the normal lifecycle.
+
+Default execution context previews at most 20 tasks from the current run, plan,
+cycle, execution mode and milestone, with pending decisions and failures first.
+Counts expose omitted records; objectives and questions have bounded previews.
+`--full-context` explicitly expands all task history. Read one full record with
+`mary_workflow.py tasks --task-id <id>`, or page a list with
+`tasks --current --offset 0 --limit 20` (omit `--current` for history). These reads
+never write, initialize, resume or accept work. Existing bare `tasks` retains its
+full-list behavior. Full evidence and decision history remain on disk.
+
 ## Parallel work and artifact baselines
 
 Milestones remain serial. Parallelize only independent work inside the current
