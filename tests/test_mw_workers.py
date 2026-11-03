@@ -22,7 +22,7 @@ from mw_runtime import workflow_lock  # noqa: E402
 from mw_workers import (  # noqa: E402
     WorkerError, accept_tasks, cancel_tasks, create_task, list_tasks,
     recover_validation, run_validation, submit_result, validate_relative_path,
-    verify_milestone_evidence, verify_review_evidence,
+    verify_milestone_evidence, verify_review_evidence, read_task, update_attention,
 )
 
 
@@ -76,6 +76,163 @@ class WorkerContractTests(unittest.TestCase):
     def verify(self, tasks=None):
         return verify_milestone_evidence(self.root, self.state, self.milestone,
                                          {"task_ids": tasks or ["implementation"]})
+
+    def attention(self, task, request, **extra):
+        return update_attention(self.root, self.state, {
+            "task_id": task["task_id"], "attempt_id": task["attempt_id"],
+            "human_action": request, **extra})
+
+    def resolve_attention(self, task):
+        request = read_task(self.root, task["task_id"])["attention"]
+        return self.attention(task, None, attention_id=request["id"], resolution="User selected the existing output format.")
+
+    def test_attention_is_independent_idempotent_and_requires_matching_resolution(self):
+        task = self.dispatch()
+        before = copy.deepcopy(self.state)
+        request = {"question": "Which output format is required?", "blocking": False}
+        with mock.patch("mw_workers._snapshot", side_effect=AssertionError("attention scanned product")):
+            first = self.attention(task, request)
+            repeated = self.attention(task, request)
+            self.assertEqual(first, repeated)
+            self.assertEqual(first["status"], "running")
+            self.assertEqual(len(first["attention_history"]), 1)
+            replaced = self.attention(task, {"question": "Which API version should be supported?", "blocking": True})
+            self.assertNotEqual(first["attention"]["id"], replaced["attention"]["id"])
+            with self.assertRaisesRegex(WorkerError, "attention_id"):
+                self.attention(task, None, attention_id=first["attention"]["id"], resolution="Answer to old question")
+            resolved = self.resolve_attention(task)
+        self.assertIsNone(resolved["attention"])
+        self.assertEqual([item["event"] for item in resolved["attention_history"]], ["requested", "requested", "resolved"])
+        self.assertEqual(resolved["status"], "running")
+        self.assertEqual(self.state, before)
+        self.assertEqual((self.project / "product.txt").read_text(), "existing user edit\n")
+
+    def test_attention_validation_does_not_write_invalid_requests(self):
+        task = self.dispatch()
+        path = self.root / "tasks" / task["task_id"] / "task.json"
+        before = path.read_bytes()
+        for request in [{}, {"question": " ", "blocking": False},
+                        {"question": "Continue?", "blocking": "false"},
+                        {"question": "x" * 1001, "blocking": False},
+                        {"question": "Continue?", "blocking": False, "scope": "all"}]:
+            with self.subTest(request=request), self.assertRaises(WorkerError):
+                self.attention(task, request)
+            self.assertEqual(path.read_bytes(), before)
+        with self.assertRaises(WorkerError):
+            update_attention(self.root, self.state, {"task_id": task["task_id"], "attempt_id": task["attempt_id"]})
+
+    def test_blocking_attention_requires_resolution_before_ready_without_invalidating_checks(self):
+        task = self.dispatch()
+        self.attention(task, {"question": "Which required format should be emitted?", "blocking": True})
+        (self.project / "product.txt").write_text("finished\n")
+        evidence = self.validate(task)
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            self.submit(task, evidence)
+        self.resolve_attention(task)
+        self.submit(task, evidence)
+        self.assertEqual(self.verify()["task_ids"], [task["task_id"]])
+
+    def test_nonblocking_attention_allows_work_and_ready_but_not_acceptance(self):
+        task, _ = self.finish_implementation()
+        result_path = self.root / "tasks" / task["task_id"] / "result.json"
+        before = result_path.read_bytes()
+        self.attention(task, {"question": "Which delivery destination should be used?", "blocking": False})
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            self.verify()
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            accept_tasks(self.root, self.state, [task["task_id"]])
+        self.resolve_attention(task)
+        self.assertEqual(self.verify()["task_ids"], [task["task_id"]])
+        self.assertEqual(result_path.read_bytes(), before)
+
+    def test_nonblocking_attention_allows_validation_and_ready_submission(self):
+        task = self.dispatch()
+        self.attention(task, {"question": "Which delivery destination should be used?", "blocking": False})
+        (self.project / "product.txt").write_text("finished\n")
+        evidence = self.validate(task)
+        submitted = self.submit(task, evidence)
+        self.assertEqual(submitted["status"], "ready_for_review")
+        self.assertIsNotNone(submitted["attention"])
+
+    def test_attention_rejects_stopped_stale_cancelled_and_wrong_attempt(self):
+        task = self.dispatch()
+        request = {"question": "Which output format is required?", "blocking": False}
+        original = copy.deepcopy(self.state)
+        for changed in [{"status": "stopped"}, {"lease_run_id": "new-run"},
+                        {"cycle": "C1"}, {"current_milestone_id": "milestone-2"},
+                        {"runtime_meta": {"plan_revision": 2, "execution_mode": "delegated"}}]:
+            self.state = {**copy.deepcopy(original), **changed}
+            with self.subTest(changed=changed), self.assertRaises(WorkerError):
+                self.attention(task, request)
+        self.state = original
+        with self.assertRaisesRegex(WorkerError, "attempt_id"):
+            self.attention(task, request, attempt_id="old-attempt")
+        cancel_tasks(self.root)
+        with self.assertRaisesRegex(WorkerError, "cancelled"):
+            self.attention(task, request)
+
+    def test_failure_report_does_not_create_a_human_question(self):
+        task = self.dispatch()
+        self.submit(task, status="failed", files_changed=[], blockers=["Network unavailable; checked local cache"])
+        self.assertFalse(read_task(self.root, task["task_id"]).get("attention"))
+
+    def test_attention_resolution_is_explicit_and_repeatable(self):
+        task = self.dispatch()
+        current = self.attention(task, {"question": "Which API version is required?", "blocking": False})
+        request_id = current["attention"]["id"]
+        with self.assertRaisesRegex(WorkerError, "resolution"):
+            self.attention(task, None, attention_id=request_id)
+        resolved = self.resolve_attention(task)
+        repeated = self.attention(task, None, attention_id=request_id, resolution="User selected the existing output format.")
+        self.assertEqual(resolved, repeated)
+        with self.assertRaises(WorkerError):
+            self.attention(task, None, attention_id=request_id, resolution="A conflicting later answer")
+
+    def test_attention_arriving_during_validation_is_preserved(self):
+        self.milestone["acceptance"] = [python_command("import time; time.sleep(.3)")]
+        task = self.dispatch()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self.validate, task)
+            deadline = time.monotonic() + 5
+            while not read_task(self.root, task["task_id"]).get("active_validation") and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(read_task(self.root, task["task_id"]).get("active_validation"))
+            with workflow_lock(self.root):
+                request = self.attention(task, {"question": "Which delivery destination is required?", "blocking": False})
+            self.assertEqual(future.result(timeout=5)["result"], "passed")
+        self.assertEqual(read_task(self.root, task["task_id"])["attention"], request["attention"])
+
+    def test_late_verifier_question_prevents_acceptance_of_passed_review(self):
+        task, _ = self.finish_implementation()
+        self.state["phase"] = "REVIEWING"
+        reviewer = self.dispatch("review", role="verifier", reviews_task_ids=[task["task_id"]])
+        self.submit(reviewer, files_changed=[], decision="passed", findings=[])
+        self.attention(reviewer, {"question": "Which required compatibility target applies?", "blocking": False})
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            verify_review_evidence(self.root, self.state, self.milestone, {"verifier_task_id": reviewer["task_id"]})
+        self.resolve_attention(reviewer)
+        self.assertTrue(verify_review_evidence(self.root, self.state, self.milestone, {"verifier_task_id": reviewer["task_id"]})["independent_review"])
+
+    def test_pending_explorer_question_prevents_milestone_completion(self):
+        task, _ = self.finish_implementation()
+        explorer = self.dispatch("context", role="explorer", write_scope=[], deliverables=[])
+        self.attention(explorer, {"question": "Which required compatibility target applies?", "blocking": False})
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            self.verify()
+        self.resolve_attention(explorer)
+        self.assertEqual(self.verify()["task_ids"], [task["task_id"]])
+
+    def test_pending_other_reviewer_question_prevents_acceptance_until_cancelled(self):
+        task, _ = self.finish_implementation()
+        self.state["phase"] = "REVIEWING"
+        reviewer = self.dispatch("review", role="verifier", reviews_task_ids=[task["task_id"]])
+        self.submit(reviewer, files_changed=[], decision="passed", findings=[])
+        other = self.dispatch("second-review", role="verifier", reviews_task_ids=[task["task_id"]])
+        self.attention(other, {"question": "Which required compatibility target applies?", "blocking": False})
+        with self.assertRaisesRegex(WorkerError, "pending human attention"):
+            verify_review_evidence(self.root, self.state, self.milestone, {"verifier_task_id": reviewer["task_id"]})
+        self.assertEqual(cancel_tasks(self.root, include_ready=False), [other["task_id"]])
+        self.assertTrue(verify_review_evidence(self.root, self.state, self.milestone, {"verifier_task_id": reviewer["task_id"]})["independent_review"])
 
     def test_worker_receipt_marks_existing_module_intro_stale(self):
         from mw_knowledge import DETAILS, update, load

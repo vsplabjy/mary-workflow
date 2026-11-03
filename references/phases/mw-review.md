@@ -8,6 +8,8 @@ Protect product and workflow control files. A verifier may run appropriate valid
 
 Submit the verifier result with `submit_worker_result`. Keep execution, review, and retry evidence separately. The main agent checks the verifier's evidence and decides whether to accept, return to legal planning, or record an error. `update_state` and product edits are forbidden in `REVIEWING`; diagnosis/repair follows the legal state route.
 
+Use `update_worker_attention` for a concrete missing human decision; deliver it promptly and explicitly resolve its matching ID before accepting. A passed check or ready report does not resolve a pending question. Use task IDs to recall full evidence and decision history as needed.
+
 For acceptance use the current verifier task ID:
 
 ```json

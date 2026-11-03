@@ -43,21 +43,26 @@ Optional milestone `validation_inputs` is a nonempty relative-file list, preserv
 
 | Phase | Legal actions |
 | --- | --- |
-| PLANNING, incomplete brief | `submit_brief`, `update_project`, `delegate_task`, `submit_worker_result` |
+| PLANNING, incomplete brief | `submit_brief`, `update_project`, `delegate_task`, `submit_worker_result`, `update_worker_attention` |
 | PLANNING, complete brief | Above plus `update_interview`, `bind_change`, `update_state` |
 | PLANNED | `reopen_plan`, `start_execution` |
-| EXECUTING | `delegate_task`, `run_validation`, `submit_worker_result`, `confirm_milestone`, `mark_task_done`, `record_error`, `request_replan` |
-| REVIEWING | `delegate_task`, `run_validation`, `submit_worker_result`, `set_phase`, `record_error`, `request_replan` |
-| DEBUGGING | `delegate_task` for diagnosis, `submit_worker_result`, `enqueue_fix_task`, `request_replan` |
+| EXECUTING | `delegate_task`, `run_validation`, `submit_worker_result`, `update_worker_attention`, `confirm_milestone`, `mark_task_done`, `record_error`, `request_replan` |
+| REVIEWING | `delegate_task`, `run_validation`, `submit_worker_result`, `update_worker_attention`, `set_phase`, `record_error`, `request_replan` |
+| DEBUGGING | `delegate_task` for diagnosis, `submit_worker_result`, `update_worker_attention`, `enqueue_fix_task`, `request_replan` |
 | FINISHED | No execution actions; bound, not-yet-archived changes may use `request_replan` to renew evidence |
 
 At a stable boundary with `refresh_required`, refresh the brief before ordinary
-actions; explorer dispatch and result recording remain available for that refresh.
+actions; explorer dispatch, result and attention recording remain available for that refresh.
 `recover_validation` is a diagnostic action available in every phase, including
 paused state. It never starts product work or accepts a result. Stopped active runs
 also permit `resume_execution` or `request_replan`, not new work. REVIEWING still
 forbids `update_state`. DEBUGGING does not edit product code;
 a focused repair is queued and implemented after returning to EXECUTING.
+
+`update_worker_attention` records a concrete human decision separately from task
+progress. Its payload, ID matching, explicit resolution and acceptance rules are
+defined in [the worker contract](subagent-contract.md#human-decisions-and-compact-context).
+It never changes authorization, phase or task status and is rejected while stopped.
 
 Rejected envelopes increment audit counters, retain the phase/plan, and report a
 structured `last_rejection` with reason, allowed actions, and a suggested next

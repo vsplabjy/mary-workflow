@@ -155,6 +155,65 @@ def list_tasks(root: Path) -> list[Json]:
             if path.is_dir() and (path / "task.json").exists()]
 
 
+def read_task(root: Path, task_id: str) -> Json:
+    """Read one task, including its history, without loading unrelated records."""
+    return _read_json(_task_dir(root, task_id) / "task.json")
+
+
+def current_tasks(root: Path, state: Json, *, tasks: list[Json] | None = None) -> list[Json]:
+    """Select the current dispatch binding and milestone; never mutate history."""
+    binding = _binding(state)
+    return [task for task in (list_tasks(root) if tasks is None else tasks)
+            if all(task.get(key) == value for key, value in binding.items())
+            and task.get("milestone_id", "") == (state.get("current_milestone_id") or "")]
+
+
+def update_attention(root: Path, state: Json, data: Json) -> Json:
+    """Record a human decision request independently of progress or result evidence."""
+    task = _current(root, state, data, statuses={"running", "ready_for_review", "blocked", "failed"})
+    if "human_action" not in data:
+        raise WorkerError("Specify human_action explicitly; use null to resolve a request.")
+    request = data["human_action"]
+    previous = task.get("attention")
+    history = task.get("attention_history", [])
+    if request is None:
+        attention_id = data.get("attention_id")
+        resolution = data.get("resolution")
+        if not isinstance(resolution, str) or not resolution.strip() or len(resolution) > 2000:
+            raise WorkerError("Resolving attention requires a concrete resolution of at most 2000 characters.")
+        if not previous:
+            if (history and history[-1].get("event") == "resolved" and history[-1]["id"] == attention_id
+                    and history[-1]["resolution"] == resolution.strip()):
+                return task
+            raise WorkerError("No matching pending attention request to resolve.")
+        if attention_id != previous["id"]:
+            raise WorkerError("attention_id must match the pending request; read the task again.")
+        event = {"event": "resolved", "id": attention_id, "resolution": resolution.strip(), "at": _now()}
+        task["attention"] = None
+    else:
+        if (not isinstance(request, dict) or set(request) != {"question", "blocking"}
+                or not isinstance(request.get("question"), str) or not request["question"].strip()
+                or len(request["question"]) > 1000 or not isinstance(request.get("blocking"), bool)):
+            raise WorkerError("human_action requires one question (at most 1000 characters) and a boolean blocking.")
+        question = request["question"].strip()
+        if previous and previous["question"] == question and previous["blocking"] == request["blocking"]:
+            return task
+        task["attention"] = {"id": "attention-" + secrets.token_hex(6), "question": question,
+                             "blocking": request["blocking"], "created_at": _now()}
+        event = {"event": "requested", **task["attention"]}
+        if previous:
+            event["supersedes"] = previous["id"]
+    task["attention_history"] = history + [event]
+    _save(root, task)
+    return task
+
+
+def _require_resolved_attention(task: Json, *, blocking_only: bool = False) -> None:
+    request = task.get("attention")
+    if request and (not blocking_only or request["blocking"]):
+        raise WorkerError(f"Task {task['task_id']} has pending human attention {request['id']}; resolve it explicitly.")
+
+
 def _revision(state: Json) -> object:
     return state.get("runtime_meta", {}).get("plan_revision", state.get("plan_revision", 0))
 
@@ -730,6 +789,7 @@ def submit_result(root: Path, state: Json, data: Json) -> Json:
     issues: list[str] = []
     observed_deviations: list[str] = []
     if status == "ready_for_review":
+        _require_resolved_attention(task, blocking_only=True)
         actual = _scope_check(root, state, task, snapshot)
         declared = _paths(root.parent, data.get("files_changed", []), "files_changed")
         if actual != declared:
@@ -827,11 +887,13 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
         raise WorkerError("Milestone completion requires a nonempty unique task_ids list.")
     if milestone.get("id") != state.get("current_milestone_id"):
         raise WorkerError("Only the current milestone can be completed.")
+    bound_tasks = current_tasks(root, state)
+    for task in bound_tasks:
+        if task.get("status") in {"running", "ready_for_review", "blocked", "failed"}:
+            _require_resolved_attention(task)
     snapshot = _snapshot(root.parent, _implementation_extra(root, state, milestone["id"]))
     digest = _digest(snapshot)
-    peers = [task for task in list_tasks(root)
-             if task["role"] == "implementer" and task["milestone_id"] == milestone["id"]
-             and all(task.get(key) == value for key, value in _binding(state).items())]
+    peers = [task for task in bound_tasks if task["role"] == "implementer"]
     if any(task["status"] == "running" for task in peers):
         raise WorkerError("Implementation workers are still running; settle every writer before completion.")
     unreviewed = {task["task_id"] for task in peers if task["status"] == "ready_for_review"} - set(task_ids)
@@ -843,6 +905,7 @@ def verify_milestone_evidence(root: Path, state: Json, milestone: Json, data: Js
     for task_id in task_ids:
         task = _read_json(_task_dir(root, task_id) / "task.json")
         _current(root, state, task, statuses={"ready_for_review", "accepted"})
+        _require_resolved_attention(task)
         if task["role"] != "implementer" or task["milestone_id"] != milestone["id"]:
             raise WorkerError("Milestone evidence must come from its implementer tasks.")
         _scope_check(root, state, task, snapshot)
@@ -872,6 +935,7 @@ def verify_review_evidence(root: Path, state: Json, milestone: Json, data: Json)
     """Require a current, product-preserving review in the recorded execution mode."""
     task = _read_json(_task_dir(root, data.get("verifier_task_id")) / "task.json")
     _current(root, state, task, statuses={"ready_for_review", "accepted"})
+    _require_resolved_attention(task)
     if task["role"] != "verifier" or task["milestone_id"] != milestone.get("id"):
         raise WorkerError("Review requires a verifier task for the current milestone.")
     summary = verify_milestone_evidence(root, state, milestone, {"task_ids": task["reviews_task_ids"]})
@@ -903,6 +967,7 @@ def accept_tasks(root: Path, state: Json, task_ids: list[str]) -> None:
     for task_id in task_ids:
         task = _read_json(_task_dir(root, task_id) / "task.json")
         _current(root, state, task, statuses={"ready_for_review", "accepted"})
+        _require_resolved_attention(task)
         tasks.append(task)
     for task in tasks:
         if task["status"] == "accepted":
