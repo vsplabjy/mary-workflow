@@ -1,107 +1,94 @@
 # Mary Workflow
 
-Mary Workflow 3.0 是一套与模型无关的 agent 工作流，适用于代码开发、研究实验、课程学习、论文阅读和文档操作。按任务选择直接实现、快速实验或正式里程碑。主线复用上下文，必要时委派独立工作；正式验收运行时核对计划、范围和证据。
+Mary Workflow 3.0 是一套与模型无关的 agent 工作流，用于代码开发、研究实验、课程学习和论文阅读。它把项目上下文、执行记录与验收证据保存在项目内，方便新会话接手；按任务选择直接修改、快速实验或正式里程碑，不要求每件小事都走完整流程。
 
-工作流不指定模型、供应商、推理档位、上下文大小或服务等级。主线和子代理继承用户的宿主设置，不根据模型名称选择流程，也不修改全局配置或 shell 启动文件。
+**工作流管理任务，不管理模型。** 主线与子代理继承宿主设置，不修改模型、供应商、推理档位、全局配置或 shell 启动文件。程序退出、测试通过、视觉质量和科学验收分别报告。
 
-## 快速实验与直接修改
+[安装与运行](#安装与运行) · [选择入口](#选择入口) · [常见操作](#常见操作) · [命令速查](#命令速查) · [维护与升级](#维护与升级) · [详细契约](#详细契约)
 
-方法已确定、要求“立即跑实验”时，使用 `/mw-experiment`；局部修复、文档或配置修改使用 `/mw-quick`。这两个入口无需全项目 init、brief 覆盖或 SDD，也不要求先派实现者和审查者。已有正式任务的停止、范围和验收绑定继续有效，不能借快速入口绕过。
+## 安装与运行
+
+需要 **Python 3.10+、Git**，以及能读取技能文件、执行本地工具的 agent 宿主。核心运行时只使用 Python 标准库；后台实验 runner 另需 Linux `/proc`。论文编译、浏览器核验和 Notion 操作需要各自的实际工具，不包含在核心依赖中。
+
+以 Codex 的技能目录为例：
+
+```bash
+mkdir -p ~/.codex/skills
+git clone https://github.com/vsplabjy/mary-workflow.git \
+  ~/.codex/skills/mary-workflow
+```
+
+在**目标项目根目录**打开宿主会话。宿主加载技能后，可以使用下方的 `/mw-*` 入口；斜杠命令的识别取决于宿主集成，克隆仓库不等于为所有宿主注册命令。
+
+OpenCode 或其他未注册这些入口的宿主，也可以通过普通请求明确加载技能：
+
+```text
+先读取 /实际安装路径/mary-workflow/SKILL.md，按其中的路由处理当前项目。
+这次只修复配置读取错误，使用 quick 入口并运行相关检查。
+```
+
+后续 shell 示例用 `MARY_WORKFLOW` 指向安装目录；在当前终端设置即可，不需要修改 shell 配置：
+
+```bash
+export MARY_WORKFLOW="$HOME/.codex/skills/mary-workflow"
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" --help
+```
+
+## 选择入口
+
+| 当前任务 | 入口 | 执行边界 |
+| --- | --- | --- |
+| 新对话接手已有项目 | `/mw-context` | 先读总览、相关模块和接手记录；不自动恢复运行 |
+| 局部代码、文档或配置修改 | `/mw-quick` | 直接修改，运行相关检查；无需全项目 init 或 SDD |
+| 方法、配置已确定，立即跑实验 | `/mw-experiment` | 保存命令、日志和退出状态；无需先冻结里程碑 |
+| 跨模块变更、长期规格或正式验收 | `/mw-init` → `/mw-plan` → `/mw-run` | 项目理解、冻结计划、执行、验证与审查 |
+| 课程笔记、复习、论文、中文润色、Notion | 对应内容入口 | 默认独立执行，不为了内容任务初始化正式流程 |
+
+已有正式任务的范围、停止状态和验收绑定继续有效，不能借快速入口绕过。小任务或紧耦合工作优先单代理；有独立切片、上下文隔离收益或明确独立审查要求时再委派。
+
+## 常见操作
+
+### 接手项目与直接修改
+
+```text
+/mw-context
+/mw-quick 修复配置读取错误，只运行相关检查
+```
+
+项目记录位于 `.mary-workflow/knowledge/`：`overview.md` 描述总览，`modules/<id>.md` 描述模块，`handoff.md` 保存进度与阻塞，`index.json` 维护归属、依赖和过期标记。也可直接读取：
+
+```bash
+python "$MARY_WORKFLOW/scripts/mw_knowledge.py" read
+python "$MARY_WORKFLOW/scripts/mw_knowledge.py" read --module <module-id>
+```
+
+读取不初始化项目、不写状态、不恢复实验。直接修改无需事先登记；交付时若项目已有这些记录，就用 `mw_knowledge.py changed` 登记实际改动路径并更新 handoff，没来得及更新的介绍保留 `stale`，尚未归属的文件保留 `unmapped_files`。记录依赖 agent 登记变更，不能自动发现所有外部编辑，也不证明语义理解。[上下文维护契约](references/knowledge-contract.md)
+
+### 运行实验
 
 ```text
 /mw-experiment 按刚才确定的配置立即运行，使用已分配的 GPU，预算一小时
 /mw-experiment status <run-id>
 /mw-experiment stop <run-id>
 /mw-experiment compare <run-a> <run-b>
-/mw-quick 修复配置读取错误，只运行相关检查
 ```
 
-本地 Linux 脚本可直接运行，`--` 后为字面 argv：
+Linux 下可以直接调用 runner，`--` 后是字面 argv，不隐式解析 shell 语法：
 
 ```bash
-python /path/to/mary-workflow/scripts/mw_experiment.py run \
+python "$MARY_WORKFLOW/scripts/mw_experiment.py" run \
   --config configs/train.yaml --resource GPU-actual-uuid --timeout 3600 \
   -- python train.py --config configs/train.yaml
 ```
 
-启动不扫描仓库、不计算数据集或 checkpoint 哈希、不运行全项目测试。保存命令、小配置原始副本、Git HEAD 引用、日志、资源声明和退出状态。后台 supervisor 负责进程；会话结束不代表实验完成。`--resource` 只协调同用户同主机的 Mary 运行，不分配 GPU 或发现外部作业；CUDA 设备和训练输出路径仍由实际命令指定。输出目录必须是新目录，runner 提供 `MARY_OUTPUT_DIR` 环境变量。
+- 启动保存命令、小配置原始副本、Git HEAD 引用、日志、资源声明和退出状态；不预先扫描仓库、计算数据集/checkpoint 哈希或运行全项目测试。
+- 后台 supervisor 管理本地前台子进程，会话结束不代表实验完成。远端提交或自行 daemonize 的程序需要原生调度器，不能靠本地 PID 证明已经结束。
+- `--resource` 只协调同用户、同主机的 Mary 运行，不分配 GPU，也不发现外部作业。CUDA 设备由实际命令指定。输出目录必须是新目录；runner 提供 `MARY_OUTPUT_DIR`，训练程序仍需实际使用它。
+- `compare` 读取 `<output-dir>/metrics.json` 或启动时 `--metrics-file` 指定的有限数值；`audit <run-id> --artifact <file>` 只对已退出运行的指定产物做事后完整性记录。
 
-`compare` 按需读取 `<output-dir>/metrics.json` 的有限数值，或启动时 `--metrics-file` 指定的位置。进程退出码为 0 不代表结果有效或科学验收。默认来源记录为 `partial`、审阅为 `unreviewed`；未追踪脏工作区和全部数据依赖，不能承诺精确复现。需要时使用 `audit <run-id> --artifact <file>` 对已退出运行的指定产物计算哈希，它只证明审计时的文件内容。
+退出码 `0` 只表示进程正常退出。默认来源记录为 `partial`、审阅为 `unreviewed`，不承诺精确复现、质量或科学结论。旧项目可显式调用安装位置的实验脚本，不因此升级或恢复原正式任务。[实验技能](skills/experiment/SKILL.md) · [实验契约](references/experiment-contract.md)
 
-旧项目保持固定版本；可以显式调用安装位置的实验脚本启动独立新实验。新建或显式升级的 bundle 携带实验能力，不静默迁移活跃任务。详见 [实验技能](skills/experiment/SKILL.md)、[运行合同与设计来源](references/experiment-contract.md)。
-
-## HTML 可视化汇报
-
-已完成且有独立交付物的工作包，提供简短 HTML 结果卡；相关 worker 结果可以合在一次交付中，不为每次工具调用、日常进度或只读查询各建网页。一轮实验结束（包括失败、停止）、里程碑完成或用户明确要求时，聚合展示结果。HTML 只为人易读，不是下一位 agent 的交接前置；原任务结果、证据和恢复机制不变。只读讨论和明确禁止写文件的情形除外。报告不等于验收，不为填页面重跑实验；文件无法生成时在聊天里如实说明结果与限制。
-
-```text
-.mary-workflow/reports/
-  index.html                           # 汇报目录，最新优先
-  <YYYYMMDDTHHMMSSZ>-<task-or-run-id>/
-    index.html                         # 本次汇报，浏览器直接打开
-    assets/                            # 图片、缩略图、短视频等展示资源
-```
-
-第一屏先给结论和真实效果，再按需展示前后对比、关键指标、验证结果、证据与复现命令。验证标为「通过、失败、运行中、未运行」，区分程序退出、工程验证、视觉质量和科学验收。没有基线或视觉产物就说明，不伪造结果，也不为了填报告重新跑实验。
-
-HTML 默认中文，离线打开，不需要启动服务、安装前端依赖或访问 CDN；核心内容直接写入页面，展示资源用相对路径。使用缩略图与精选结果，不把数据集、checkpoint、完整日志复制进报告。固定纯文字卡片复用实际验证过的模板布局，同时逐份检查链接和状态；新布局、图像/媒体对比、重要报告仍检查实际浏览器表面。不能把模板检查说成每份内容都做过视觉核验，工具不可用时明确限制。
-
-初始化时 `/.mary-workflow/` 已整体覆盖 HTML、assets、实验记录与输出、配置、哈希、runtime 和归档；其他 workflow 自有项目目录同样自动忽略，详见下方初始化说明。目录按需创建，但忽略规则在初始化时先安装。历史汇报包保留，cycle 不删除总入口或含 regular `index.html` 的非 cycle 汇报目录；`reports/C0/` 等名称保留给正式收据，仍按周期归档。新建/显式升级的 bundle 携带规范；不静默升级旧项目。完整要求见 [汇报契约](references/report-contract.md)。
-
-优先使用固定渲染脚本，而不是让每个 worker 重写 HTML/CSS 或总索引：
-
-```bash
-python /path/to/mary-workflow/scripts/mw_report.py \
-  --project . --input .mary-workflow/analysis/report.json --name task-result
-```
-
-`report.json` 最少只需 `title` 和 `summary`。可用 `tasks` 引用已有 worker `result.json` 或原结果字段，用 `verification` 引用已有执行回执，再按需添加实际 `metrics`、精选 `artifacts` 与 `next_steps`。脚本只做人类展示，不执行测试、浏览器或任务状态转换；状态字符串不能冒充执行证据，命令记录通过也不等于当前工程或科学验收。输出具体报告路径，保留历史包与索引。新建/显式升级的 bundle 携带脚本，旧项目不会自动升级。输入格式与证据边界见[汇报契约](references/report-contract.md#fixed-rendering-not-another-workflow)。
-
-## 新对话接手与模块说明
-
-使用 `/mw-context`，或让 Mary 在新对话开始时先读取项目内的记录：
-
-```text
-.mary-workflow/knowledge/
-  index.json          # 维护源：模块归属、依赖、版本和过期标记
-  overview.md         # 项目用途、架构、能力边界、模块索引
-  modules/<id>.md     # 职责、入口、输入输出、约束、使用/验证方法、已知缺口
-  handoff.md          # 当前进度、决策原因、结果位置、阻塞、停止状态和下一步
-```
-
-默认先读总览、相关模块介绍和接手说明，修改或解决具体疑点时再读对应代码。`python /path/to/mary-workflow/scripts/mw_knowledge.py read` 直接从维护源输出总览和接手说明，`read --module <id>` 按需增加模块详情；读取不要求 init、不写状态、不恢复实验。
-
-每次修改按明确文件路径更新对应介绍，来不及就保留 `stale`；所属模块及依赖它的模块会被标记，新文件尚未归属时显示 `unmapped_files`。正式 worker 提交复用已有变更列表自动标记；直接修改由 agent 在编辑前登记路径、完成后补记额外变更。新建或更新介绍使用带版本的 `update`，防止旧回复清除新变更标记。已有 brief 可以导入，但简短摘要先标为 `incomplete`，不冒充完整说明。
-
-这套记录不遍历源码、不新增哈希校验、不要求重写未改模块，也不阻塞已经确定的实验。它依赖 agent 登记直接修改，不能自动发现外部未报告的编辑；本地记录默认忽略，不会自动传到其他机器。旧项目不自动升级。[维护命令与格式](references/knowledge-contract.md)。
-
-## 正式流程的核心行为
-
-以下阶段与冻结规则适用于正式 milestone 流程；快速实验和直接修改采用上面的独立入口。
-
-- **上下文复用**：保留已有探索成果，阶段边界核对状态与变化；项目说明和机器清单保存在项目内，不要求声明丢弃记忆。
-- **分级理解**：小项目直接阅读，中项目形成模块摘要，大项目可由 explorer 并行分片。运行时核算清单覆盖，无需为每个文件填写重复的用途、导出和消费者字段。
-- **必要访谈**：只问影响范围、验收或重要选择的问题，信息充分时不额外提问。里程碑按可独立验收边界划分，不限制文件数和里程碑数。
-- **明确执行起点**：计划冻结后，用户明确发出 `/mw-run` 或“通过，直接修改”等执行指令即开始。记录计划哈希、确认来源和运行身份，不搬运一次性口令，也不重复请求已给出的授权。
-- **快速选择执行模式**：任务开始前，主线根据请求、已有上下文、耦合程度和验收要求做简短判断；小任务或紧耦合工作优先单代理，有独立切片、上下文隔离收益或明确独立审查要求时选择多代理。不另做难度评分、全库扫描或为选模式启动 agent；只说明一次选择和简短理由。正式流程在启动时显式记录 `execution_mode`，恢复时保留。
-- **按模式审查**：`delegated` 使用不同实际 agent 身份的 verifier；`single_agent` 由同一 agent 单独复核，如实记录 `same_agent`、`independent_review: false`，不谎称宿主没有 workers。两种模式都保留验证与审查证据，由主线完成验收；明确要求独立审查时不能静默降级为自审。
-- **可恢复执行**：停止时中断或通知 worker，保留现场；恢复时核对残留改动和计划版本，拒绝旧任务的迟到或重复结果。
-- **聚焦修复**：DEBUGGING 只诊断并排入修复任务，回到 EXECUTING 才修改产品文件；保留失败、执行、审查和重试证据。
-- **增量归档**：cycle 检测文件变化，更新受影响认知并列出仍有效条目，合并成完整项目说明后归档。
-
-文件哈希和动作白名单用于发现正常流程中的误操作，不能阻止拥有任意 shell 权限的 agent 绕开脚本。所谓只读 worker 也需要宿主实际权限支持；提示词本身不是文件系统隔离。
-
-## 安装与运行
-
-需要 Python 3.10 或更高版本、Git，以及能够读取技能和执行本地工具的 agent 宿主。核心运行时不依赖额外 Python 包。以下是 Codex 的安装示例；其他宿主可以使用相同脚本和契约，按实际工具能力适配。
-
-```bash
-mkdir -p ~/.codex/skills
-git clone https://github.com/reversevertin1999/mary-workflow.git \
-  ~/.codex/skills/mary-workflow
-```
-
-在目标项目根目录开启宿主会话，依次使用：
+### 执行正式变更
 
 ```text
 /mw-init
@@ -109,112 +96,106 @@ git clone https://github.com/reversevertin1999/mary-workflow.git \
 /mw-run
 ```
 
-`/mw-init` 建立项目说明；`/mw-plan` 保存真实需求、必要澄清、交付路径和验收条件并冻结计划；`/mw-run` 确认并执行这个计划。讨论中的“可以/对”必须按其回答的问题理解，不能把对方案的认可偷换成开始执行的授权。用户已有明确执行授权时，不再机械追问。
+`/mw-init` 建立或刷新项目说明；`/mw-plan` 记录需求、必要澄清、交付路径和验收条件并冻结计划；`/mw-run` 开始冻结计划或恢复暂停的执行。明确的执行指令就是授权，不重复索要确认；对讨论方案的认可不能被当成执行授权。
 
-初始化及独立论文创建会自动补齐项目根目录 `.gitignore`：默认忽略 `/.mary-workflow/`、`/.mary-workflow-worker/`、`/.mary-research/`、`/.vspi/`。初始化在生成项目记录前安装这些规则，覆盖 HTML 汇报及其 assets、实验记录与本地输出、哈希清单、生成配置、固定运行时、归档和 worker 临时目录；无需为每个子目录重复加规则。其他路径的流程记录应在生成前添加精确忽略项。已有规则和 Git 索引保持原样，因此已跟踪文件仍会被跟踪。不得使用宽泛的 `reports/`、`outputs/` 规则误忽略项目源码、正式交付物或手写 OpenSpec 规范。
+正式运行保存计划身份和 `execution_mode`：
 
-项目根目录的 `.maryignore` 与 `.mary-workflow/config.yaml` 中 `init.ignore` 控制扫描排除项，例如：
+- `single_agent`：同一 agent 实现后单独复核，记录 `same_agent`、`independent_review: false`。
+- `delegated`：worker 按任务身份、允许写入范围和验收条件交付 `ready_for_review`，由不同实际身份的 verifier 审查；主线负责控制状态、验收、Git 和已授权外部操作。
 
-```gitignore
-data/**
-*.log
+两种模式都保留真实验证与审查证据；明确要求独立审查时不能降级为自审。里程碑串行，当前里程碑内可委派独立任务；还要考虑共享接口、端口、数据库和构建输出，不能只看文件是否相交。
+
+`/mw-stop` 协调暂停并保存现场；`/mw-debug` 诊断并排入修复，回到执行阶段再修改产品；`/mw-cycle` 增量刷新项目认知并归档。旧任务的迟到结果或产物修改前的验证，不能继续充当当前验收依据。[状态契约](references/state-contract.md) · [worker 契约](references/subagent-contract.md)
+
+需要 SDD 时，已接受规格放在 `openspec/specs/`，当前变更放在 `openspec/changes/<change-id>/`。`tasks.md` 是人工维护的任务源，`mary-task` JSON 绑定交付、验收及场景；只读检查使用：
+
+```bash
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" sdd-check <change-id>
 ```
 
-排除规则会影响所声称的覆盖范围；覆盖记录不能证明语义理解。缺少数据、GPU 或工具时，如实保留未运行的验证，不能以 CPU 或格式检查冒充真实实验。
+主线随后按契约绑定并冻结计划，验收通过后由运行时回写进度。已知验证依赖可用 `validation_inputs` 声明代码、测试、配置和 fixture；不能事后缩小范围以维持旧证据。Mary 使用 OpenSpec 风格布局，不宣称完整 OpenSpec CLI 兼容。[SDD 契约](references/sdd-contract.md)
 
-## 命令
+## 命令速查
 
 | 命令 | 用途 |
 | --- | --- |
-| `/mw-experiment [请求]` | 快速启动、状态、停止、比较和显式审计实验 |
-| `/mw-quick [请求]` | 单 agent 直接完成局部修改与相关检查 |
+| `/mw-context` | 读取项目总览、模块说明与接手记录 |
+| `/mw-quick [请求]` | 直接完成局部修改与相关检查 |
+| `/mw-experiment [请求]` | 实验启动、状态、停止、比较和显式审计 |
 | `/mw-init` | 初始化、理解或刷新当前项目；保留已有固定版本 |
-| `/mw-plan [需求]` | 必要澄清与可验收计划，规划阶段不执行产品工作 |
+| `/mw-plan [需求]` | 澄清必要问题并冻结可验收计划，不执行产品工作 |
 | `/mw-run` | 开始冻结计划或恢复暂停的运行 |
-| `/mw-status` | 查看阶段、worker、证据与阻塞，不修改状态 |
-| `/mw-stop` | 协调暂停、保留部分产物与恢复记录 |
-| `/mw-debug` | 诊断当前错误并排入聚焦修复 |
+| `/mw-status` | 只读查看阶段、worker、证据和阻塞 |
+| `/mw-stop` | 协调暂停，保留部分产物和恢复记录 |
+| `/mw-debug` | 诊断错误并排入聚焦修复 |
 | `/mw-cycle` | 刷新项目认知并归档当前周期 |
-| `/mw-learn` | Lecture 学习、slides、原始录音转写与课堂增量融合 |
+| `/mw-learn` | Lecture 学习、slides、原始转写与课堂增量融合 |
 | `/mw-exam`、`/mw-review` | 章节/考试复习、错题本、自测与模拟卷 |
 | `/slide-learning` | 整理 Slide → Lecture 基础笔记 |
-| `/mw-paper` | 论文阅读、总结、汇报与基于来源的问答 |
-| `/mw-humanize [文本或文件路径]` | 使用 Humanizer-zh 润色中文，保留事实、语气和引用 |
+| `/mw-paper` | 论文阅读、总结、汇报和基于来源的问答 |
+| `/mw-humanize [文本或路径]` | 润色中文，保留事实、语气、引用和确定程度 |
 | `/mw-notion [请求]` | 读取或修改 Notion，检查 schema 并回读验证 |
 
-`/mw-init --reset` 仅用于用户明确要求删除并重建工作流数据的情况，不能用来代替升级。旧的模型设置命令已退出入口；`scripts/mw_model.py` 只保留不读写配置的兼容提示。既有用户 shell 配置不会被本次升级擅自删除或修改。
+课程内容默认直接处理，缺少可选录音或考试日期不阻塞已有来源支持的交付；显式分阶段或已绑定任务才使用正式流程。`mw_codex.py mw-learn --formal`、`mw-exam --formal` 可选择正式课程入口。
 
-## 委派、验证和并行
+论文使用独立的 `paper_state_schema: 1` 与 `.mary-research/papers/`；来源和 JSON sidecar 放在 `artifacts/`，`slides.tex` 是可编辑汇报源，paper workspace 中 `make slide` 生成 `build/slides.pdf`。Notion 必须有实际授权连接，先读取、最小范围写入、再回读；没有连接不能声称同步成功。Humanizer-zh 保留[上游来源与 MIT 许可](skills/humanizer-zh/SKILL.md#来源与维护)，不判断作者身份或保证通过 AI 检测。
 
-每个 worker 任务包含身份与 attempt、计划版本、目标、交付物、允许写入范围、验收、改动基线和必要上下文。worker 返回 `ready_for_review`、真实文件变化、实际验证与证据路径，以及越界、阻塞和不确定性。执行与审查证据分别保存；旧证据不能在产物变化后继续作为通过依据。
+## 本地记录与汇报
 
-主线是控制状态的唯一写入者，使用 `mary_workflow.py apply-action`。它保留用户交互、最终判定、Git 写操作和已授权外部修改；worker 不直接修改正式状态、日志或报告。合法测试修订可以纳入范围，但删除断言或弱化验收以换取通过不可接受。
+初始化在生成记录前补齐项目根目录的精确忽略项：`/.mary-workflow/`、`/.mary-workflow-worker/`、`/.mary-research/`、`/.vspi/`。已有规则和 Git 索引保持原样，**已跟踪文件不会自动取消跟踪**。不使用宽泛的 `reports/`、`outputs/`、`docs/` 规则误忽略产品文件或手写 `openspec/` 规格。
 
-第一版保持里程碑串行，支持当前里程碑内部的独立任务并行，以及 init 分片阅读。文件不相交还不够：共享接口、生成文件、数据库、端口和构建输出也可能冲突。紧耦合工作保留在同一个 worker 或串行处理，不为小任务制造派单仪式。
+`.maryignore` 和 `.mary-workflow/config.yaml` 的 `init.ignore` 控制扫描排除范围，例如 `data/**`、`*.log`；扫描排除不等于 Git 忽略，覆盖记录也不证明已理解源码。本地记录默认不自动同步到其他机器。
 
-小任务、紧耦合工作或缺少子代理时，可以按契约选择单 agent 模式，不能声称已经完成独立 agent 审查。TodoList 是持久记录的进度视图；结构化提问、memory、goal 和 hooks 都是可选能力。辅助 hooks 应短时、幂等、失败不阻塞；没有它们，核心流程也必须工作。
-
-具体协议见 [子代理契约](references/subagent-contract.md)、[状态契约](references/state-contract.md)、[记忆契约](references/memory-contract.md) 和 [宿主能力契约](references/host-contract.md)。
-
-## 多场景边界
-
-课程笔记、slides 整理和章节复习默认直接执行，复用已有资料与目录，无需先 init、冻结计划或 cycle。缺少可选录音或考试日期时，先交付现有来源支持的内容并标注缺口。保留原始资料和内容检查；不为整理一讲笔记重建整个 Course Hub，也不为章节复习自动追加两套模拟卷。
-
-显式分阶段课程项目或已绑定的正式任务继续使用 milestone。`mw_codex.py mw-learn --formal`（考试使用 `mw-exam`）选择正式入口。默认课程 CLI 不读取项目状态或验证 runtime bundle，且不创建控制文件。
-
-论文继续使用独立的 `paper_state_schema: 1` 和 `.mary-research/papers/<paper-id>/`，不要求 milestone init/run。来源定位、解析质量、下游失效、slide 编译与视觉检查、quiz 的追加哈希链保持原契约。原文与生成 JSON sidecar 放在 `artifacts/`；`slides.tex` 是可编辑汇报源。paper workspace 中 `make slide` 生成 `build/slides.pdf`，`make hypo-template` 保留独立模板对照。详见 [paper 技能](skills/paper/SKILL.md)。
-
-Notion 操作依赖已授权的实际连接，先读取目标与 schema、最小范围修改、再回读确认。worker 可准备内容和调研，主线执行已授权的外部写入。没有工具时报告具体依赖，不能声称已同步。详见 [Notion 技能](skills/notion/SKILL.md)。
-
-## 中文润色：Humanizer-zh
-
-已集成 [op7418/Humanizer-zh](https://github.com/op7418/Humanizer-zh)，保留上游规则快照与 MIT 许可。可直接调用：
+结果默认在聊天中汇报（quick 修改、每轮实验均如此）。只有用户明确要求或正式里程碑完成时才生成 HTML 报告：
 
 ```text
-/mw-humanize 请润色 article.md 的正文，保留技术评论的语气
-/mw-humanize 只审阅这段文字，给建议，不修改文件：……
+.mary-workflow/reports/
+  index.html                           # 总入口，最新优先
+  <YYYYMMDDTHHMMSSZ>-<task-or-run-id>/
+    index.html                         # 离线结果卡
+    assets/                            # 精选展示资源
 ```
 
-中文论文总结、课程笔记、报告和 Notion 正文在验证交付前按需调用。润色保留事实、确定程度、作者声音、来源标记和文件结构，不改原文引语、证据记录、公式或代码。它是编辑指导，不判断作者身份，也不保证通过 AI 检测器。详见 [集成入口](skills/humanizer-zh/SKILL.md)。新建或显式升级的项目 bundle 携带此技能；已有项目不会静默升级。
+使用固定渲染器，避免每个 worker 重写网页：
 
-## 共享规则与正式证据范围
-
-[task-policy.md](references/task-policy.md) 是过程选择、授权、委派和共享交付规则的维护源。子技能保留领域内容，阶段源只描述正式状态操作，命令和提示继续自动生成。重复的课程阶段表和各技能通用协调段已改为引用。
-
-正式任务已知验收命令的依赖时，在冻结 milestone 或 `mary-task` 中声明：
-
-```json
-{"validation_inputs": ["src/export.py", "tests/test_export.py", "fixtures/input.csv"]}
+```bash
+python "$MARY_WORKFLOW/scripts/mw_report.py" \
+  --project . --input .mary-workflow/analysis/report.json --name task-result
 ```
 
-必须包含实际读取的代码、测试、配置和 fixture。字段绑定到计划，不能在运行后临时缩小。命令前后只读取声明的交付/依赖范围，收据按 `validation_inputs` 判断是否失效；授权范围内、未被该命令读取的笔记修改不再要求重跑测试。交付及接受时仍检查全局越界与 Git index，正式 SDD 归档仍核对完整已接受快照。依赖不明或未声明该字段时保留旧的全项目证据语义。详情集中在 [worker 合同](references/subagent-contract.md#validation-inputs-and-ownership-audits)。
+输入最少包含 `title` 和 `summary`；`tasks`、`verification` 可引用已有结果/执行回执，再按需添加 `metrics`、`artifacts` 和 `next_steps`。报告用「通过、失败、运行中、未运行」区分实际状态；渲染器不执行测试、不做验收，自填状态不能冒充证据。
 
-## 指令来源与升级
+报告是给人阅读的，不是 agent 接手前置。页面离线打开，保留历史包和索引，不复制整份数据集或 checkpoint。浏览器核验是可选项；没做就标注视觉核验「未运行」。只读请求不写报告，也不为填报告重跑实验。[汇报契约与输入格式](references/report-contract.md)
 
-维护源只有技能和共享契约：
+## 维护与升级
+
+技能和共享契约是维护源；生成入口不手工修改：
 
 | 位置 | 角色 |
 | --- | --- |
-| `skills/*/SKILL.md` | 命令对应的维护入口 |
-| `references/phases/*.md` | 阶段指令的维护源 |
-| `commands/*.md` | 从技能生成的兼容路由，不手工维护行为 |
+| `SKILL.md`、`skills/*/SKILL.md` | 路由及各领域技能 |
+| `references/*.md`、`references/phases/*.md` | 共享契约与正式阶段指令 |
+| `commands/*.md` | 从技能生成的命令入口 |
 | `.mary-workflow/prompts/*.md` | 从阶段源生成的版本副本 |
-| 项目 `.mary-workflow/runtime/` | 项目固定的运行时及其兼容契约 |
+| 项目 `.mary-workflow/runtime/` | 固定运行时及兼容契约 |
 
-更新技能代码不会在普通 init 中静默替换项目的运行时和提示。旧项目保持完整版本的一致行为；不能把旧提示词与新状态逻辑混用。
+更新安装目录不会在普通 init 中替换已有项目 bundle。不要混用新脚本与旧正式提示，也不要用 `/mw-init --reset` 代替升级；reset 只适用于明确授权删除重建。
 
-从 2.1 升级时，先在目标项目根目录预览，再在已有升级授权范围内应用：
+在目标项目根目录预览，获得升级授权后再应用：
 
 ```bash
-python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate
-python ~/.codex/skills/mary-workflow/scripts/mary_workflow.py migrate --apply
+# 从 2.1 迁移状态
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" migrate
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" migrate --apply
+
+# 同状态版本的 runtime/prompts 更新
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" upgrade
+python "$MARY_WORKFLOW/scripts/mary_workflow.py" upgrade --apply
 ```
 
-同一状态版本的运行时/提示 bundle 更新使用 `upgrade` 预览和 `upgrade --apply`。迁移保留历史并创建备份；不要为了升级 reset。使用已授权任务实施升级时，无需再次请求相同授权。
+迁移/升级保留备份。正式上下文默认只显示当前阶段所需部分，`mw_codex.py <alias> --full-context` 可显式展开历史。旧模型设置入口已退役，工作流不会清理或改写用户现有宿主配置。
 
-正式上下文默认只显示当前阶段所需部分；`mw_codex.py <alias> --full-context` 可显式展开完整历史。
-
-维护者修改源后运行：
+在本仓库修改技能或阶段源后生成入口，并做相关验证：
 
 ```bash
 python scripts/mw_surfaces.py
@@ -222,24 +203,15 @@ python scripts/mw_surfaces.py --check
 python -m unittest discover -s tests
 ```
 
-`--check` 只报告生成物漂移，不写入文件。核心运行时测试验证阶段和交付边界；真实宿主、远端连接和真实模型表现需要对应环境实测，不能由本地合成测试替代。
+`--check` 只报告漂移，不写文件。核心测试覆盖运行时边界，不代替真实宿主、免费模型、远端连接或 GPU 实验。`python scripts/benchmark_experiments.py --repeats 5` 可在临时目录测 CPU 假实验的启动、首次进度和状态读取；组件耗时不是完整 agent 流程耗时，少量暖缓存样本也不证明总体 p95 或训练速度。
 
-## SDD：规格、变更与执行
+## 详细契约
 
-跨模块行为变更、长期规格或显式正式验收使用 [SDD 契约](references/sdd-contract.md)。已接受的行为保存在 `openspec/specs/<capability>/spec.md`；当前变更位于 `openspec/changes/<change-id>/`，包含 `proposal.md`、增量规格、按需要编写的 `design.md` 和 `tasks.md`。规格描述可观察行为，任务描述实现与验证。既有未绑定计划继续兼容；论文与 Notion 保持独立流程。
+- [共享策略](references/task-policy.md)：流程选择、授权、委派与交付规则。
+- [项目认知](references/memory-contract.md) · [上下文维护](references/knowledge-contract.md)：项目理解、增量更新和接手。
+- [状态](references/state-contract.md) · [worker](references/subagent-contract.md) · [SDD](references/sdd-contract.md)：正式执行、证据与归档。
+- [宿主能力](references/host-contract.md)：实际工具与可选 hooks；没有 hooks 也可运行核心流程。
+- [实验](references/experiment-contract.md) · [汇报](references/report-contract.md)：本地运行记录与人类可读结果。
+- [论文](skills/paper/SKILL.md) · [课程](skills/lecture-learning/SKILL.md) · [复习](skills/exam-review/SKILL.md) · [Notion](skills/notion/SKILL.md)：独立内容流程。
 
-`tasks.md` 是唯一人工维护的任务定义。每个编号勾选项后附 `mary-task` JSON，声明交付路径、验收命令及场景到验收编号的映射。运行时从它生成 milestone；只有验收通过才回写勾选，不能靠手工勾选跳过验证。
-
-```bash
-python scripts/mary_workflow.py sdd-check add-export
-```
-
-此命令只读检查变更并输出里程碑与覆盖信息。主线将这些里程碑和真实澄清写入 `update_interview`，再执行 `bind_change` 和 `update_state` 冻结。计划身份绑定规格、设计、任务和已接受规格基线；改动后走合法重新规划路径。审查为每个场景记录具体证据与结论，覆盖完整不等于语义正确。
-
-完成并验收后的 `cycle` 合并 delta 并归档变更；遇到基线冲突停止覆盖，归档中断通过日志恢复。停止的未完成周期只归档执行证据，保留尚未合并的变更。纯文档/重构可通过 `.openspec.yaml` 的 `skip_specs: true` 与 `skip_reason` 明确解释无行为变化；不要为了格式发明需求。
-
-设计参考 [OpenSpec 概念](https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md) 和 [默认 spec-driven schema](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/schema.yaml)。兼容边界是本地文件布局和受支持的 Requirement/Scenario 增量格式，`mary-task` 和证据绑定是 Mary 扩展；不宣称完整 OpenSpec CLI 兼容，不要求 Node/OpenSpec CLI，也不模拟 stores、自定义 schema 或并发 change 执行。
-
-## 效率基准
-
-用 `python scripts/benchmark_experiments.py --repeats 5` 在临时目录运行 CPU 假实验，报告启动（含握手）、首次进度、状态读取和旧快照组件的独立耗时。可用 `--output .mary-workflow/analysis/efficiency/benchmark.json` 保存本地结果。旧快照耗时不是旧 agent 全流程耗时；少量暖缓存样本不证明总体 p95 或 GPU 训练速度。实验启动测试验证不调用仓库快照或内容哈希。
+文件哈希、动作白名单和提示词能发现正常流程中的误操作，**不是 shell 或文件系统沙箱**。不可信 agent 的只读范围、网络和凭据隔离必须由宿主实际执行。

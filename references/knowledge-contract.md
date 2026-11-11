@@ -23,7 +23,7 @@ Existing formal `submit_brief` seeds incomplete module introductions from in-mem
 
 ## Updating only affected knowledge
 
-Before editing, mark the intended exact paths. This makes interruptions conservative. Account for additional actual changes at delivery. Deleted and renamed files use their old/new exact paths; update the affected ownership lists. No glob expansion, inventory traversal, source read or content hashing occurs.
+Record the actual changed paths at delivery. For long or interruptible edits, marking the planned paths before editing is optional and makes interruptions conservative. Deleted and renamed files use their old/new exact paths; update the affected ownership lists. No glob expansion, inventory traversal, source read or content hashing occurs.
 
 ```bash
 python /path/to/mary-workflow/scripts/mw_knowledge.py changed \

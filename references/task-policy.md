@@ -31,7 +31,7 @@ Inherit host settings; do not select or change models, providers or reasoning se
 
 For a new project conversation, read the persisted overview, relevant module introductions and handoff before opening source. Use `scripts/mw_knowledge.py read`, then `read --module <id>` as needed; it reads documentation only and never resumes work. The [knowledge contract](knowledge-contract.md) defines these records. If absent, reuse a saved brief or existing context; do not initialize or scan the project solely to explain it. Read specific code when modifying, verifying or resolving a concrete unknown.
 
-For every authorized project edit, mark the exact planned paths with `mw_knowledge.py changed` before editing and account for additional actual paths at delivery. Update the affected module introductions and useful handoff facts after the change; if unable, retain explicit stale/unmapped markers with next steps. Formal worker receipts automatically mark already-observed paths; the coordinator updates descriptions afterward. No full scans, source hashes, all-module rewrites or documentation gate before an agreed experiment. New files need ownership mapping; deletions/renames need explicit description updates. This policy relies on declared paths for direct edits, not an editor hook.
+Direct edits need no pre-edit registration. At delivery, when project knowledge records exist, record the actual changed paths with `mw_knowledge.py changed` and update the handoff (and affected module introductions when you can); otherwise leave the stale/unmapped markers visible. Do not create knowledge records solely for this. Formal worker receipts mark already-observed paths automatically; the coordinator updates descriptions afterward. No full scans, source hashes, all-module rewrites or documentation gate before an agreed experiment.
 
 Workflow-only state, caches and reports belong under the exact ignored directories `/.mary-workflow/`, `/.mary-workflow-worker/`, `/.mary-research/` and `/.vspi/`. Init must install these rules before generating project records; independent entrypoints must ensure them before their own writes. This includes `.mary-workflow/reports/` HTML pages/assets, experiments, local outputs, generated config, hashes, runtime bundles and archives. Maintain these rules without broad ignore patterns or untracking user files. Other workflow-only paths need an exact ignore rule before writing. Product files and authored specifications follow repository conventions.
 
@@ -41,9 +41,7 @@ Use `skills/humanizer-zh/SKILL.md` as needed for substantial authored Chinese pr
 
 ## Visual delivery
 
-Completed work packages with independently useful deliverables get compact human-readable HTML result cards; related worker results may share one report. Experiment-round end (including failure/stop), milestone completion and explicit report requests use the same presentation under `.mary-workflow/reports/<timestamp>-<task-or-run-id>/index.html`, linked from `.mary-workflow/reports/index.html`. Use the fixed renderer described in the report contract rather than having each worker write a website. HTML is for the user, not an agent handoff input. Tool calls, ordinary questions, progress messages and read-only status do not each generate reports; live reports are timestamped snapshots, not completion.
-
-Never present report creation as acceptance, and do not rerun experiments to fill report sections. If report files cannot be written, explain the same result and limits to the user in chat. A failed or stopped report states what ended and what remains unsupported.
+Report results in chat by default. Create an HTML report only on explicit user request or at formal milestone completion, using the fixed renderer per `report-contract.md`. A report is never acceptance, never a handoff input, and never a reason to rerun experiments.
 
 ## Where to read details
 

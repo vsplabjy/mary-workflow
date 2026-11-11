@@ -24,9 +24,9 @@ Audit only individually selected files from exited runs, streaming SHA-256 once 
 
 Use direct single-agent work for small authorized changes (`skills/quick/SKILL.md`), this experiment lifecycle for settled-method trials, and the strict milestone/SDD lifecycle for explicitly chosen acceptance and cross-cutting changes. Do not bypass an already active bound change or a stopped project run by relabeling its work. Reuse valid evidence, independent review at meaningful boundaries, and current context. Unknown dependencies limit a claim; they need not prevent exploratory execution.
 
-## End-of-round presentation
+## End-of-round delivery
 
-The main agent delivers a static HTML report for each ended experiment round, including failed or stopped rounds, following [report-contract.md](report-contract.md). Use actual run records and saved results; link the package from `.mary-workflow/reports/index.html` and give its exact path to the user. Keep `assessment_status`, provenance and scientific claims unchanged. A user-requested live report identifies its snapshot time and unfinished work. The supervisor records execution only; report creation happens when the agent observes and delivers the result, not through an invented post-chat reporting service. Never delay launch or rerun training to fill report sections.
+At the end of each agreed round, including failed or stopped rounds, the main agent reports in chat from actual run records: run ID, observed status, key metrics and log/output paths. HTML follows [report-contract.md](report-contract.md) (explicit request only). Keep `assessment_status`, provenance and scientific claims unchanged. The supervisor records execution only; delivery happens when the agent observes the result. Never delay launch or rerun training to fill a report.
 
 ## Design references
 

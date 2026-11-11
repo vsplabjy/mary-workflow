@@ -2,15 +2,16 @@
 
 This is the maintained contract for human-facing visual reports. HTML is a reading surface for the user, not an agent handoff prerequisite. Existing task results, experiment records and validation receipts remain authoritative; reporting never replaces coordination records or domain acceptance.
 
-## When a report is required
+## When to create a report
 
-Create an HTML report when any of these conditions applies:
+Create an HTML report only when:
 
-- An experiment round ends: completed, failed or stopped. A round is the agreed run or comparison batch, not every training step or seed in a still-running batch. Preserve failures and partial results.
-- A work package finishes with an independently useful deliverable: give the user a compact result card in HTML. Related worker results may share one delivery/report; do not create a site or a screenshot for every worker or tool call. Milestones use an aggregate report. Ordinary questions, progress messages and read-only status do not each need a report.
 - The user explicitly requests a report, including while work is still running. Record the snapshot time, live status and unfinished work; do not imply completion.
+- A formal milestone completes: one aggregate report for its work packages. Do not create a site or screenshot for every worker or tool call.
 
-Discussion-only and read-only requests remain read-only unless the user explicitly asks to create a report file; the only other exemption is an explicit user prohibition on writing files. A read-only status command does not create reports. For detached experiments, report at the next authorized completion observation/delivery; do not block launch, invent a watcher, or claim the supervisor authors a report after the chat ends. Do not mark a live run finished to trigger reporting. Reuse available evidence; never rerun experiments, access held-out inputs or consume additional GPU resources merely to populate a page.
+Everything else, including quick changes and ended experiment rounds (completed, failed or stopped), is reported in chat: outcome, actual verification states, key metrics, run IDs and log/output paths, failures and remaining limits.
+
+Discussion-only and read-only requests remain read-only unless the user explicitly asks to create a report file. For detached experiments, report at the next authorized completion observation/delivery; do not block launch, invent a watcher, or claim the supervisor authors a report after the chat ends. Do not mark a live run finished to trigger reporting. Reuse available evidence; never rerun experiments, access held-out inputs or consume additional GPU resources merely to populate a page.
 
 The report itself is not acceptance: creating it never changes phase, run status, assessment or scientific claims, and it never substitutes for formal execution/review receipts. Workers do not need to read HTML to continue. If report files cannot be written (read-only host, explicit user prohibition, unavailable filesystem), give the user the same result and limitations in chat instead of promising a nonexistent file.
 
@@ -74,12 +75,11 @@ A card without its own attached receipt does not mean its commands were never ex
 
 The renderer reuses exact ignore rules, creates a new immutable report package, snapshots small selected evidence, and preserves the aggregate index. It executes no validation, browser, training, external write or workflow transition. Supply already-observed results; do not repeat checks to fill the page. Full visual or narrative artifacts may extend the fixed presentation when needed, without changing the authoritative records.
 
-Plain text cards use the fixed layout with per-report link/status checks. Reuse an actual template layout check for unchanged plain text; this is not a claim that each card was visually inspected. New images/media/comparisons, layout changes and substantial reports still need inspection of the actual surface. Do not automatically rerun a browser for every worker.
+Browser inspection of a rendered page is optional. Do it when the user asks, or when new images/media/comparison layouts make visual correctness material and a browser is available. Otherwise state that visual verification is `未运行`; never claim it.
 
 ## Fast local viewing and verification
 
 - Deliver static UTF-8 HTML with a viewport declaration, readable contrast and responsive layout. Inline essential CSS. Core content MUST be present in the HTML, not fetched at runtime.
 - Opening `index.html` through `file://` MUST show the report without a server, build step, login, package installation or network access. No CDN fonts, remote scripts or mandatory external chart libraries. Use relative local asset/navigation links; escape untrusted text rather than executing log/config content as HTML.
 - Show thumbnails/selected previews first; defer large images and use video controls with `preload="metadata"` or `none`. Avoid autoplay and embedding entire checkpoints, datasets or full logs. Retain original large artifacts in their existing location; copy only small, useful presentation assets.
-- For template/layout changes, new visual comparisons/media and substantial reports, open the actual page in a browser, inspect the first screen and exercise the local navigation/media used. Unchanged plain text cards may reuse the template layout check, but still verify their own local links and evidence states. Record the exact check scope; if browser/media support is unavailable, say so rather than claim visual verification.
 - Final delivery MUST include the exact report path or clickable link, the main finding, and any material verification limit. A report-generation failure is a delivery issue, not permission to change experiment/acceptance state or claim the report exists.

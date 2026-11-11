@@ -1,6 +1,6 @@
 ---
 name: mary-workflow
-description: Coordinate model-independent project work with persisted context, plans, delegated implementation, evidence-based review, and resumable milestones. Use /mw-context for docs-first project handoff; /mw-init, /mw-plan, /mw-run, /mw-status, /mw-stop, /mw-debug, /mw-cycle for formal work; course learning, /mw-paper, /mw-notion and /mw-humanize for content; /mw-experiment for settled-method trials and /mw-quick for small changes.
+description: Project development and experiment workflow with persisted context and evidence-based acceptance. Use /mw-context for docs-first handoff, /mw-quick for small changes, /mw-experiment for settled-method runs, and /mw-init, /mw-plan, /mw-run, /mw-status, /mw-stop, /mw-debug, /mw-cycle for formal milestones. Also routes /mw-learn, /mw-exam, /mw-paper, /mw-notion and /mw-humanize.
 ---
 
 # Mary Workflow
@@ -11,7 +11,7 @@ Mary Workflow 3.0 separates coordination, worker deliverables, and runtime valid
 
 Read [task-policy.md](references/task-policy.md) once, then load only the relevant skill. It owns process selection, authorization, delegation, local records and shared delivery rules. Use direct work for bounded changes, experiment runs for settled methods, and formal milestones for explicit staged acceptance or already-bound work. Ordinary course notes and review are direct content tasks.
 
-Deliver compact human-readable HTML result cards for completed work packages, with aggregate reports at experiment-round end, milestone completion or an explicit report request, per [report-contract.md](references/report-contract.md). Prefer the fixed `scripts/mw_report.py` renderer when available. HTML is for the user, never a required agent handoff input. Reports/assets stay under the init-ignored `.mary-workflow/reports/`; reporting does not imply experiment or scientific acceptance.
+Report results in chat; HTML reports only on explicit request or at formal milestone completion ([report-contract.md](references/report-contract.md)).
 
 ## Routing
 
@@ -49,5 +49,3 @@ Course learning and exam review normally run directly with local content deliver
 Skills and shared references are maintained sources. `commands/*.md` are generated from subskills; `.mary-workflow/prompts/*.md` are generated from `references/phases/*.md`. Run `python scripts/mw_surfaces.py --check` to detect drift, or omit `--check` to regenerate. Do not hand-edit generated surfaces.
 
 A project pins its runtime and prompt compatibility together. Generated project prompts are a versioned copy, not an independently maintained policy source; use the pinned bundle consistently. Ordinary init preserves an existing bundle. Use `mary_workflow.py migrate` to preview a 2.1 state migration and `migrate --apply` to apply it with backup. Use `upgrade` / `upgrade --apply` for explicit bundle upgrades. Do not reset a project merely to upgrade.
-
-The old model-setting command is retired. Host model settings and shell integration are outside workflow ownership; neither init nor a worker may change them.

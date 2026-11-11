@@ -4,10 +4,10 @@
   "description": "Task-sized development, fast experiment runs, learning, paper and Notion workflows with optional delegation and evidence-based acceptance.",
   "author": {
     "name": "Mary Workflow",
-    "url": "https://github.com/reversevertin1999/mary-workflow"
+    "url": "https://github.com/vsplabjy/mary-workflow"
   },
-  "homepage": "https://github.com/reversevertin1999/mary-workflow",
-  "repository": "https://github.com/reversevertin1999/mary-workflow",
+  "homepage": "https://github.com/vsplabjy/mary-workflow",
+  "repository": "https://github.com/vsplabjy/mary-workflow",
   "license": "MIT",
   "keywords": [
     "workflow",
@@ -38,7 +38,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/reversevertin1999/mary-workflow",
+    "websiteURL": "https://github.com/vsplabjy/mary-workflow",
     "defaultPrompt": [
       "/mw-experiment Run the agreed configuration with the assigned resources.",
       "/mw-plan Plan this project request into milestones.",
